@@ -12,11 +12,11 @@ Protect the customer's pickup-time promise and the merchant's financial state wh
 4. Confirmation checks both aggregate state and payment authorization before changing the commitment to `CONFIRMED`.
 5. PostgreSQL stores commitment state and domain-outbox rows through the R2DBC repository.
 6. `OutboxRelay` publishes unpublished rows to `pickup.commitment.events.v1`; downstream consumers remain idempotent because duplicate publication is possible.
-7. Cancellation appends a cancellation event and then releases the Redis lease. Redis TTL remains a safety boundary if cleanup cannot complete.
+7. If PostgreSQL persistence fails after Redis admission, the hold path compensates by releasing the lease. Cancellation also releases the lease after its event is committed. Redis TTL remains a final safety boundary if cleanup cannot complete.
 
 ### Capacity scope
 
-The current Lua implementation is a per-slot atomic counter with release and TTL. It proves the no-oversubscription invariant under the synthetic race benchmark. It does not claim token-level retry deduplication or independently expiring confirmed leases.
+The current Lua implementation is a per-slot atomic counter with release and TTL. The TTL covers the requested pickup time plus a grace period, which favors promise safety over early capacity reclamation. It proves the no-oversubscription invariant under the synthetic race benchmark. It does not claim token-level retry deduplication or a production abandoned-checkout timeout.
 
 ## Financial path
 
