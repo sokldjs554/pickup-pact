@@ -34,11 +34,10 @@ test('virtual customer can browse, add to cart, order, track, and cancel', async
 
   await page.getByRole('button', { name: '9,000원 주문하기', exact: true }).click();
   await expect(page.getByRole('heading', { name: '내 주문', exact: true })).toBeVisible();
-  await expect(page.locator('#customerOrderView')).toContainText('주문됐어요.');
   await expect(page.locator('#customerOrderView')).toContainText('아메리카노 2개');
   await expect(page.locator('#customerOrderView')).toContainText('9,000원');
-
-  await expect(page.locator('#customerOrderView')).toContainText('픽업 준비됐어요.', { timeout: 6000 });
+  await expect(page.locator('#customerOrderView')).toHaveAttribute('data-stage', 'ready', { timeout: 8000 });
+  await expect(page.locator('#customerOrderView')).toContainText('픽업 준비됐어요.');
 
   await page.getByRole('button', { name: '주문 취소', exact: true }).click();
   await expect(page.getByRole('dialog', { name: '주문 취소 확인' })).toBeVisible();
@@ -140,7 +139,8 @@ test('first customer action waits for a slow session bootstrap', async ({ page }
   await page.getByRole('button', { name: /장바구니 보기/ }).click();
   await page.getByRole('button', { name: '4,500원 주문하기', exact: true }).click();
 
-  await expect(page.locator('#customerOrderView')).toContainText('주문됐어요.', { timeout: 17000 });
+  await expect(page.locator('#customerOrderView')).toHaveAttribute('data-stage', 'ready', { timeout: 20000 });
+  await expect(page.locator('#customerOrderView')).toContainText('4,500원');
   await expect(page.locator('body')).toHaveAttribute('aria-busy', 'false');
 });
 
