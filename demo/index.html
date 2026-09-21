@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Pickup Pact — 주문 복구 센터</title>
+<title>Pickup Pact — 스마트오더 체험</title>
 <style>
 :root{
   --bg:#f4f6fa;--surface:#fff;--surface2:#f8fafc;--text:#101828;--muted:#667085;
@@ -141,6 +141,59 @@ body.expert-mode .app{display:grid;grid-template-columns:235px 1fr}
 body.expert-mode .sidebar{display:block}
 body.expert-mode .topbar{height:68px}
 body.expert-mode .content{max-width:1450px}
+
+/* Customer smart-order experience */
+body:not(.expert-mode) .health{display:none}
+.customer-pill{display:inline-flex;align-items:center;gap:7px;background:#f2f4f7;border:1px solid #eaecf0;border-radius:999px;padding:8px 11px;font-size:10px;font-weight:850;color:#475467}
+.customer-pill::before{content:"";width:7px;height:7px;border-radius:50%;background:#12b76a}
+.customer-home{display:grid;gap:24px}
+.customer-hero{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;padding:8px 2px 2px}
+.customer-hero h2{font-size:38px;line-height:1.15;letter-spacing:-.05em;margin:0 0 10px}
+.customer-hero p{margin:0;color:#667085;font-size:14px;line-height:1.65}
+.customer-note{font-size:10px;color:#98a2b3;white-space:nowrap}
+.customer-section{display:grid;gap:12px}
+.customer-section-head{display:flex;justify-content:space-between;gap:16px;align-items:end}
+.customer-section-head h3{font-size:19px;margin:0;letter-spacing:-.025em}
+.customer-section-head p{font-size:10px;color:#98a2b3;margin:0}
+.store-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.store-card{border:1px solid #eaecf0;background:#fff;border-radius:18px;padding:18px;text-align:left;cursor:pointer;box-shadow:0 6px 24px rgba(16,24,40,.035);transition:.16s}
+.store-card:hover{transform:translateY(-2px);box-shadow:0 12px 30px rgba(16,24,40,.07)}
+.store-card.active{border-color:#101828;box-shadow:0 0 0 2px #101828}
+.store-card-top{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.store-avatar{width:42px;height:42px;border-radius:14px;background:#101828;color:#fff;display:grid;place-items:center;font-size:12px;font-weight:950}
+.store-time{font-size:10px;font-weight:900;color:#067647;background:#ecfdf3;padding:6px 8px;border-radius:999px}
+.store-card h4{font-size:15px;margin:14px 0 5px}.store-meta{font-size:10px;color:#667085}.store-card p{font-size:10px;color:#98a2b3;line-height:1.45;margin:10px 0 0}
+.menu-panel{background:#fff;border:1px solid #eaecf0;border-radius:22px;padding:24px}
+.menu-panel-head{display:flex;justify-content:space-between;align-items:flex-end;gap:18px;margin-bottom:15px}
+.menu-panel-head h3{font-size:20px;margin:0}.menu-panel-head p{font-size:10px;color:#98a2b3;margin:5px 0 0}
+.menu-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.menu-card{border:1px solid #eaecf0;border-radius:16px;padding:16px;display:grid;grid-template-columns:1fr auto;gap:14px;align-items:center}
+.menu-card h4{font-size:13px;margin:0 0 5px}.menu-card p{font-size:10px;color:#667085;line-height:1.45;margin:0 0 9px}.menu-price{font-size:12px;font-weight:900}.menu-popular{display:inline-block;font-size:8px;font-weight:900;color:#b54708;background:#fffaeb;border-radius:999px;padding:4px 6px;margin-left:6px}
+.menu-add{width:34px;height:34px;border-radius:11px;border:1px solid #d0d5dd;background:#fff;font-size:20px;line-height:1;cursor:pointer;font-weight:500}
+.menu-add:hover{background:#101828;color:#fff;border-color:#101828}
+.menu-qty{font-size:9px;color:#667085;font-weight:850;margin-top:6px;text-align:center}
+.cart-bar{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);width:min(720px,calc(100% - 28px));background:#101828;color:#fff;border-radius:16px;padding:13px 16px;display:none;align-items:center;justify-content:space-between;gap:16px;box-shadow:0 18px 50px rgba(16,24,40,.26);z-index:15;cursor:pointer;border:0}
+.cart-bar.show{display:flex}.cart-bar-info{display:flex;align-items:center;gap:10px}.cart-count{display:grid;place-items:center;width:27px;height:27px;border-radius:50%;background:#fff;color:#101828;font-size:10px;font-weight:950}.cart-bar b{font-size:12px}.cart-bar span{font-size:10px;color:#d0d5dd}.cart-bar-total{font-size:13px;font-weight:950}
+.sheet-backdrop{position:fixed;inset:0;background:rgba(16,24,40,.42);z-index:30;display:none;align-items:flex-end;justify-content:center;padding:18px}.sheet-backdrop.show{display:flex}
+.cart-sheet{width:min(560px,100%);background:#fff;border-radius:22px;padding:22px;box-shadow:0 24px 70px rgba(16,24,40,.25)}
+.cart-sheet-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px}.cart-sheet-head h3{margin:0;font-size:18px}.sheet-close{border:0;background:#f2f4f7;width:32px;height:32px;border-radius:10px;cursor:pointer}
+.cart-items{display:grid;gap:9px;max-height:310px;overflow:auto}.cart-item{display:grid;grid-template-columns:1fr auto;gap:12px;border-bottom:1px solid #f2f4f7;padding:10px 0}.cart-item:last-child{border-bottom:0}.cart-item b{font-size:12px}.cart-item small{display:block;font-size:10px;color:#667085;margin-top:3px}.qty-control{display:flex;align-items:center;gap:8px}.qty-control button{width:27px;height:27px;border:1px solid #d0d5dd;background:#fff;border-radius:8px;cursor:pointer}.qty-control span{font-size:11px;font-weight:900;min-width:14px;text-align:center}
+.cart-summary{border-top:1px solid #eaecf0;margin-top:14px;padding-top:14px;display:grid;gap:8px}.cart-summary-row{display:flex;justify-content:space-between;gap:12px;font-size:11px}.cart-summary-row.total{font-size:14px;font-weight:950}
+.checkout-btn{width:100%;border:0;background:#101828;color:#fff;border-radius:12px;padding:13px 15px;font-size:12px;font-weight:900;margin-top:15px;cursor:pointer}
+.order-page{max-width:760px;margin:0 auto;display:grid;gap:14px}
+.order-page-head{display:flex;justify-content:space-between;align-items:center;gap:16px}.order-page-head h2{font-size:25px;letter-spacing:-.04em;margin:0}.order-page-head p{font-size:11px;color:#667085;margin:5px 0 0}
+.order-status-card{background:#fff;border:1px solid #eaecf0;border-radius:22px;padding:24px;box-shadow:0 8px 30px rgba(16,24,40,.04)}
+.order-status-icon{width:46px;height:46px;border-radius:15px;background:#ecfdf3;color:#067647;display:grid;place-items:center;font-size:19px;font-weight:950;margin-bottom:14px}
+.order-status-card.cancelled .order-status-icon{background:#f2f4f7;color:#475467}
+.order-status-card h3{font-size:22px;margin:0 0 6px;letter-spacing:-.03em}.order-status-card>p{font-size:11px;color:#667085;line-height:1.55;margin:0}
+.order-progress{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:18px}.order-progress-step{border-radius:12px;background:#f8fafc;padding:11px;text-align:center;color:#98a2b3;font-size:9px;font-weight:850}.order-progress-step.done{background:#ecfdf3;color:#067647}.order-progress-step.current{background:#101828;color:#fff}
+.order-detail-card{background:#fff;border:1px solid #eaecf0;border-radius:18px;padding:20px}.order-detail-card h3{font-size:13px;margin:0 0 12px}.order-detail-row{display:flex;justify-content:space-between;gap:14px;padding:10px 0;border-top:1px solid #f2f4f7;font-size:11px}.order-detail-row span{color:#667085}.order-detail-row b{text-align:right}
+.order-actions{display:flex;gap:8px;flex-wrap:wrap}.customer-action{border:1px solid #d0d5dd;background:#fff;border-radius:11px;padding:10px 13px;font-size:11px;font-weight:850;cursor:pointer}.customer-action.primary{background:#101828;color:#fff;border-color:#101828}.customer-action.danger{color:#b42318;border-color:#fecdca;background:#fffafa}
+.customer-empty{text-align:center;padding:64px 22px;background:#fff;border:1px solid #eaecf0;border-radius:22px}.customer-empty h3{font-size:19px;margin:12px 0 6px}.customer-empty p{font-size:11px;color:#667085;margin:0 0 18px}
+.cancel-sheet p{font-size:11px;color:#667085;line-height:1.55}.cancel-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:16px}.cancel-actions button{border:1px solid #d0d5dd;background:#fff;border-radius:11px;padding:11px;font-size:11px;font-weight:850;cursor:pointer}.cancel-actions .confirm-cancel{background:#b42318;color:#fff;border-color:#b42318}
+.dev-entry-note{display:none}
+body.expert-mode .customer-pill{display:none}
+@media(max-width:900px){.store-grid{grid-template-columns:1fr}.menu-grid{grid-template-columns:1fr}.customer-note{display:none}}
 @media(max-width:1100px){.app{grid-template-columns:185px 1fr}.g4{grid-template-columns:repeat(2,1fr)}.g3{grid-template-columns:1fr 1fr}.form{grid-template-columns:1fr 1fr 1fr}}
 @media(max-width:1100px){.story-flow{grid-template-columns:1fr}.story-arrow{transform:rotate(90deg);min-height:18px}.guide-main{grid-template-columns:1fr}}
 @media(max-width:760px){.app{display:block}.sidebar{position:relative;height:auto}.sidebar-foot{display:none}.nav{grid-template-columns:repeat(2,1fr)}.content{padding:18px 14px 48px}.topbar{position:relative;padding:0 14px}.g4,.g3,.g2,.timeline-grid,.form,.guide-progress{grid-template-columns:1fr}.hero h2{font-size:29px}.audit-item{grid-template-columns:1fr}.story-flow{grid-template-columns:1fr}.story-arrow{transform:rotate(90deg);min-height:18px}.result-grid{grid-template-columns:1fr}.result-arrow{transform:rotate(90deg)}.expert-callout{align-items:flex-start;flex-direction:column}.top-actions .small-btn{display:none}
@@ -176,90 +229,73 @@ body.expert-mode .app{display:block}body.expert-mode .sidebar{position:relative;
       <div class="product-brand">
         <button class="brand-home" type="button" onclick="goProductPage('overview')" aria-label="Pickup Pact 홈">
           <span class="brand-mark">PP</span>
-          <span class="brand-copy"><strong>Pickup Pact</strong><small>ORDER PROTECTION</small></span>
+          <span class="brand-copy"><strong>Pickup Pact</strong><small>SMART ORDER</small></span>
         </button>
         <nav class="product-tabs" aria-label="제품 메뉴">
           <button class="active" data-product-page="overview" type="button" onclick="goProductPage('overview')">홈</button>
-          <button data-product-page="guided" type="button" onclick="goProductPage('guided')">복구 체험</button>
+          <button data-product-page="guided" type="button" onclick="goProductPage('guided')">내 주문</button>
         </nav>
       </div>
       <h1 class="expert-page-title" id="pageTitle">주문 흐름</h1>
       <div class="top-actions">
+        <span class="customer-pill" id="customerPill">체험 손님</span>
         <span class="health" id="health">● 서비스 확인 중</span>
-        <button class="product-expert-action" type="button" onclick="enterExpertMode('orders')">개발자 보기</button>
         <button class="small-btn expert-session-action" type="button" onclick="newSession()">새 세션</button>
       </div>
     </header>
 
     <div class="content">
       <section class="page active" id="page-overview">
-        <div class="product-shell">
-          <div class="product-hero">
-            <div class="product-hero-copy">
-              <div class="product-kicker"><span class="product-kicker-dot"></span> 주문 보호 기능이 켜져 있습니다</div>
-              <h2>취소된 주문의<br>잘못된 정산을 되돌립니다.</h2>
-              <p>
-                주문 취소 정보가 늦게 도착해 매장 정산이나 고객 포인트가 잘못 반영돼도,
-                Pickup Pact가 처리 순서를 다시 확인하고 안전한 복구 결과를 보여줍니다.
-              </p>
-              <div class="product-hero-actions">
-                <button class="product-primary" type="button" onclick="runRecruiterDemo()">복구 시나리오 체험하기</button>
-                <button class="product-secondary" type="button" onclick="enterExpertMode('orders')">개발자 구현 보기</button>
-              </div>
-              <div class="product-trust">
-                <span>실제 데모 API 사용</span>
-                <span>원본 기록 보존</span>
-                <span>독립된 체험 세션</span>
-              </div>
+        <div class="customer-home">
+          <div class="customer-hero">
+            <div>
+              <h2>커피, 미리 주문해요.</h2>
+              <p>가까운 카페에서 메뉴를 담고 주문하세요.<br>준비되면 바로 픽업하면 돼요.</p>
             </div>
-            <div class="protection-preview" aria-label="주문 보호 미리보기">
-              <div class="preview-head">
-                <span>체험 주문</span>
-                <span class="preview-status">● 보호 중</span>
-              </div>
-              <div class="preview-order">
-                <div class="preview-label">PICKUP ORDER</div>
-                <h3>아메리카노 2잔</h3>
-                <p>패스카페 강남역점 · 12:30 픽업</p>
-                <div class="preview-rows">
-                  <div class="preview-row"><span>주문 금액</span><b>9,000원</b></div>
-                  <div class="preview-row"><span>정산 상태</span><b>자동 확인</b></div>
-                  <div class="preview-row"><span>포인트 상태</span><b>자동 확인</b></div>
-                </div>
-              </div>
-              <div class="preview-protection">
-                <div><span class="preview-check">✓</span> 취소와 정산의 순서를 다시 확인합니다.</div>
-                <div><span class="preview-check">✓</span> 잘못된 금액은 기록을 남기고 되돌립니다.</div>
-                <div><span class="preview-check">✓</span> 복구 전후 결과를 바로 비교할 수 있습니다.</div>
-              </div>
+            <span class="customer-note">가상 매장과 가상 주문으로 동작하는 체험 서비스예요.</span>
+          </div>
+
+          <div class="customer-section">
+            <div class="customer-section-head">
+              <h3>근처 매장</h3>
+              <p>매장을 고르면 메뉴가 보여요.</p>
+            </div>
+            <div class="store-grid" id="storeList">
+              <div class="empty">매장을 불러오고 있어요.</div>
             </div>
           </div>
 
-          <div class="product-section">
-            <div class="product-section-title">
-              <div><h3>주문이 꼬였을 때 필요한 세 가지</h3></div>
-              <p>복잡한 기술 정보는 개발자 화면에서 따로 확인할 수 있습니다.</p>
+          <div class="menu-panel">
+            <div class="menu-panel-head">
+              <div>
+                <h3 id="selectedStoreName">메뉴</h3>
+                <p id="selectedStoreNotice">매장을 먼저 골라주세요.</p>
+              </div>
+              <span class="store-time" id="selectedStoreTime" style="display:none"></span>
             </div>
-            <div class="product-feature-grid">
-              <div class="product-feature">
-                <span class="feature-icon">01</span>
-                <b>문제 감지</b>
-                <span>취소보다 뒤에 남은 정산과 포인트처럼 서로 맞지 않는 상태를 찾습니다.</span>
-              </div>
-              <div class="product-feature">
-                <span class="feature-icon">02</span>
-                <b>안전한 복구</b>
-                <span>기존 내역을 지우지 않고 반대 기록을 추가해 금액과 포인트를 원래대로 돌립니다.</span>
-              </div>
-              <div class="product-feature">
-                <span class="feature-icon">03</span>
-                <b>변경 기록 보존</b>
-                <span>무엇을 왜 되돌렸는지 남겨 이후에도 복구 과정을 확인할 수 있습니다.</span>
-              </div>
+            <div class="menu-grid" id="menuList">
+              <div class="empty">매장을 고르면 메뉴가 보여요.</div>
             </div>
           </div>
 
-          <div class="product-footnote">이 화면은 합성 주문 데이터로 동작하는 공개 체험 서비스입니다. 실제 결제·매장 계정과 연결되지 않습니다.</div>
+          <div class="product-footnote">실제 결제는 일어나지 않아요. 버튼과 주문 흐름을 직접 눌러볼 수 있는 체험용 서비스예요.</div>
+        </div>
+
+        <button class="cart-bar" id="cartBar" type="button" onclick="openCart()">
+          <span class="cart-bar-info"><span class="cart-count" id="cartCount">0</span><span><b>장바구니 보기</b><br><span id="cartStoreLabel"></span></span></span>
+          <span class="cart-bar-total" id="cartBarTotal">0원</span>
+        </button>
+
+        <div class="sheet-backdrop" id="cartBackdrop" onclick="closeCartFromBackdrop(event)">
+          <div class="cart-sheet" role="dialog" aria-modal="true" aria-label="장바구니">
+            <div class="cart-sheet-head"><h3>장바구니</h3><button class="sheet-close" type="button" onclick="closeCart()" aria-label="장바구니 닫기">×</button></div>
+            <div class="cart-items" id="cartItems"></div>
+            <div class="cart-summary">
+              <div class="cart-summary-row"><span>픽업</span><b id="cartPickup">-</b></div>
+              <div class="cart-summary-row total"><span>총 금액</span><b id="cartTotal">0원</b></div>
+            </div>
+            <button class="checkout-btn" id="checkoutButton" type="button" onclick="placeCustomerOrder()">주문하기</button>
+          </div>
         </div>
 
         <div class="compat-hidden" aria-hidden="true">
@@ -269,71 +305,22 @@ body.expert-mode .app{display:block}body.expert-mode .sidebar{position:relative;
       </section>
 
       <section class="page" id="page-guided">
-        <div class="recovery-shell">
-          <div class="recovery-head">
-            <div>
-              <div class="eyebrow">ORDER RECOVERY CENTER</div>
-              <h2>주문 복구 센터</h2>
-              <p>취소 정보가 늦게 도착했을 때 잘못 반영된 정산과 포인트를 확인하고 되돌립니다.</p>
-            </div>
-            <button class="product-secondary" type="button" onclick="resetRecruiterDemo()">새로 시작</button>
+        <div class="order-page">
+          <div class="order-page-head">
+            <div><h2>내 주문</h2><p>주문 상태를 여기서 확인할 수 있어요.</p></div>
+            <button class="customer-action" type="button" onclick="goProductPage('overview')">메뉴 보기</button>
           </div>
+          <div id="customerOrderView"></div>
+        </div>
 
-          <div class="recovery-banner" id="recoveryBanner">
-            <div class="recovery-banner-icon" id="recoveryBannerIcon">✓</div>
-            <div class="recovery-banner-copy">
-              <b id="recoveryBannerTitle">체험을 시작할 준비가 됐습니다.</b>
-              <span id="recoveryBannerText">샘플 주문으로 실제 복구 흐름을 확인할 수 있습니다.</span>
+        <div class="sheet-backdrop" id="cancelBackdrop" onclick="closeCancelFromBackdrop(event)">
+          <div class="cart-sheet cancel-sheet" role="dialog" aria-modal="true" aria-label="주문 취소 확인">
+            <div class="cart-sheet-head"><h3>주문을 취소할까요?</h3><button class="sheet-close" type="button" onclick="closeCancelDialog()" aria-label="취소창 닫기">×</button></div>
+            <p>주문을 취소하면 결제 금액과 포인트도 함께 정리돼요.</p>
+            <div class="cancel-actions">
+              <button type="button" onclick="closeCancelDialog()">계속 주문하기</button>
+              <button class="confirm-cancel" type="button" onclick="cancelCustomerOrder()">주문 취소</button>
             </div>
-          </div>
-
-          <div class="guide-progress recruiter-progress" id="guideProgress">
-            <div class="guide-step" data-story-step="1"><span class="dot">1</span><span>주문 확정</span></div>
-            <div class="guide-step" data-story-step="2"><span class="dot">2</span><span>취소 발생</span></div>
-            <div class="guide-step" data-story-step="3"><span class="dot">3</span><span>잘못된 지급</span></div>
-            <div class="guide-step" data-story-step="4"><span class="dot">4</span><span>문제 감지</span></div>
-            <div class="guide-step" data-story-step="5"><span class="dot">5</span><span>복구 완료</span></div>
-          </div>
-
-          <div class="recovery-workspace">
-            <div class="recovery-card">
-              <div class="micro">현재 처리</div>
-              <h3 id="guideTitle">복구 시나리오를 시작해보세요.</h3>
-              <p id="guideDescription">정상 주문부터 취소 지연, 잘못된 정산·포인트 지급, 문제 감지까지 자동으로 진행합니다.</p>
-              <div class="recovery-actions">
-                <button class="product-primary" id="guideStart" type="button" onclick="runRecruiterDemo()">복구 시나리오 시작</button>
-                <button class="product-primary" id="guideRepair" type="button" onclick="repairRecruiterDemo()" style="display:none">잘못된 처리 되돌리기</button>
-                <button class="product-secondary" id="guideAgain" type="button" onclick="resetRecruiterDemo()" style="display:none">다시 체험하기</button>
-              </div>
-            </div>
-
-            <div class="recovery-card">
-              <div class="order-summary-head"><h3>현재 주문</h3><span class="order-live-badge">DEMO</span></div>
-              <div id="guideOrder"></div>
-            </div>
-          </div>
-
-          <div class="product-results">
-            <div class="product-results-head">
-              <h3>금액 변화</h3>
-              <span>복구 전과 복구 후를 비교합니다.</span>
-            </div>
-            <div class="result-grid">
-              <div class="result-card before" id="guideBefore"></div>
-              <div class="result-arrow">→</div>
-              <div class="result-card after" id="guideAfter"></div>
-            </div>
-          </div>
-
-          <div class="product-problem-section">
-            <h3>확인된 내용</h3>
-            <p>기술 코드를 몰라도 이해할 수 있는 문장으로 보여줍니다.</p>
-            <div class="guide-problems" id="guideProblemList"></div>
-          </div>
-
-          <div class="product-expert-link">
-            <div><b>백엔드 동작까지 확인하고 싶나요?</b><span>수신 시각과 실제 발생 시각, 복구 계획, ledger와 audit 기록을 개발자 화면에서 볼 수 있습니다.</span></div>
-            <button class="product-secondary" type="button" onclick="enterExpertMode('reconcile')">개발자 화면 열기</button>
           </div>
         </div>
       </section>
@@ -462,11 +449,16 @@ let sessionId=localStorage.getItem("pickupPactProductSessionV3");
 let state=null;
 let sessionReadyPromise=null;
 let pendingRequests=0;
-let recruiterNarrativeStage=null;
+let catalog=[];
+let customer={name:"하늘",label:"체험 손님"};
+let selectedStoreId=null;
+let cart=[];
+let customerOrderStage="none";
+let orderReadyTimer=null;
 const $=id=>document.getElementById(id);
 
 const pageNames={
-  overview:"홈",guided:"복구 체험",orders:"주문 흐름",capacity:"매장 처리량",
+  overview:"홈",guided:"내 주문",orders:"주문 흐름",capacity:"매장 처리량",
   faults:"장애 주입",reconcile:"정합성 복구",ledger:"정산 · 감사"
 };
 
@@ -548,22 +540,212 @@ function auditHas(action){
   return Boolean(state && (state.audit||[]).some(item=>item.action===action));
 }
 
-function inferredRecruiterStage(){
-  if(!state || !state.order) return 0;
-  const applied=new Set(state.applied_repairs||[]);
-  if(applied.has("REVERSE_SETTLEMENT") && applied.has("REVERSE_REWARD")) return 5;
-  if(state.order.status==="CANCELLED" && auditHas("RECONCILED")) return 4;
-  if(state.order.status==="CANCELLED" && state.order.settled && state.order.rewarded) return 3;
-  if(state.order.status==="CANCELLED") return 2;
-  return 1;
+function selectedStore(){
+  return catalog.find(store=>store.id===selectedStoreId)||null;
 }
 
-function recruiterStage(){
-  return recruiterNarrativeStage===null?inferredRecruiterStage():recruiterNarrativeStage;
+function currentMenuItem(menuId){
+  const store=selectedStore();
+  return store ? store.menu.find(item=>item.id===menuId)||null : null;
 }
 
-function storyPause(ms=260){
-  return new Promise(resolve=>setTimeout(resolve,ms));
+function cartItemCount(){
+  return cart.reduce((sum,item)=>sum+item.qty,0);
+}
+
+function cartTotalValue(){
+  return cart.reduce((sum,item)=>sum+(item.price*item.qty),0);
+}
+
+function cartItemSummary(){
+  return cart.map(item=>item.name+(item.qty>1?" "+item.qty+"개":"")).join(", ");
+}
+
+function estimatedPickup(){
+  const store=selectedStore();
+  if(!store) return "-";
+  return "약 "+store.pickup_minutes+"분 뒤";
+}
+
+async function loadCustomerExperience(){
+  const [catalogPayload,customerPayload]=await Promise.all([
+    api("/api/demo/catalog"),
+    api("/api/demo/customer")
+  ]);
+  catalog=catalogPayload;
+  customer=customerPayload;
+  if(!selectedStoreId && catalog.length) selectedStoreId=catalog[0].id;
+  renderCustomerHome();
+  renderCustomerOrder();
+  $("customerPill").textContent=customer.label+" · "+customer.name;
+}
+
+function renderCustomerHome(){
+  if(!$("storeList")||!$("menuList"))return;
+  $("storeList").innerHTML=catalog.length?catalog.map(store=>
+    '<button class="store-card '+(store.id===selectedStoreId?"active":"")+'" type="button" onclick="selectCustomerStore(\''+store.id+'\')">'+
+      '<div class="store-card-top"><span class="store-avatar">'+store.name.slice(0,2)+'</span><span class="store-time">'+store.pickup_minutes+'분</span></div>'+
+      '<h4>'+store.name+'</h4><div class="store-meta">'+store.category+' · '+store.distance_m+'m</div><p>'+store.notice+'</p>'+
+    '</button>'
+  ).join(""):'<div class="empty">매장을 불러오지 못했어요.</div>';
+
+  const store=selectedStore();
+  if(!store){
+    $("selectedStoreName").textContent="메뉴";
+    $("selectedStoreNotice").textContent="매장을 먼저 골라주세요.";
+    $("selectedStoreTime").style.display="none";
+    $("menuList").innerHTML='<div class="empty">매장을 고르면 메뉴가 보여요.</div>';
+  }else{
+    $("selectedStoreName").textContent=store.name;
+    $("selectedStoreNotice").textContent=store.notice;
+    $("selectedStoreTime").style.display="inline-block";
+    $("selectedStoreTime").textContent="픽업 "+store.pickup_minutes+"분";
+    $("menuList").innerHTML=store.menu.map(item=>{
+      const qty=cart.find(row=>row.id===item.id)?.qty||0;
+      return '<div class="menu-card"><div><h4>'+item.name+(item.popular?'<span class="menu-popular">인기</span>':'')+'</h4><p>'+item.description+'</p><span class="menu-price">'+money(item.price)+'원</span></div>'+
+        '<div><button class="menu-add" type="button" aria-label="'+item.name+' 담기" onclick="addToCart(\''+item.id+'\')">+</button><div class="menu-qty">'+(qty?qty+'개 담음':'담기')+'</div></div></div>';
+    }).join("");
+  }
+  renderCart();
+}
+
+function selectCustomerStore(storeId){
+  if(selectedStoreId!==storeId && cart.length){
+    cart=[];
+    closeCart();
+    toast("매장을 바꿔 장바구니를 비웠어요.");
+  }
+  selectedStoreId=storeId;
+  renderCustomerHome();
+}
+
+function addToCart(menuId){
+  const item=currentMenuItem(menuId);
+  if(!item)return;
+  const existing=cart.find(row=>row.id===menuId);
+  if(existing) existing.qty+=1;
+  else cart.push({id:item.id,name:item.name,price:item.price,qty:1});
+  renderCustomerHome();
+  toast(item.name+" 담았어요.");
+}
+
+function changeCartQty(menuId,delta){
+  const item=cart.find(row=>row.id===menuId);
+  if(!item)return;
+  item.qty+=delta;
+  if(item.qty<=0) cart=cart.filter(row=>row.id!==menuId);
+  renderCustomerHome();
+}
+
+function renderCart(){
+  const bar=$("cartBar");
+  if(!bar)return;
+  const count=cartItemCount();
+  const total=cartTotalValue();
+  bar.classList.toggle("show",count>0);
+  $("cartCount").textContent=count;
+  $("cartBarTotal").textContent=money(total)+"원";
+  $("cartStoreLabel").textContent=selectedStore()?.name||"";
+  if($("cartTotal")) $("cartTotal").textContent=money(total)+"원";
+  if($("cartPickup")) $("cartPickup").textContent=estimatedPickup();
+  if($("checkoutButton")) $("checkoutButton").textContent=money(total)+"원 주문하기";
+  if($("cartItems")){
+    $("cartItems").innerHTML=cart.length?cart.map(item=>
+      '<div class="cart-item"><div><b>'+item.name+'</b><small>'+money(item.price)+'원 · '+money(item.price*item.qty)+'원</small></div>'+
+      '<div class="qty-control"><button type="button" aria-label="'+item.name+' 수량 줄이기" onclick="changeCartQty(\''+item.id+'\',-1)">−</button><span>'+item.qty+'</span><button type="button" aria-label="'+item.name+' 수량 늘리기" onclick="changeCartQty(\''+item.id+'\',1)">+</button></div></div>'
+    ).join(""):'<div class="empty">아직 담은 메뉴가 없어요.</div>';
+  }
+}
+
+function openCart(){
+  if(!cart.length)return;
+  renderCart();
+  $("cartBackdrop").classList.add("show");
+}
+
+function closeCart(){
+  $("cartBackdrop")?.classList.remove("show");
+}
+
+function closeCartFromBackdrop(event){
+  if(event.target===$("cartBackdrop"))closeCart();
+}
+
+async function placeCustomerOrder(){
+  try{
+    if(!cart.length)throw new Error("메뉴를 먼저 담아주세요.");
+    const store=selectedStore();
+    if(!store)throw new Error("매장을 먼저 골라주세요.");
+    await waitForSession();
+    state=await api("/api/demo/sessions/"+sessionId+"/reset","POST",{});
+    const items=cartItemSummary();
+    const total=cartTotalValue();
+    const units=cartItemCount();
+    let result=await api("/api/demo/sessions/"+sessionId+"/orders","POST",{
+      store:store.name,items,total,pickup_at:"12:30",units
+    });
+    state=result.state;
+    result=await api("/api/demo/sessions/"+sessionId+"/payment","POST",{authorization_id:"customer-demo"});
+    state=result.state;
+    result=await api("/api/demo/sessions/"+sessionId+"/confirm","POST",{});
+    state=result.state;
+    customerOrderStage="received";
+    cart=[];
+    closeCart();
+    renderAll();
+    showPage("guided");
+    toast("주문됐어요.");
+    if(orderReadyTimer)clearTimeout(orderReadyTimer);
+    setTimeout(()=>{if(state?.order?.status==="CONFIRMED"){customerOrderStage="preparing";renderCustomerOrder();}},500);
+    orderReadyTimer=setTimeout(()=>{if(state?.order?.status==="CONFIRMED"){customerOrderStage="ready";renderCustomerOrder();}},1300);
+  }catch(e){toast(e.message,true)}
+}
+
+function openCancelDialog(){
+  $("cancelBackdrop").classList.add("show");
+}
+
+function closeCancelDialog(){
+  $("cancelBackdrop").classList.remove("show");
+}
+
+function closeCancelFromBackdrop(event){
+  if(event.target===$("cancelBackdrop"))closeCancelDialog();
+}
+
+async function cancelCustomerOrder(){
+  try{
+    await waitForSession();
+    if(!state?.order||state.order.status!=="CONFIRMED")throw new Error("취소할 주문이 없어요.");
+    const total=Number(state.order.total||0);
+    const reward=Math.max(1,Math.round(total/100));
+    let result=await api("/api/demo/sessions/"+sessionId+"/cancel","POST",{delay_seconds:52});
+    state=result.state;
+    result=await api("/api/demo/sessions/"+sessionId+"/settlement","POST",{amount:total});
+    state=result.state;
+    result=await api("/api/demo/sessions/"+sessionId+"/reward","POST",{amount:reward});
+    state=result.state;
+    result=await api("/api/demo/sessions/"+sessionId+"/reconcile","POST",{});
+    state=result.state;
+    result=await api("/api/demo/sessions/"+sessionId+"/repairs/apply","POST",{});
+    state=result.state;
+    customerOrderStage="cancelled";
+    if(orderReadyTimer)clearTimeout(orderReadyTimer);
+    closeCancelDialog();
+    renderAll();
+    toast("주문을 취소했어요.");
+  }catch(e){toast(e.message,true)}
+}
+
+async function startNewCustomerOrder(){
+  try{
+    await waitForSession();
+    state=await api("/api/demo/sessions/"+sessionId+"/reset","POST",{});
+    customerOrderStage="none";
+    cart=[];
+    renderAll();
+    showPage("overview");
+  }catch(e){toast(e.message,true)}
 }
 
 function enterExpertMode(page="orders"){
@@ -573,74 +755,19 @@ function enterExpertMode(page="orders"){
 }
 
 function leaveExpertMode(){
+  const url=new URL(window.location.href);
+  url.searchParams.delete("dev");
+  history.replaceState({}, "", url.pathname+url.search);
   document.body.classList.remove("expert-mode");
   showPage("overview");
   window.scrollTo({top:0,behavior:"smooth"});
 }
 
-async function runRecruiterDemo(){
-  try{
-    await waitForSession();
-    state=await api("/api/demo/sessions/"+sessionId+"/reset","POST",{});
-    recruiterNarrativeStage=0;
-    renderAll();goPage("guided");
-    await storyPause();
-
-    let result=await api("/api/demo/sessions/"+sessionId+"/orders","POST",{
-      store:"패스카페 강남역점",items:"아메리카노 2잔",total:9000,pickup_at:"12:30",units:2
-    });
-    state=result.state;
-    result=await api("/api/demo/sessions/"+sessionId+"/payment","POST",{authorization_id:"recruiter-demo"});
-    state=result.state;
-    result=await api("/api/demo/sessions/"+sessionId+"/confirm","POST",{});
-    state=result.state;
-    recruiterNarrativeStage=1;renderAll();
-    await storyPause();
-
-    result=await api("/api/demo/sessions/"+sessionId+"/cancel","POST",{delay_seconds:52});
-    state=result.state;
-    recruiterNarrativeStage=2;renderAll();
-    await storyPause();
-
-    result=await api("/api/demo/sessions/"+sessionId+"/settlement","POST",{amount:9000});
-    state=result.state;
-    result=await api("/api/demo/sessions/"+sessionId+"/reward","POST",{amount:90});
-    state=result.state;
-    recruiterNarrativeStage=3;renderAll();
-    await storyPause();
-
-    result=await api("/api/demo/sessions/"+sessionId+"/reconcile","POST",{});
-    state=result.state;
-    recruiterNarrativeStage=4;renderAll();
-    toast("문제를 찾았습니다. 이제 ‘잘못된 처리 되돌리기’를 눌러 전후 결과를 비교해보세요.");
-  }catch(e){
-    recruiterNarrativeStage=null;
-    toast(e.message,true);
-  }
-}
-
-async function repairRecruiterDemo(){
-  try{
-    await waitForSession();
-    const result=await api("/api/demo/sessions/"+sessionId+"/repairs/apply","POST",{});
-    state=result.state;
-    recruiterNarrativeStage=5;renderAll();
-    toast(result.applied.length?"복구가 끝났습니다. 9,000원과 90P가 모두 원래 상태로 돌아왔습니다.":"새로 적용할 복구가 없습니다.");
-  }catch(e){toast(e.message,true)}
-}
-
-async function resetRecruiterDemo(){
-  try{
-    await waitForSession();
-    state=await api("/api/demo/sessions/"+sessionId+"/reset","POST",{});
-    recruiterNarrativeStage=0;
-    renderAll();goPage("guided");toast("체험을 처음 상태로 되돌렸습니다.");
-  }catch(e){toast(e.message,true)}
-}
-
 async function newSession(){
   try{
-    localStorage.removeItem("pickupPactProductSessionV3");sessionId=null;state=null;recruiterNarrativeStage=null;
+    localStorage.removeItem("pickupPactProductSessionV3");sessionId=null;state=null;
+    customerOrderStage="none";cart=[];
+    if(orderReadyTimer)clearTimeout(orderReadyTimer);
     await bootstrapSession();
     toast("새 독립 데모 세션을 만들었습니다.");
   }catch(e){toast(e.message,true)}
@@ -817,92 +944,40 @@ function humanStatus(status){
   return ({HELD:"주문 접수",CONFIRMED:"픽업 확정",CANCELLED:"주문 취소",AT_RISK:"확인 필요"})[status]||status;
 }
 
-function renderGuide(){
-  if(!state)return;
-  const stage=recruiterStage();
-
-  document.querySelectorAll("[data-story-step]").forEach((el,index)=>{
-    const step=index+1;
-    el.classList.toggle("done",step<=stage);
-    el.classList.toggle("active",step===stage+1 && stage<5);
-    el.querySelector(".dot").textContent=step<=stage?"✓":String(step);
-  });
-
-  $("guideStart").style.display=stage===0?"inline-flex":"none";
-  $("guideRepair").style.display=stage===4?"inline-flex":"none";
-  $("guideAgain").style.display=stage===5?"inline-flex":"none";
-
-  const titles=[
-    "복구 시나리오를 시작해보세요.",
-    "주문이 정상적으로 확정됐습니다.",
-    "고객이 주문을 취소했습니다.",
-    "취소 정보가 늦게 도착했습니다.",
-    "잘못된 처리를 찾았습니다.",
-    "주문 상태를 정상화했습니다."
-  ];
-  const descriptions=[
-    "정상 주문부터 취소 지연, 잘못된 정산·포인트 지급, 문제 감지까지 자동으로 진행합니다.",
-    "아메리카노 2잔, 9,000원 주문과 12:30 픽업이 정상적으로 준비됐습니다.",
-    "고객은 주문을 취소했습니다. 취소 정보는 서버에 52초 늦게 도착하는 상황을 재현합니다.",
-    "서버가 취소를 알기 전에 매장 정산 9,000원과 고객 포인트 90P가 잘못 반영됐습니다.",
-    "취소 이후 남아 있는 정산과 포인트를 확인했습니다. ‘잘못된 처리 되돌리기’를 누르면 원래 상태로 복구합니다.",
-    "정산 0원, 포인트 0P로 돌아왔습니다. 기존 처리 내역과 복구 기록은 모두 남아 있습니다."
-  ];
-  $("guideTitle").textContent=titles[stage];
-  $("guideDescription").textContent=descriptions[stage];
-
-  const banner=$("recoveryBanner");
-  const bannerIcon=$("recoveryBannerIcon");
-  const bannerTitle=$("recoveryBannerTitle");
-  const bannerText=$("recoveryBannerText");
-  banner.className="recovery-banner"+(stage===4?" problem":stage===5?" success":"");
-  bannerIcon.textContent=stage===4?"!":stage===5?"✓":"✓";
-  bannerTitle.textContent=stage===4?"주의가 필요한 주문을 찾았습니다.":stage===5?"복구가 완료됐습니다.":stage===0?"체험을 시작할 준비가 됐습니다.":"주문 상태를 확인하고 있습니다.";
-  bannerText.textContent=stage===4?"취소된 주문에 정산 9,000원과 포인트 90P가 남아 있습니다.":stage===5?"잘못된 정산과 포인트가 0으로 돌아왔고 변경 기록도 보존됐습니다.":stage===0?"샘플 주문으로 실제 복구 흐름을 확인할 수 있습니다.":"주문·취소·정산 정보를 순서대로 확인하는 중입니다.";
-
-  if(!state.order){
-    $("guideOrder").innerHTML='<div class="empty">아직 주문이 없습니다.<br>‘복구 시나리오 시작’을 누르면 체험 주문이 준비됩니다.</div>';
-  }else{
-    const o=state.order;
-    $("guideOrder").innerHTML=
-      '<div class="product-order-title">'+o.items+'</div>'+
-      '<div class="product-order-store">'+o.store+' · '+o.order_id+'</div>'+
-      '<div class="product-order-kv"><div><span>결제 금액</span><b>'+money(o.total)+'원</b></div>'+
-      '<div><span>픽업 시간</span><b>'+o.pickup_at+'</b></div>'+
-      '<div><span>주문 상태</span><b>'+humanStatus(o.status)+'</b></div></div>';
+function renderCustomerOrder(){
+  const view=$("customerOrderView");
+  if(!view)return;
+  if(!state?.order){
+    view.innerHTML='<div class="customer-empty"><div class="order-status-icon" style="margin:0 auto">☕</div><h3>아직 주문이 없어요.</h3><p>메뉴를 골라 주문하면 여기에서 준비 상태를 볼 수 있어요.</p><button class="customer-action primary" type="button" onclick="goProductPage(\'overview\')">메뉴 보러가기</button></div>';
+    return;
   }
-
-  if(stage<3){
-    $("guideBefore").className="result-card before";
-    $("guideBefore").innerHTML='<div class="micro">문제 발생 전</div><div class="value">정상 상태</div><p>취소 정보가 늦게 도착하면 잘못된 금전 상태가 여기 표시됩니다.</p>';
-    $("guideAfter").className="result-card after";
-    $("guideAfter").innerHTML='<div class="micro">복구 후</div><div class="value">아직 비교 전</div><p>문제를 찾은 뒤 복구하면 최종 결과가 표시됩니다.</p>';
-  }else{
-    $("guideBefore").className="result-card before ready";
-    $("guideBefore").innerHTML='<div class="micro">복구 전</div><div class="value">정산 9,000원 · 포인트 90P</div><p>취소된 주문인데도 매장 정산과 고객 포인트가 남아 있는 잘못된 상태입니다.</p>';
-    $("guideAfter").className="result-card after"+(stage===5?" ready":"");
-    $("guideAfter").innerHTML=stage===5
-      ? '<div class="micro">복구 후</div><div class="value">정산 0원 · 포인트 0P</div><p>원본 기록은 삭제하지 않고 되돌림 기록을 추가해 변경 이력을 보존했습니다.</p>'
-      : '<div class="micro">복구 후</div><div class="value">복구 대기</div><p>‘잘못된 처리 되돌리기’를 누르면 잘못된 정산과 포인트가 원래 상태로 돌아갑니다.</p>';
-  }
-
-  const problems=state.reconciliation?.anomalies||[];
-  if(stage<4){
-    $("guideProblemList").innerHTML='<div class="empty">자동 데모가 문제를 확인하면 이유가 여기에 표시됩니다.</div>';
-  }else if(stage===5){
-    $("guideProblemList").innerHTML='<div class="alert green"><b>해결 완료</b><br>잘못 반영된 정산과 포인트를 되돌렸고, 변경 과정은 기록으로 남겼습니다.</div>';
-  }else if(!problems.length){
-    $("guideProblemList").innerHTML='<div class="empty">표시할 문제가 없습니다.</div>';
-  }else{
-    $("guideProblemList").innerHTML=problems.map(item=>
-      '<div class="plain-problem"><b>'+item.title+'</b>'+item.detail+'</div>'
-    ).join("");
-  }
+  const o=state.order;
+  const cancelled=o.status==="CANCELLED"||customerOrderStage==="cancelled";
+  const stage=cancelled?"cancelled":customerOrderStage==="ready"?"ready":customerOrderStage==="preparing"?"preparing":"received";
+  const statusTitle=cancelled?"주문이 취소됐어요.":stage==="ready"?"픽업 준비됐어요.":stage==="preparing"?"음료를 만들고 있어요.":"주문됐어요.";
+  const statusText=cancelled?money(o.total)+"원 결제 취소와 포인트 정리가 끝났어요.":stage==="ready"?"매장에서 주문번호를 보여주고 받아가세요.":stage==="preparing"?"조금만 기다려주세요. 준비되면 바로 알려드릴게요.":"매장에서 주문을 확인했어요.";
+  const icon=cancelled?"✓":stage==="ready"?"✓":stage==="preparing"?"…":"✓";
+  const orderNo=(o.order_id||"PP-0000").split("-").slice(-1)[0];
+  view.innerHTML=
+    '<div class="order-status-card '+(cancelled?"cancelled":"")+'"><div class="order-status-icon">'+icon+'</div><h3>'+statusTitle+'</h3><p>'+statusText+'</p>'+
+      (cancelled?'':'<div class="order-progress"><div class="order-progress-step done">주문 접수</div><div class="order-progress-step '+(stage==="preparing"||stage==="ready"?"done":"current")+'">준비 중</div><div class="order-progress-step '+(stage==="ready"?"current":"")+'">픽업 준비</div></div>')+
+    '</div>'+
+    '<div class="order-detail-card"><h3>주문 정보</h3>'+
+      '<div class="order-detail-row"><span>매장</span><b>'+o.store+'</b></div>'+
+      '<div class="order-detail-row"><span>메뉴</span><b>'+o.items+'</b></div>'+
+      '<div class="order-detail-row"><span>결제 금액</span><b>'+money(o.total)+'원</b></div>'+
+      '<div class="order-detail-row"><span>주문번호</span><b>'+orderNo+'</b></div>'+
+    '</div>'+
+    '<div class="order-actions">'+
+      (cancelled?'<button class="customer-action primary" type="button" onclick="startNewCustomerOrder()">다시 주문하기</button>':'<button class="customer-action danger" type="button" onclick="openCancelDialog()">주문 취소</button>')+
+    '</div>';
 }
 
 function renderAll(){
   if(!state)return;
-  renderGuide();
+  renderCustomerHome();
+  renderCustomerOrder();
+  renderCart();
   $("mOrder").textContent=state.order?humanStatus(state.order.status):"-";
   $("mOrderSub").textContent=state.order?state.order.order_id:"주문 없음";
   $("mEvents").textContent=state.metrics.event_count;
@@ -954,10 +1029,16 @@ function goPage(page){
 }
 
 fetch("/health").then(r=>r.json()).then(body=>{
-  $("health").textContent=body.engine?"● 보호 서비스 정상":"● 보호 서비스 정상";
+  $("health").textContent=body.engine?"● 정상":"● 정상";
 }).catch(()=>{$("health").textContent="○ 백엔드 연결 실패";$("health").style.background="#fef3f2";$("health").style.color="#b42318"});
 
-bootstrapSession().catch(e=>toast("데모 세션 준비 실패: "+e.message,true));
+Promise.all([bootstrapSession(),loadCustomerExperience()])
+  .then(()=>{
+    const params=new URLSearchParams(window.location.search);
+    if(params.get("dev")==="1") enterExpertMode("orders");
+    else {renderAll();showPage("overview");}
+  })
+  .catch(e=>toast("서비스를 준비하지 못했어요: "+e.message,true));
 </script>
 </body>
 </html>
