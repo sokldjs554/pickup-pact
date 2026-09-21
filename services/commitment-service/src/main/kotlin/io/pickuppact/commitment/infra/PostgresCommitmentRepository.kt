@@ -1,21 +1,27 @@
 package io.pickuppact.commitment.infra
 
+import com.fasterxml.jackson.databind.ObjectMapper
 import io.pickuppact.commitment.application.CommitmentRepository
 import io.pickuppact.commitment.domain.CommitmentState
 import io.pickuppact.commitment.domain.PickupCommitment
 import org.springframework.context.annotation.Profile
 import org.springframework.r2dbc.core.DatabaseClient
 import org.springframework.stereotype.Repository
+import org.springframework.transaction.reactive.TransactionalOperator
 import reactor.core.publisher.Mono
-import java.time.Instant
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
 import java.util.UUID
 
 @Repository
 @Profile("postgres")
-class PostgresCommitmentRepository(private val db: DatabaseClient) : CommitmentRepository {
-    override fun save(c: PickupCommitment): Mono<PickupCommitment> =
+class PostgresCommitmentRepository(
+    private val db: DatabaseClient,
+    private val tx: TransactionalOperator,
+    private val objectMapper: ObjectMapper
+) : CommitmentRepository {
+
+    private fun upsert(c: PickupCommitment): Mono<PickupCommitment> =
         db.sql(
             """
             insert into pickup_commitments
@@ -42,6 +48,27 @@ class PostgresCommitmentRepository(private val db: DatabaseClient) : CommitmentR
                 if (changed == 0L) Mono.error(IllegalStateException("optimistic version conflict"))
                 else Mono.just(c)
             }
+
+    override fun save(c: PickupCommitment): Mono<PickupCommitment> = upsert(c)
+
+    override fun saveWithEvent(
+        commitment: PickupCommitment,
+        eventType: String,
+        payload: Map<String, Any>
+    ): Mono<PickupCommitment> {
+        val eventId = UUID.randomUUID()
+        val json = objectMapper.writeValueAsString(payload)
+        val writeEvent = db.sql(
+            """insert into outbox_events(id, aggregate_id, event_type, payload, occurred_at)
+               values(:id, :aggregate, :type, cast(:payload as jsonb), now())"""
+        )
+            .bind("id", eventId)
+            .bind("aggregate", commitment.id)
+            .bind("type", eventType)
+            .bind("payload", json)
+            .fetch().rowsUpdated().then()
+        return tx.transactional(upsert(commitment).flatMap { saved -> writeEvent.thenReturn(saved) })
+    }
 
     override fun find(id: UUID): Mono<PickupCommitment> =
         db.sql(

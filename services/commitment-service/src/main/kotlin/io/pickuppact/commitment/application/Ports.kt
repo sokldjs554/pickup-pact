@@ -13,8 +13,10 @@ interface CapacityLeasePort {
 interface CommitmentRepository {
     fun save(commitment: PickupCommitment): Mono<PickupCommitment>
     fun find(id: UUID): Mono<PickupCommitment>
-}
 
-interface DomainEventPublisher {
-    fun publish(eventType: String, aggregateId: UUID, payload: Map<String, Any>): Mono<Void>
+    fun saveWithEvent(
+        commitment: PickupCommitment,
+        eventType: String,
+        payload: Map<String, Any>
+    ): Mono<PickupCommitment> = save(commitment)
 }
