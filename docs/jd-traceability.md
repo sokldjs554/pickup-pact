@@ -10,32 +10,34 @@ This document makes the job-description mapping auditable instead of listing tec
 | Python | FastAPI reconciliation, Celery tasks, benchmark and verification scripts |
 | Spring | both JVM services |
 | WebFlux | reactive commitment command edge and R2DBC/Redis adapters |
-| FastAPI | canonical replay/reconciliation API |
+| FastAPI | canonical replay/reconciliation API and public interviewer demo |
 | Flask | operator replay console |
-| PostgreSQL | aggregate, outbox, append-only ledger and reconciliation audit schema; idempotency enforced by unique event keys |
-| MongoDB | immutable raw-envelope archive adapter |
-| Redis | atomic capacity lease Lua path + Celery broker/cache topology |
+| PostgreSQL | commitment state, outbox, append-only ledger, reconciliation-run audit |
+| MongoDB | distinct event-delivery evidence archive; conflicting copies of one event ID are preserved |
+| Redis | Lua-protected atomic pickup-slot capacity counter + Celery broker topology |
 | Elasticsearch | searchable incident/reconciliation index adapter |
-| Kafka | transactional-outbox publish path + financial-event consumer contract |
+| Kafka | transactional-outbox relay + financial-event consumer contract |
 | Celery | asynchronous replay worker and retry/backoff policy |
 | DDD | Pickup Commitment + Financial Ledger bounded contexts and invariants |
 | EDA | versioned domain envelopes and AsyncAPI contract |
-| CQRS | command-owned invariants; disposable projections/rebuild repair |
+| CQRS | command-owned invariants; rebuildable projections and replay repair |
 | Distributed consistency | outbox, at-least-once delivery, event-level idempotency, compensation |
-| REST/OpenAPI | explicit OpenAPI 3.1 contract, idempotency header on commitment writes |
-| SQL tuning | replay/timeline indexes + `EXPLAIN (ANALYZE, BUFFERS)` artifact |
-| Performance troubleshooting | deterministic race benchmark + HTTP load driver + runbook |
-| Docker | four service images + local dependency topology |
-| Kubernetes | deployments/services/probes/resources/HPA |
-| AWS | Terraform blueprint for EKS/RDS/ElastiCache/MSK |
+| REST/OpenAPI | explicit OpenAPI 3.1 contract for hold → payment authorization → confirm/cancel, ledger postings, reconciliation |
+| SQL tuning | committed timeline indexes + executable `EXPLAIN (ANALYZE, BUFFERS)` query template |
+| Performance troubleshooting | deterministic race benchmark + loopback HTTP baseline + runbook |
+| Docker | commitment, ledger, reconciler, ops-console, and interviewer-demo images |
+| Kubernetes | checked-in deployments/services/probes/resource limits for the service topology |
+| AWS | Terraform blueprint for RDS PostgreSQL, ElastiCache Redis, and MSK Serverless; Kubernetes manifests are separate and no live EKS deployment is claimed |
 | Jenkins | verification/test/benchmark/container stages |
 | Datadog | service/env tagging and anomaly monitor template |
 | Elastic APM | trace propagation/instrumentation integration notes |
-| Claude Code / Cursor / Claude / ChatGPT / Gemini | `CLAUDE.md`, `.cursor/rules/project.mdc`, `AGENTS.md`, provider-neutral review interface, prompts and eval contract; no fake external run claim |
+| Claude Code / Cursor / Claude / ChatGPT / Gemini | `CLAUDE.md`, `.cursor/rules/project.mdc`, `AGENTS.md`, provider-neutral review interface, prompts and eval contract; no fake provider-run claim |
 | n8n / Make | regression/triage workflow artifacts |
-| Slack / Jira / Notion | optional validated automation destinations; no live account connection claimed |
+| Slack / Jira / Notion | optional automation destinations; no live account connection claimed |
 | Sprint/cross-functional workflow | `docs/sprint-brief.md` with PRD, handoff, QA, rollout and retrospective evidence plan |
 
 ## Interview story
 
-The project is not presented as “I used many tools.” The primary story is one production-shaped failure mode: **a pickup promise crosses capacity, payment, settlement and rewards while events may be delayed, duplicated or reordered**. Every technology is assigned only where it supports that failure boundary.
+The project is not presented as “I used many tools.” The primary story is one production-shaped failure mode: **a pickup promise crosses capacity, payment, settlement and rewards while events may be delayed, duplicated or reordered**.
+
+The public demo deliberately explains the customer/merchant impact first. Technical evidence is then traceable to code, contracts, tests, measured artifacts, or clearly labeled blueprints.
