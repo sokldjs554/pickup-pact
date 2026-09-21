@@ -15,6 +15,8 @@
 body{margin:0;background:var(--bg);color:var(--text);font-family:Pretendard,Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
 button,input{font:inherit}
 button:focus-visible,input:focus-visible{outline:3px solid rgba(37,99,235,.28);outline-offset:2px}
+body.network-busy .main button,body.network-busy .preset{pointer-events:none;cursor:progress}
+body.network-busy .main button:not(:disabled),body.network-busy .preset{opacity:.68}
 .app{display:grid;grid-template-columns:235px 1fr;min-height:100vh}
 .sidebar{background:var(--nav);color:#fff;padding:24px 16px;position:sticky;top:0;height:100vh}
 .logo{font-size:21px;font-weight:950;padding:0 10px 24px;letter-spacing:-.04em}.logo b{color:var(--brand)}
@@ -325,6 +327,8 @@ button:focus-visible,input:focus-visible{outline:3px solid rgba(37,99,235,.28);o
 <script>
 let sessionId=localStorage.getItem("pickupPactProductSessionV3");
 let state=null;
+let sessionReadyPromise=null;
+let pendingRequests=0;
 const $=id=>document.getElementById(id);
 
 const pageNames={
@@ -348,23 +352,50 @@ function toast(message,error=false){
   setTimeout(()=>t.className="toast",2600);
 }
 
+function setNetworkBusy(delta){
+  pendingRequests=Math.max(0,pendingRequests+delta);
+  const busy=pendingRequests>0;
+  document.body.classList.toggle("network-busy",busy);
+  document.body.setAttribute("aria-busy",busy?"true":"false");
+}
+
 async function api(path,method="GET",body=null){
   const options={method,headers:{"Content-Type":"application/json"}};
   if(body!==null) options.body=JSON.stringify(body);
-  const response=await fetch(path,options);
-  const payload=await response.json().catch(()=>({}));
-  if(!response.ok) throw new Error(payload.detail||("HTTP "+response.status));
-  return payload;
+  setNetworkBusy(1);
+  try{
+    const response=await fetch(path,options);
+    const payload=await response.json().catch(()=>({}));
+    if(!response.ok) throw new Error(payload.detail||("HTTP "+response.status));
+    return payload;
+  }finally{
+    setNetworkBusy(-1);
+  }
 }
 
 async function ensureSession(){
   if(sessionId){
     try{state=await api("/api/demo/sessions/"+sessionId);return;}
-    catch(_){localStorage.removeItem("pickupPactProductSessionV3");sessionId=null;}
+    catch(_){localStorage.removeItem("pickupPactProductSessionV3");sessionId=null;state=null;}
   }
   const created=await api("/api/demo/sessions","POST",{});
   sessionId=created.session_id;localStorage.setItem("pickupPactProductSessionV3",sessionId);
   state=created;
+}
+
+function bootstrapSession(){
+  if(state && sessionId)return Promise.resolve(state);
+  if(sessionReadyPromise)return sessionReadyPromise;
+  sessionReadyPromise=ensureSession()
+    .then(()=>{renderAll();return state;})
+    .finally(()=>{sessionReadyPromise=null;});
+  return sessionReadyPromise;
+}
+
+async function waitForSession(){
+  if(state && sessionId)return;
+  await bootstrapSession();
+  if(!state || !sessionId)throw new Error("데모 세션을 준비하지 못했습니다. 다시 시도해주세요.");
 }
 
 
@@ -383,6 +414,7 @@ function currentGuideStage(){
 
 async function startGuidedDemo(){
   try{
+    await waitForSession();
     state=await api("/api/demo/sessions/"+sessionId+"/reset","POST",{});
     let result=await api("/api/demo/sessions/"+sessionId+"/orders","POST",{
       store:"패스카페 강남역점",items:"아메리카노 2잔",total:9000,pickup_at:"12:30",units:2
@@ -398,6 +430,7 @@ async function startGuidedDemo(){
 
 async function guidedIncident(){
   try{
+    await waitForSession();
     let result=await api("/api/demo/sessions/"+sessionId+"/cancel","POST",{delay_seconds:52});
     state=result.state;
     result=await api("/api/demo/sessions/"+sessionId+"/settlement","POST",{amount:9000});
@@ -410,6 +443,7 @@ async function guidedIncident(){
 
 async function guidedAnalyze(){
   try{
+    await waitForSession();
     const result=await api("/api/demo/sessions/"+sessionId+"/reconcile","POST",{});
     state=result.state;renderAll();toast("실제 발생 순서를 기준으로 문제와 복구 계획을 확인했습니다.");
   }catch(e){toast(e.message,true)}
@@ -417,6 +451,7 @@ async function guidedAnalyze(){
 
 async function guidedRepair(){
   try{
+    await waitForSession();
     const result=await api("/api/demo/sessions/"+sessionId+"/repairs/apply","POST",{});
     state=result.state;renderAll();
     toast(result.applied.length?"복구가 끝났습니다. 정산과 포인트 결과를 확인해보세요.":"새로 적용할 복구가 없습니다.");
@@ -425,14 +460,18 @@ async function guidedRepair(){
 
 async function resetGuidedDemo(){
   try{
+    await waitForSession();
     state=await api("/api/demo/sessions/"+sessionId+"/reset","POST",{});
     renderAll();goPage("guided");toast("체험을 처음 상태로 되돌렸습니다.");
   }catch(e){toast(e.message,true)}
 }
 
 async function newSession(){
-  localStorage.removeItem("pickupPactProductSessionV3");sessionId=null;state=null;
-  await ensureSession();renderAll();toast("새 독립 데모 세션을 만들었습니다.");
+  try{
+    localStorage.removeItem("pickupPactProductSessionV3");sessionId=null;state=null;
+    await bootstrapSession();
+    toast("새 독립 데모 세션을 만들었습니다.");
+  }catch(e){toast(e.message,true)}
 }
 
 async function refresh(){
@@ -440,17 +479,20 @@ async function refresh(){
 }
 
 async function loadPreset(name){
+  await waitForSession();
   state=await api("/api/demo/sessions/"+sessionId+"/presets/"+name,"POST",{});
   renderAll();toast("시나리오를 불러왔습니다: "+name);
 }
 
 async function resetBlank(){
+  await waitForSession();
   state=await api("/api/demo/sessions/"+sessionId+"/reset","POST",{});
   renderAll();toast("빈 세션으로 초기화했습니다.");
 }
 
 async function createOrder(){
   try{
+    await waitForSession();
     const payload={
       store:$("fStore").value,items:$("fItems").value,total:Number($("fTotal").value),
       pickup_at:$("fPickup").value,units:Number($("fUnits").value)
@@ -462,6 +504,7 @@ async function createOrder(){
 
 async function authorizePayment(){
   try{
+    await waitForSession();
     const result=await api("/api/demo/sessions/"+sessionId+"/payment","POST",{authorization_id:null});
     state=result.state;renderAll();toast("결제 승인 이벤트를 기록했습니다.");
   }catch(e){toast(e.message,true)}
@@ -469,6 +512,7 @@ async function authorizePayment(){
 
 async function confirmOrder(){
   try{
+    await waitForSession();
     const result=await api("/api/demo/sessions/"+sessionId+"/confirm","POST",{});
     state=result.state;renderAll();toast("픽업 약속을 확정했습니다.");
   }catch(e){toast(e.message,true)}
@@ -476,17 +520,20 @@ async function confirmOrder(){
 
 async function cancelOrder(delay){
   try{
+    await waitForSession();
     const result=await api("/api/demo/sessions/"+sessionId+"/cancel","POST",{delay_seconds:delay});
     state=result.state;renderAll();toast(delay?"지연 취소 이벤트를 만들었습니다.":"주문을 취소했습니다.");
   }catch(e){toast(e.message,true)}
 }
 
 async function postSettlement(){
+  await waitForSession();
   const result=await api("/api/demo/sessions/"+sessionId+"/settlement","POST",{amount:null});
   state=result.state;
   return result;
 }
 async function postReward(){
+  await waitForSession();
   const result=await api("/api/demo/sessions/"+sessionId+"/reward","POST",{amount:null});
   state=result.state;
   return result;
@@ -504,6 +551,7 @@ async function rewardNow(){
 
 async function injectLateCancel(){
   try{
+    await waitForSession();
     if(!state.order){throw new Error("먼저 주문을 만들거나 preset을 불러오세요.");}
     if(state.order.status==="HELD" && !state.order.payment_authorized) await authorizePayment();
     state=await api("/api/demo/sessions/"+sessionId);
@@ -517,6 +565,7 @@ async function injectLateCancel(){
 
 async function reviseCapacity(){
   try{
+    await waitForSession();
     const result=await api("/api/demo/sessions/"+sessionId+"/capacity","POST",{available_units:Number($("capacityInput").value)});
     state=result.state;renderAll();toast("매장 처리량 변경 이벤트를 기록했습니다.");
   }catch(e){toast(e.message,true)}
@@ -524,6 +573,7 @@ async function reviseCapacity(){
 
 async function quickCapacityDrop(){
   try{
+    await waitForSession();
     if(!state.order) throw new Error("주문이 필요합니다.");
     const units=Math.max(0,state.order.units-1);
     const result=await api("/api/demo/sessions/"+sessionId+"/capacity","POST",{available_units:units});
@@ -533,6 +583,7 @@ async function quickCapacityDrop(){
 
 async function redeliver(conflict){
   try{
+    await waitForSession();
     const body={conflicting_amount:conflict?Number($("conflictAmount").value):null};
     const result=await api("/api/demo/sessions/"+sessionId+"/redelivery","POST",body);
     state=result.state;renderAll();toast(conflict?"금액 충돌 이벤트를 주입했습니다.":"동일 이벤트를 재전달했습니다.");
@@ -541,6 +592,7 @@ async function redeliver(conflict){
 
 async function runReconcile(){
   try{
+    await waitForSession();
     const result=await api("/api/demo/sessions/"+sessionId+"/reconcile","POST",{});
     state=result.state;renderAll();toast("정합성 계산을 다시 실행했습니다.");
   }catch(e){toast(e.message,true)}
@@ -548,6 +600,7 @@ async function runReconcile(){
 
 async function applyRepairs(){
   try{
+    await waitForSession();
     const result=await api("/api/demo/sessions/"+sessionId+"/repairs/apply","POST",{});
     state=result.state;renderAll();
     toast(result.applied.length?"샌드박스 복구 계획을 적용했습니다: "+result.applied.join(", "):"새로 적용할 복구가 없습니다.");
@@ -720,7 +773,7 @@ fetch("/health").then(r=>r.json()).then(body=>{
   $("health").textContent=body.engine?"● 복구 엔진 연결됨":"● 백엔드 정상";
 }).catch(()=>{$("health").textContent="○ 백엔드 연결 실패";$("health").style.background="#fef3f2";$("health").style.color="#b42318"});
 
-ensureSession().then(()=>renderAll()).catch(e=>toast(e.message,true));
+bootstrapSession().catch(e=>toast("데모 세션 준비 실패: "+e.message,true));
 </script>
 </body>
 </html>
