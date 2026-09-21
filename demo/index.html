@@ -60,6 +60,22 @@ body.network-busy .main button:not(:disabled),body.network-busy .preset{opacity:
 .empty{padding:32px;text-align:center;color:#98a2b3;font-size:11px;border:1px dashed var(--line);border-radius:13px;background:#fafbfc}
 .code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10px;color:#475467}
 .toast{position:fixed;right:24px;bottom:24px;background:#101828;color:#fff;border-radius:11px;padding:12px 15px;font-size:11px;box-shadow:var(--shadow);display:none;z-index:20;max-width:360px}.toast.show{display:block}.toast.error{background:#7a271a}
+.expert-caption,.expert-nav{display:none}
+body.expert-mode .expert-caption{display:block}
+body.expert-mode .expert-nav{display:grid}
+.expert-entry{margin:14px 0 4px;padding:0 4px}
+.expert-entry button{width:100%;border:1px solid #334155;background:#162033;color:#e2e8f0;border-radius:10px;padding:10px 12px;text-align:left;font-size:11px;font-weight:850;cursor:pointer}
+.expert-entry button:hover{background:#1e293b}
+.recruiter-intro{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:14px}
+.recruiter-intro .card{box-shadow:none}
+.recruiter-intro b{display:block;font-size:13px;margin:5px 0 6px}
+.recruiter-intro span{font-size:11px;line-height:1.55;color:var(--muted)}
+.recruiter-progress{grid-template-columns:repeat(5,1fr)}
+.recruiter-status{border:1px solid #fed7cc;background:linear-gradient(135deg,#fff,#fffaf7)}
+.recruiter-status .micro{color:#c4320a}
+.recruiter-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
+.recruiter-actions .btn.primary{padding:11px 15px;font-size:12px}
+.compat-hidden{display:none!important}
 @media(max-width:1100px){.app{grid-template-columns:185px 1fr}.g4{grid-template-columns:repeat(2,1fr)}.g3{grid-template-columns:1fr 1fr}.form{grid-template-columns:1fr 1fr 1fr}}
 @media(max-width:1100px){.story-flow{grid-template-columns:1fr}.story-arrow{transform:rotate(90deg);min-height:18px}.guide-main{grid-template-columns:1fr}}
 @media(max-width:760px){.app{display:block}.sidebar{position:relative;height:auto}.sidebar-foot{display:none}.nav{grid-template-columns:repeat(2,1fr)}.content{padding:18px 14px 48px}.topbar{position:relative;padding:0 14px}.g4,.g3,.g2,.timeline-grid,.form,.guide-progress{grid-template-columns:1fr}.hero h2{font-size:29px}.audit-item{grid-template-columns:1fr}.story-flow{grid-template-columns:1fr}.story-arrow{transform:rotate(90deg);min-height:18px}.result-grid{grid-template-columns:1fr}.result-arrow{transform:rotate(90deg)}.expert-callout{align-items:flex-start;flex-direction:column}.top-actions .small-btn{display:none}}
@@ -69,18 +85,21 @@ body.network-busy .main button:not(:disabled),body.network-busy .preset{opacity:
 <div class="app">
   <aside class="sidebar">
     <div class="logo"><b>Pickup</b> Pact</div>
-    <div class="side-caption">빠른 시작</div>
+    <div class="side-caption">일반 데모</div>
     <div class="nav">
-      <button class="active" data-page="overview">홈</button>
-      <button data-page="guided">3분 체험</button>
+      <button class="active" data-page="overview">처음 보기</button>
+      <button data-page="guided">문제 복구 체험</button>
     </div>
-    <div class="side-caption" style="margin-top:14px">기술 상세</div>
-    <div class="nav">
-      <button data-page="orders">주문 흐름</button>
-      <button data-page="capacity">매장 처리량</button>
-      <button data-page="faults">장애 주입</button>
-      <button data-page="reconcile">정합성 복구</button>
-      <button data-page="ledger">정산 · 감사</button>
+    <div class="expert-entry">
+      <button type="button" onclick="enterExpertMode('orders')">백엔드 구현 보기</button>
+    </div>
+    <div class="side-caption expert-caption" style="margin-top:14px">전문가 모드</div>
+    <div class="nav expert-nav">
+      <button data-page="orders" data-expert="true">주문 흐름</button>
+      <button data-page="capacity" data-expert="true">매장 처리량</button>
+      <button data-page="faults" data-expert="true">장애 주입</button>
+      <button data-page="reconcile" data-expert="true">정합성 복구</button>
+      <button data-page="ledger" data-expert="true">정산 · 감사</button>
     </div>
     <div class="sidebar-foot">
       체험용 가상 데이터만 사용합니다.<br>
@@ -100,108 +119,86 @@ body.network-busy .main button:not(:disabled),body.network-busy .preset{opacity:
     <div class="content">
       <section class="page active" id="page-overview">
         <div class="hero">
-          <div class="badge">스마트오더 문제 복구 체험</div>
-          <h2>주문은 취소됐는데<br>정산과 포인트가 지급됐다면?</h2>
+          <div class="badge">일반 사용자용 데모</div>
+          <h2>주문 취소가 늦게 전달되면<br>어떻게 될까요?</h2>
           <p>
-            Pickup Pact는 늦게 도착한 주문·취소 메시지의 <strong>실제 발생 순서</strong>를 다시 확인해
-            잘못 반영된 정산과 포인트를 찾아내고, 원래 기록을 지우지 않은 채 안전하게 되돌리는 과정을 보여줍니다.
-            기술 용어를 몰라도 아래 안내 순서대로 직접 체험할 수 있습니다.
+            고객은 이미 주문을 취소했지만 취소 정보가 서버에 늦게 도착할 수 있습니다.
+            그 사이 매장에는 <strong>9,000원</strong>이 정산되고 고객에게 <strong>90P</strong>가 지급되면,
+            Pickup Pact가 잘못된 결과를 찾아 원래 상태로 되돌리는 과정을 실제 API로 보여줍니다.
           </p>
           <div class="hero-actions">
-            <button class="btn primary large" onclick="goPage('guided')">3분 데모 시작</button>
-            <button class="btn large" onclick="goPage('reconcile')">기술 상세 보기</button>
+            <button class="btn primary large" onclick="runRecruiterDemo()">직접 확인해보기</button>
+            <button class="btn large" onclick="enterExpertMode('orders')">백엔드 구현 보기</button>
           </div>
           <div class="promise-row">
-            <span class="promise-chip">정상 주문</span>
-            <span class="promise-chip">문제 발생</span>
-            <span class="promise-chip">자동 확인</span>
-            <span class="promise-chip">안전한 복구</span>
-            <span class="promise-chip">변경 기록 보존</span>
+            <span class="promise-chip">버튼 한 번으로 시작</span>
+            <span class="promise-chip">잘못된 9,000원 · 90P 확인</span>
+            <span class="promise-chip">복구 전후 비교</span>
           </div>
         </div>
 
-        <div class="section-head"><h2>한눈에 보는 대표 상황</h2><p>복잡한 인프라 설명보다 실제 사용자 영향부터 보여줍니다.</p></div>
-        <div class="story-flow" aria-label="대표 복구 흐름">
-          <div class="story-step"><span class="n">1</span><strong>정상 주문</strong><span>아메리카노 2잔 · 9,000원 · 12:30 픽업</span></div>
-          <div class="story-arrow">→</div>
-          <div class="story-step problem"><span class="n">2</span><strong>취소 메시지 52초 지연</strong><span>고객은 먼저 취소했지만 서버는 나중에 받습니다.</span></div>
-          <div class="story-arrow">→</div>
-          <div class="story-step problem"><span class="n">3</span><strong>잘못된 정산·포인트 발견</strong><span>점주 9,000원 정산과 고객 90P가 남았습니다.</span></div>
-          <div class="story-arrow">→</div>
-          <div class="story-step"><span class="n">4</span><strong>잘못된 처리 되돌리기</strong><span>기존 기록은 남기고 되돌림 기록을 추가합니다.</span></div>
-          <div class="story-arrow">→</div>
-          <div class="story-step success"><span class="n">5</span><strong>정상 상태로 복구</strong><span>정산 0원 · 포인트 0P · 변경 이력 보존</span></div>
+        <div class="section-head"><h2>이 데모에서 보는 것</h2><p>기술 용어보다 실제 사용자에게 생기는 문제와 결과부터 보여줍니다.</p></div>
+        <div class="recruiter-intro">
+          <div class="card"><div class="micro">1 · 문제</div><b>취소는 먼저 했는데 처리 순서가 뒤바뀜</b><span>서버가 취소 정보를 늦게 받아 정산과 포인트가 잘못 남는 상황입니다.</span></div>
+          <div class="card"><div class="micro">2 · 확인</div><b>시스템이 실제 발생 순서를 다시 확인</b><span>어떤 처리가 잘못됐는지 찾아내고 되돌려야 할 항목을 준비합니다.</span></div>
+          <div class="card"><div class="micro">3 · 결과</div><b>9,000원 · 90P → 0원 · 0P</b><span>기존 기록을 지우지 않고 반대 기록을 추가해 결과를 정상화합니다.</span></div>
         </div>
 
-        <div class="section-head"><h2>현재 체험 상태</h2><p>첫 방문은 빈 상태에서 시작합니다.</p></div>
-        <div class="grid g4">
-          <div class="card metric"><span>현재 주문</span><b id="mOrder">-</b><span id="mOrderSub">주문 없음</span></div>
-          <div class="card metric"><span>기록된 변화</span><b id="mEvents">0</b><span>주문·결제·취소 등</span></div>
-          <div class="card metric"><span>감지한 문제</span><b id="mAnomalies">0</b><span>자동 상태 확인</span></div>
-          <div class="card metric"><span>금전 기록</span><b id="mLedger">0</b><span>정산·포인트·복구 이력</span></div>
+        <div class="expert-callout">
+          <div><strong>구현을 보고 싶다면 전문가 모드로 전환할 수 있습니다.</strong><span>주문 이벤트, 장애 주입, 시간 순서 비교, 복구 계획, ledger와 audit 기록을 별도 화면에서 확인합니다.</span></div>
+          <button class="btn" onclick="enterExpertMode('orders')">백엔드 구현 보기</button>
         </div>
 
-        <div class="section-head"><h2>다른 상황도 바로 체험</h2><p>한 번 클릭하면 샘플 상태를 불러옵니다.</p></div>
-        <div class="grid g4">
-          <div class="card preset" onclick="loadPreset('late-cancel')"><strong>취소 메시지가 52초 늦게 도착</strong><span>취소보다 정산과 포인트가 먼저 처리된 상황</span></div>
-          <div class="card preset" onclick="loadPreset('duplicate')"><strong>같은 정산 메시지가 두 번 도착</strong><span>같은 돈이 두 번 반영되지 않도록 막아야 하는 상황</span></div>
-          <div class="card preset" onclick="loadPreset('capacity-drop')"><strong>매장이 처리할 수 있는 주문 수 감소</strong><span>이미 약속한 픽업 수량을 만들 수 없게 된 상황</span></div>
-          <div class="card preset" onclick="loadPreset('conflict')"><strong>같은 메시지 번호인데 금액 충돌</strong><span>단순 중복이 아니라 사람 확인이 필요한 상황</span></div>
-        </div>
-
-        <div class="section-head"><h2>현재 운영 상태</h2><p>샘플을 불러오거나 체험을 시작하면 여기에 결과가 나타납니다.</p></div>
-        <div class="grid g3">
-          <div class="card" id="overviewOrder"></div>
-          <div class="card" id="overviewImpact"></div>
-          <div class="card" id="overviewIncident"></div>
+        <div class="compat-hidden" aria-hidden="true">
+          <span id="mOrder">-</span><span id="mOrderSub">주문 없음</span><span id="mEvents">0</span><span id="mAnomalies">0</span><span id="mLedger">0</span>
+          <div id="overviewOrder"></div><div id="overviewImpact"></div><div id="overviewIncident"></div>
         </div>
       </section>
 
       <section class="page" id="page-guided">
         <div class="section-head">
-          <div><h2>3분 체험</h2><p>왼쪽부터 한 단계씩 누르면 정상 주문부터 복구 완료까지 이어집니다.</p></div>
-          <button class="small-btn" onclick="resetGuidedDemo()">처음부터 다시</button>
+          <div><h2>주문 취소 오류 복구 체험</h2><p>처음 세 단계는 자동으로 진행됩니다. 잘못된 결과가 보이면 복구만 직접 눌러보세요.</p></div>
+          <button class="small-btn" onclick="resetRecruiterDemo()">처음부터 다시</button>
         </div>
 
-        <div class="guide-progress" id="guideProgress">
-          <div class="guide-step" data-guide-step="1"><span class="dot">1</span><span>정상 주문 만들기</span></div>
-          <div class="guide-step" data-guide-step="2"><span class="dot">2</span><span>문제 발생시키기</span></div>
-          <div class="guide-step" data-guide-step="3"><span class="dot">3</span><span>문제 확인하기</span></div>
-          <div class="guide-step" data-guide-step="4"><span class="dot">4</span><span>안전하게 복구</span></div>
+        <div class="guide-progress recruiter-progress" id="guideProgress">
+          <div class="guide-step" data-story-step="1"><span class="dot">1</span><span>정상 주문</span></div>
+          <div class="guide-step" data-story-step="2"><span class="dot">2</span><span>취소 발생</span></div>
+          <div class="guide-step" data-story-step="3"><span class="dot">3</span><span>잘못된 지급</span></div>
+          <div class="guide-step" data-story-step="4"><span class="dot">4</span><span>문제 발견</span></div>
+          <div class="guide-step" data-story-step="5"><span class="dot">5</span><span>정상 복구</span></div>
         </div>
 
         <div class="guide-main">
-          <div class="card guide-status">
-            <div class="micro">지금 할 일</div>
-            <h3 id="guideTitle">정상 주문부터 만들어보세요.</h3>
-            <p id="guideDescription">버튼 하나로 주문 생성, 결제 승인, 픽업 확정까지 준비합니다. 이 단계에서는 문제가 없는 정상 상태입니다.</p>
-            <div class="guide-actions">
-              <button class="btn" id="guideStart" onclick="startGuidedDemo()">1. 정상 주문 만들기</button>
-              <button class="btn" id="guideIncident" onclick="guidedIncident()">2. 52초 지연 취소 만들기</button>
-              <button class="btn" id="guideAnalyze" onclick="guidedAnalyze()">3. 문제 확인하기</button>
-              <button class="btn" id="guideRepair" onclick="guidedRepair()">4. 안전하게 복구하기</button>
-              <button class="btn" id="guideAgain" onclick="resetGuidedDemo()" style="display:none">다시 체험하기</button>
+          <div class="card guide-status recruiter-status">
+            <div class="micro">지금 일어나는 일</div>
+            <h3 id="guideTitle">버튼 한 번으로 시작할 수 있습니다.</h3>
+            <p id="guideDescription">정상 주문부터 취소 지연, 잘못된 정산·포인트 지급, 문제 탐지까지 자동으로 보여줍니다.</p>
+            <div class="recruiter-actions">
+              <button class="btn primary" id="guideStart" onclick="runRecruiterDemo()">자동 데모 시작</button>
+              <button class="btn primary" id="guideRepair" onclick="repairRecruiterDemo()" style="display:none">문제 복구하기</button>
+              <button class="btn" id="guideAgain" onclick="resetRecruiterDemo()" style="display:none">다시 체험하기</button>
             </div>
           </div>
           <div class="card">
-            <h3>현재 주문</h3>
+            <h3>고객 주문</h3>
             <div id="guideOrder"></div>
           </div>
         </div>
 
-        <div class="section-head"><h2>복구 전 / 후</h2><p>기술 코드 대신 돈과 포인트가 어떻게 달라지는지 보여줍니다.</p></div>
+        <div class="section-head"><h2>복구 전 / 후</h2><p>돈과 포인트가 어떻게 달라지는지만 먼저 확인하면 됩니다.</p></div>
         <div class="result-grid">
           <div class="result-card before" id="guideBefore"></div>
           <div class="result-arrow">→</div>
           <div class="result-card after" id="guideAfter"></div>
         </div>
 
-        <div class="section-head"><h2>시스템이 찾은 문제</h2><p>일반 사용자가 이해할 수 있는 문장으로 설명합니다.</p></div>
+        <div class="section-head"><h2>왜 잘못된 상태인지</h2><p>백엔드 코드를 몰라도 이해할 수 있는 문장으로 설명합니다.</p></div>
         <div class="guide-problems" id="guideProblemList"></div>
 
         <div class="expert-callout">
-          <div><strong>백엔드 면접관이라면 더 깊게 볼 수 있습니다.</strong><span>실제 발생 시각과 서버 수신 시각, anomaly code, repair proposal, append-only ledger, audit trail을 그대로 확인할 수 있습니다.</span></div>
-          <button class="btn" onclick="goPage('reconcile')">기술 상세 보기</button>
+          <div><strong>여기부터는 백엔드 면접관용입니다.</strong><span>이벤트의 서버 수신 시각과 실제 발생 시각, anomaly code, repair proposal, append-only ledger, audit trail을 그대로 확인할 수 있습니다.</span></div>
+          <button class="btn" onclick="enterExpertMode('reconcile')">백엔드 구현 보기</button>
         </div>
       </section>
 
@@ -329,15 +326,17 @@ let sessionId=localStorage.getItem("pickupPactProductSessionV3");
 let state=null;
 let sessionReadyPromise=null;
 let pendingRequests=0;
+let recruiterNarrativeStage=null;
 const $=id=>document.getElementById(id);
 
 const pageNames={
-  overview:"홈",guided:"3분 체험",orders:"주문 흐름",capacity:"매장 처리량",
+  overview:"처음 보기",guided:"문제 복구 체험",orders:"주문 흐름",capacity:"매장 처리량",
   faults:"장애 주입",reconcile:"정합성 복구",ledger:"정산 · 감사"
 };
 
 document.querySelectorAll(".nav button").forEach(button=>{
   button.onclick=()=>{
+    if(button.dataset.expert==="true") document.body.classList.add("expert-mode");
     document.querySelectorAll(".nav button").forEach(x=>x.classList.remove("active"));
     button.classList.add("active");
     const page=button.dataset.page;
@@ -403,72 +402,92 @@ function auditHas(action){
   return Boolean(state && (state.audit||[]).some(item=>item.action===action));
 }
 
-function currentGuideStage(){
+function inferredRecruiterStage(){
   if(!state || !state.order) return 0;
   const applied=new Set(state.applied_repairs||[]);
-  if(applied.has("REVERSE_SETTLEMENT") && applied.has("REVERSE_REWARD")) return 4;
-  if(state.order.status==="CANCELLED" && auditHas("RECONCILED")) return 3;
-  if(state.order.status==="CANCELLED" && state.order.settled && state.order.rewarded) return 2;
+  if(applied.has("REVERSE_SETTLEMENT") && applied.has("REVERSE_REWARD")) return 5;
+  if(state.order.status==="CANCELLED" && auditHas("RECONCILED")) return 4;
+  if(state.order.status==="CANCELLED" && state.order.settled && state.order.rewarded) return 3;
+  if(state.order.status==="CANCELLED") return 2;
   return 1;
 }
 
-async function startGuidedDemo(){
+function recruiterStage(){
+  return recruiterNarrativeStage===null?inferredRecruiterStage():recruiterNarrativeStage;
+}
+
+function storyPause(ms=260){
+  return new Promise(resolve=>setTimeout(resolve,ms));
+}
+
+function enterExpertMode(page="orders"){
+  document.body.classList.add("expert-mode");
+  goPage(page);
+}
+
+async function runRecruiterDemo(){
   try{
     await waitForSession();
     state=await api("/api/demo/sessions/"+sessionId+"/reset","POST",{});
+    recruiterNarrativeStage=0;
+    renderAll();goPage("guided");
+    await storyPause();
+
     let result=await api("/api/demo/sessions/"+sessionId+"/orders","POST",{
       store:"패스카페 강남역점",items:"아메리카노 2잔",total:9000,pickup_at:"12:30",units:2
     });
     state=result.state;
-    result=await api("/api/demo/sessions/"+sessionId+"/payment","POST",{authorization_id:"guided-demo"});
+    result=await api("/api/demo/sessions/"+sessionId+"/payment","POST",{authorization_id:"recruiter-demo"});
     state=result.state;
     result=await api("/api/demo/sessions/"+sessionId+"/confirm","POST",{});
     state=result.state;
-    renderAll();goPage("guided");toast("정상 주문이 준비됐습니다. 다음 단계로 진행해보세요.");
-  }catch(e){toast(e.message,true)}
-}
+    recruiterNarrativeStage=1;renderAll();
+    await storyPause();
 
-async function guidedIncident(){
-  try{
-    await waitForSession();
-    let result=await api("/api/demo/sessions/"+sessionId+"/cancel","POST",{delay_seconds:52});
+    result=await api("/api/demo/sessions/"+sessionId+"/cancel","POST",{delay_seconds:52});
     state=result.state;
+    recruiterNarrativeStage=2;renderAll();
+    await storyPause();
+
     result=await api("/api/demo/sessions/"+sessionId+"/settlement","POST",{amount:9000});
     state=result.state;
     result=await api("/api/demo/sessions/"+sessionId+"/reward","POST",{amount:90});
     state=result.state;
-    renderAll();toast("취소 메시지가 늦게 도착해 잘못된 정산과 포인트가 남았습니다.");
-  }catch(e){toast(e.message,true)}
+    recruiterNarrativeStage=3;renderAll();
+    await storyPause();
+
+    result=await api("/api/demo/sessions/"+sessionId+"/reconcile","POST",{});
+    state=result.state;
+    recruiterNarrativeStage=4;renderAll();
+    toast("문제를 찾았습니다. 이제 ‘문제 복구하기’를 눌러 전후 결과를 비교해보세요.");
+  }catch(e){
+    recruiterNarrativeStage=null;
+    toast(e.message,true);
+  }
 }
 
-async function guidedAnalyze(){
-  try{
-    await waitForSession();
-    const result=await api("/api/demo/sessions/"+sessionId+"/reconcile","POST",{});
-    state=result.state;renderAll();toast("실제 발생 순서를 기준으로 문제와 복구 계획을 확인했습니다.");
-  }catch(e){toast(e.message,true)}
-}
-
-async function guidedRepair(){
+async function repairRecruiterDemo(){
   try{
     await waitForSession();
     const result=await api("/api/demo/sessions/"+sessionId+"/repairs/apply","POST",{});
-    state=result.state;renderAll();
-    toast(result.applied.length?"복구가 끝났습니다. 정산과 포인트 결과를 확인해보세요.":"새로 적용할 복구가 없습니다.");
+    state=result.state;
+    recruiterNarrativeStage=5;renderAll();
+    toast(result.applied.length?"복구가 끝났습니다. 9,000원과 90P가 모두 원래 상태로 돌아왔습니다.":"새로 적용할 복구가 없습니다.");
   }catch(e){toast(e.message,true)}
 }
 
-async function resetGuidedDemo(){
+async function resetRecruiterDemo(){
   try{
     await waitForSession();
     state=await api("/api/demo/sessions/"+sessionId+"/reset","POST",{});
+    recruiterNarrativeStage=0;
     renderAll();goPage("guided");toast("체험을 처음 상태로 되돌렸습니다.");
   }catch(e){toast(e.message,true)}
 }
 
 async function newSession(){
   try{
-    localStorage.removeItem("pickupPactProductSessionV3");sessionId=null;state=null;
+    localStorage.removeItem("pickupPactProductSessionV3");sessionId=null;state=null;recruiterNarrativeStage=null;
     await bootstrapSession();
     toast("새 독립 데모 세션을 만들었습니다.");
   }catch(e){toast(e.message,true)}
@@ -647,71 +666,71 @@ function humanStatus(status){
 
 function renderGuide(){
   if(!state)return;
-  const stage=currentGuideStage();
-  document.querySelectorAll("[data-guide-step]").forEach((el,index)=>{
+  const stage=recruiterStage();
+
+  document.querySelectorAll("[data-story-step]").forEach((el,index)=>{
     const step=index+1;
     el.classList.toggle("done",step<=stage);
-    el.classList.toggle("active",step===stage+1 && stage<4);
+    el.classList.toggle("active",step===stage+1 && stage<5);
     el.querySelector(".dot").textContent=step<=stage?"✓":String(step);
   });
 
-  const buttons=[
-    ["guideStart",0],["guideIncident",1],["guideAnalyze",2],["guideRepair",3]
-  ];
-  buttons.forEach(([id,needed])=>{
-    const button=$(id);
-    button.disabled=stage!==needed;
-    button.classList.toggle("current",stage===needed);
-    button.classList.toggle("done",stage>needed);
-  });
-  $("guideAgain").style.display=stage===4?"inline-flex":"none";
+  $("guideStart").style.display=stage===0?"inline-flex":"none";
+  $("guideRepair").style.display=stage===4?"inline-flex":"none";
+  $("guideAgain").style.display=stage===5?"inline-flex":"none";
 
   const titles=[
-    "정상 주문부터 만들어보세요.",
+    "버튼 한 번으로 시작할 수 있습니다.",
     "정상 주문이 준비됐습니다.",
-    "문제가 발생했습니다.",
-    "복구 계획이 준비됐습니다.",
+    "고객이 주문을 취소했습니다.",
+    "취소 정보가 늦게 도착했습니다.",
+    "문제를 발견했습니다.",
     "복구가 끝났습니다."
   ];
   const descriptions=[
-    "버튼 하나로 주문 생성, 결제 승인, 픽업 확정까지 준비합니다. 이 단계에서는 문제가 없는 정상 상태입니다.",
-    "9,000원 주문의 결제와 12:30 픽업 약속이 정상적으로 확정됐습니다. 이제 실제 서비스에서 생길 수 있는 지연 상황을 만들어봅니다.",
-    "고객 취소는 먼저 발생했지만 서버가 52초 늦게 받았습니다. 그 사이 점주 정산 9,000원과 고객 포인트 90P가 잘못 반영됐습니다.",
-    "시스템이 실제 발생 순서를 다시 계산해 잘못된 정산과 포인트를 찾았습니다. 원본 기록을 지우지 않고 반대 기록을 추가하는 복구 계획을 준비했습니다.",
-    "정산과 포인트가 모두 원래 상태로 돌아왔고, 무엇을 왜 되돌렸는지 변경 이력도 남아 있습니다."
+    "정상 주문부터 취소 지연, 잘못된 정산·포인트 지급, 문제 탐지까지 자동으로 보여줍니다.",
+    "아메리카노 2잔, 9,000원 주문과 12:30 픽업이 정상적으로 확정됐습니다.",
+    "고객은 주문을 취소했습니다. 하지만 이 취소 정보는 서버에 52초 늦게 도착하도록 설정했습니다.",
+    "서버가 취소를 알기 전에 매장 정산 9,000원과 고객 포인트 90P가 잘못 반영됐습니다.",
+    "시스템이 실제 발생 순서를 다시 확인해 취소 뒤에 남은 정산과 포인트를 잘못된 처리로 판단했습니다. 이제 복구 버튼만 눌러보세요.",
+    "정산은 0원, 포인트는 0P로 돌아왔습니다. 기존 기록은 지우지 않고 되돌림 기록을 추가했습니다."
   ];
   $("guideTitle").textContent=titles[stage];
   $("guideDescription").textContent=descriptions[stage];
 
   if(!state.order){
-    $("guideOrder").innerHTML='<div class="empty">아직 주문이 없습니다.<br>1단계 버튼을 눌러 시작하세요.</div>';
+    $("guideOrder").innerHTML='<div class="empty">아직 주문이 없습니다.<br>‘자동 데모 시작’을 누르면 샘플 주문이 준비됩니다.</div>';
   }else{
     const o=state.order;
     $("guideOrder").innerHTML=
       '<div class="order-title">'+o.items+'</div>'+
-      '<div class="muted" style="font-size:11px">'+o.store+' · '+o.order_id+'</div>'+
+      '<div class="muted" style="font-size:11px">'+o.store+'</div>'+
       '<div class="kv"><div class="kv-row"><span>결제 금액</span><b>'+money(o.total)+'원</b></div>'+
       '<div class="kv-row"><span>픽업 시간</span><b>'+o.pickup_at+'</b></div>'+
       '<div class="kv-row"><span>현재 상태</span><b>'+humanStatus(o.status)+'</b></div></div>';
   }
 
-  if(stage<2){
+  if(stage<3){
     $("guideBefore").className="result-card before";
-    $("guideBefore").innerHTML='<div class="micro">문제 발생 전</div><div class="value">정상 상태</div><p>문제를 발생시키면 잘못된 금전 상태가 여기에 표시됩니다.</p>';
+    $("guideBefore").innerHTML='<div class="micro">문제 발생 전</div><div class="value">정상 상태</div><p>취소 정보가 늦게 도착하면 잘못된 금전 상태가 여기 표시됩니다.</p>';
     $("guideAfter").className="result-card after";
-    $("guideAfter").innerHTML='<div class="micro">복구 후</div><div class="value">아직 비교 전</div><p>복구가 끝나면 최종 정산과 포인트가 표시됩니다.</p>';
+    $("guideAfter").innerHTML='<div class="micro">복구 후</div><div class="value">아직 비교 전</div><p>문제를 찾은 뒤 복구하면 최종 결과가 표시됩니다.</p>';
   }else{
     $("guideBefore").className="result-card before ready";
-    $("guideBefore").innerHTML='<div class="micro">복구 전</div><div class="value">정산 +9,000원 · 포인트 +90P</div><p>취소된 주문인데도 점주 정산과 고객 포인트가 남아 있는 잘못된 상태입니다.</p>';
-    $("guideAfter").className="result-card after"+(stage===4?" ready":"");
-    $("guideAfter").innerHTML=stage===4
-      ? '<div class="micro">복구 후</div><div class="value">정산 0원 · 포인트 0P</div><p>원본 기록은 삭제하지 않고, 되돌림 기록과 포인트 회수 기록을 추가해 변경 이력을 보존했습니다.</p>'
-      : '<div class="micro">복구 후</div><div class="value">복구 대기</div><p>문제를 확인한 뒤 안전한 복구 버튼을 누르면 결과를 비교할 수 있습니다.</p>';
+    $("guideBefore").innerHTML='<div class="micro">복구 전</div><div class="value">정산 9,000원 · 포인트 90P</div><p>취소된 주문인데도 매장 정산과 고객 포인트가 남아 있는 잘못된 상태입니다.</p>';
+    $("guideAfter").className="result-card after"+(stage===5?" ready":"");
+    $("guideAfter").innerHTML=stage===5
+      ? '<div class="micro">복구 후</div><div class="value">정산 0원 · 포인트 0P</div><p>원본 기록은 삭제하지 않고 되돌림 기록을 추가해 변경 이력을 보존했습니다.</p>'
+      : '<div class="micro">복구 후</div><div class="value">복구 대기</div><p>‘문제 복구하기’를 누르면 잘못된 정산과 포인트가 원래 상태로 돌아갑니다.</p>';
   }
 
   const problems=state.reconciliation?.anomalies||[];
-  if(stage<2 || !problems.length){
-    $("guideProblemList").innerHTML='<div class="empty">아직 표시할 문제가 없습니다.</div>';
+  if(stage<4){
+    $("guideProblemList").innerHTML='<div class="empty">자동 데모가 문제를 확인하면 이유가 여기에 표시됩니다.</div>';
+  }else if(stage===5){
+    $("guideProblemList").innerHTML='<div class="alert green"><b>해결 완료</b><br>잘못 반영된 정산과 포인트를 되돌렸고, 변경 과정은 기록으로 남겼습니다.</div>';
+  }else if(!problems.length){
+    $("guideProblemList").innerHTML='<div class="empty">표시할 문제가 없습니다.</div>';
   }else{
     $("guideProblemList").innerHTML=problems.map(item=>
       '<div class="plain-problem"><b>'+item.title+'</b>'+item.detail+'</div>'
