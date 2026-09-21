@@ -15,24 +15,64 @@ Pickup Pact는 서버가 받은 순서만 믿지 않고 `occurred_at`과 `receiv
 
 ## 면접관용 데모
 
-첫 화면은 기술 용어가 아니라 **고객 주문 → 어떤 문제가 생겼는지 → 고객/점주/서비스 영향 → 백엔드가 계산한 복구 결과** 순서로 읽히도록 구성했습니다.
+공개 데모는 더 이상 네 개의 고정 시나리오만 보여주는 화면이 아닙니다. **한 세션 안에서 주문을 만들고, 결제를 승인하고, 픽업을 확정하고, 장애를 직접 주입하고, 정합성 엔진으로 원인을 분석한 뒤, 보상 계획을 샌드박스에 적용하는 운영 콘솔**입니다.
 
-데모에서 확인할 수 있는 네 가지 장애 상황은 다음과 같습니다.
+### 실제로 조작할 수 있는 기능
 
-1. **취소 메시지 지연** — 취소는 먼저 발생했지만 정산·적립 이후 서버에 도착
-2. **Kafka 중복 전달** — 동일 정산 이벤트를 두 번 받아도 금전 반영은 한 번만 유지
-3. **매장 처리량 감소** — 확정한 픽업 약속보다 현재 제조 가능량이 작아짐
-4. **동일 event_id 금액 충돌** — 안전한 redelivery와 상류 금액 충돌을 구분
+1. **개요 Dashboard**
+   - 현재 주문 상태, 이벤트 수, 탐지된 이상 수, ledger batch 수
+   - 늦은 취소 / Kafka 중복 / capacity 감소 / event-id 금액 충돌 preset
+2. **주문 흐름**
+   - 새 HOLD 주문 생성
+   - 별도 payment authorization
+   - pickup confirmation
+   - 정상 cancellation
+3. **매장 처리량**
+   - 현재 slot의 reserved / available units 확인
+   - capacity revision 이벤트 발행
+   - 확정 주문을 `AT_RISK`로 만드는 상황 재현
+4. **장애 주입 Lab**
+   - 52초 늦게 도착하는 취소
+   - exact Kafka redelivery
+   - 같은 `event_id` + 다른 금액
+   - 픽업 약속보다 작은 매장 처리량
+5. **정합성 복구**
+   - 실제 `services/reconciler/app/engine.py` 호출
+   - 서버 수신 순서와 실제 업무 발생 순서 비교
+   - anomaly / evidence / deterministic repair proposal 확인
+   - 안전한 repair plan을 **데모 샌드박스에만** 적용
+6. **정산 · 감사**
+   - settlement / reward / reversal ledger batch
+   - net settlement / reward balance
+   - projection rebuild 횟수
+   - operator audit trail
 
-**“장애 감지 및 복구 계획 계산”** 버튼은 데모용 별도 알고리즘이 아니라 저장소의 실제 reconciliation engine을 호출합니다. 화면의 “서버가 받은 순서”와 “실제로 발생한 순서”도 같은 scenario payload에서 계산됩니다.
+각 브라우저는 독립적인 demo session을 사용해 다른 방문자의 상태와 섞이지 않습니다.
+
+대표 흐름은 다음과 같습니다.
+
+```text
+HOLD 주문 생성
+  → 결제 승인
+  → 픽업 확정
+  → 취소 메시지 52초 지연
+  → 그 사이 점주 정산 + 포인트 적립
+  → reconciliation
+  → REVERSE_SETTLEMENT + REVERSE_REWARD
+  → 샌드박스에 보상 계획 적용
+  → net settlement 0 / reward balance 0
+```
+
+공개 Render 인스턴스는 리뷰 편의를 위해 FastAPI + session-isolated in-memory sandbox로 동작합니다. Kafka/PostgreSQL/Redis/MongoDB/Elasticsearch 전체 topology가 공개 인스턴스에서 함께 실행된다고 주장하지 않습니다. 실제 분산 서비스 구현과 계약, Compose/Kubernetes/Terraform은 저장소의 별도 서비스 경로에 있습니다.
 
 로컬 실행:
 
 ```bash
 pip install -r demo/requirements.txt
+pytest -q demo/test_demo.py
 uvicorn demo.main:app --host 0.0.0.0 --port 10000
 
-# 또는 동일한 공개 데모 이미지
+# 공개 데모와 같은 이미지
 docker build -f Dockerfile.demo -t pickup-pact-demo .
 docker run --rm -p 10000:10000 pickup-pact-demo
 ```
@@ -114,7 +154,7 @@ flowchart LR
 ## 저장소 구조
 
 ```text
-demo/                         # 면접관용 FastAPI 인터랙티브 데모
+demo/                         # 면접관용 FastAPI 운영 샌드박스 + session state
 services/
   commitment-service/         # Kotlin + Spring WebFlux
   ledger-service/             # Java + Spring
