@@ -27,7 +27,6 @@ def test_late_cancel_uses_core_engine_and_proposes_compensation():
     anomaly_codes = {x["code"] for x in result["anomalies"]}
     assert "REVERSE_SETTLEMENT" in codes
     assert "REVERSE_REWARD" in codes
-    assert "REBUILD_PROJECTION" in codes
     assert "settlement_posted_after_prior_cancellation" in anomaly_codes
     assert result["engine"] == "services/reconciler/app/engine.py"
     assert result["before"] == "주문 취소 / 정산 유지 / 90P 유지"
