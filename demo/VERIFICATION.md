@@ -5,8 +5,8 @@ The public demo is not considered verified from a screenshot, one successful API
 For a release candidate, all of the following automated paths must pass on the same commit:
 
 - `demo-ci`: FastAPI demo unit/API tests and Docker image build.
-- `ui-e2e`: local Chromium verification of the first-time one-click recruiter story, the full expert operator flow, capacity/conflict labs, and a narrow mobile viewport.
-- `live-demo-smoke`: waits until the public `/health` reports the exact `RENDER_GIT_COMMIT` equal to the GitHub Actions SHA, checks the one-click recruiter-story markers, verifies fixed scenarios and the complete API operator flow twice, then runs the same Chromium suite against that deployed public URL.
+- `ui-e2e`: local Chromium verification of the first-time product recovery center, the full expert operator flow, capacity/conflict labs, and a narrow mobile viewport.
+- `live-demo-smoke`: waits until the public `/health` reports the exact `RENDER_GIT_COMMIT` equal to the GitHub Actions SHA, checks the product-shell and recovery-center markers, verifies fixed scenarios and the complete API operator flow twice, then runs the same Chromium suite against that deployed public URL.
 - `ci`: repository guardrails, Python/JVM tests, contracts, evidence reproduction, Docker builds, and Terraform validation.
 - `release-gate`: three repeated test passes, deterministic evidence reproduction, full Docker topology integration twice, and Terraform validation.
 
@@ -15,7 +15,7 @@ Before calling a demo release complete, re-check the current release commit in t
 1. implementation — read the current UI/backend code instead of trusting an earlier result;
 2. tests — execute all five automated paths on the same commit;
 3. deployed execution — confirm the public Render service reports that exact commit;
-4. UI/API behavior — exercise both the one-click recruiter journey and the opt-in expert operator flow;
+4. UI/API behavior — exercise both the product recovery journey and the opt-in expert operator flow;
 5. regression — repeat core tests and full topology checks, including the two-pass integration smoke;
 6. README/docs — verify that public claims match the implementation and measured evidence;
 7. final diff — compare the release commit with its pre-change base and review every changed file.
