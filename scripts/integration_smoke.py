@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
+import subprocess
 import time
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -202,6 +204,75 @@ def ledger_flow(pass_no: int) -> None:
     ), conflicts
 
 
+def kafka_ledger_flow(pass_no: int) -> None:
+    event_id = f"integration-kafka-ledger-{pass_no}-{uuid.uuid4().hex[:8]}"
+    aggregate_id = f"integration-kafka-order-{pass_no}"
+
+    def publish(amount: int) -> None:
+        payload = {
+            "eventId": event_id,
+            "aggregateId": aggregate_id,
+            "type": "REWARD",
+            "amount": amount,
+        }
+        subprocess.run(
+            [
+                "docker",
+                "compose",
+                "exec",
+                "-T",
+                "kafka",
+                "/opt/kafka/bin/kafka-console-producer.sh",
+                "--bootstrap-server",
+                "localhost:9092",
+                "--topic",
+                "pickup.financial.events.v1",
+            ],
+            input=json.dumps(payload) + "\n",
+            text=True,
+            check=True,
+            timeout=30,
+        )
+
+    publish(120)
+
+    def history_has_one():
+        response = httpx.get(
+            f"{LEDGER}/api/v1/ledger/orders/{aggregate_id}?limit=10",
+            timeout=10,
+        )
+        return (
+            response.status_code == 200
+            and len(response.json()) == 1
+            and response.json()[0]["eventId"] == event_id
+        )
+
+    wait_until(history_has_one, timeout_s=30, label="Kafka ledger consumer posting")
+
+    publish(120)
+    time.sleep(2)
+    history = expect(
+        httpx.get(f"{LEDGER}/api/v1/ledger/orders/{aggregate_id}?limit=10", timeout=10),
+        200,
+    )
+    assert len(history) == 1, history
+
+    publish(999)
+
+    def conflict_is_quarantined():
+        response = httpx.get(f"{LEDGER}/api/v1/ledger/conflicts?limit=50", timeout=10)
+        return (
+            response.status_code == 200
+            and any(item["eventId"] == event_id for item in response.json())
+        )
+
+    wait_until(
+        conflict_is_quarantined,
+        timeout_s=30,
+        label="Kafka conflicting event quarantine",
+    )
+
+
 def late_cancel_packet(pass_no: int) -> tuple[str, dict]:
     aggregate = f"integration-reconcile-{pass_no}-{uuid.uuid4().hex[:8]}"
     base = datetime.now(UTC)
@@ -353,6 +424,7 @@ def celery_flow(pass_no: int) -> None:
 def one_pass(pass_no: int) -> None:
     commitment_flow(pass_no)
     ledger_flow(pass_no)
+    kafka_ledger_flow(pass_no)
     reconciler_flow(pass_no)
     ops_console_flow()
     celery_flow(pass_no)
