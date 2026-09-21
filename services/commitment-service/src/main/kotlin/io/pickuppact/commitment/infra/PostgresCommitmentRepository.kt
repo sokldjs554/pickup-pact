@@ -50,7 +50,7 @@ class PostgresCommitmentRepository(
                 else Mono.just(c)
             }
 
-    override fun save(c: PickupCommitment): Mono<PickupCommitment> = upsert(c)
+    override fun save(commitment: PickupCommitment): Mono<PickupCommitment> = upsert(commitment)
 
     override fun saveWithEvent(
         commitment: PickupCommitment,
