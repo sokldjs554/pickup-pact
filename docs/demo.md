@@ -2,16 +2,20 @@
 
 The public demo is a **session-isolated smart-order recovery sandbox** with two UX layers.
 
-## First-time guided flow
+## First-time recruiter story
 
-The default landing page starts from a blank session and explains the business problem before exposing infrastructure terms. A visitor can finish the representative incident in four actions:
+The default landing page explains the business problem before exposing infrastructure terms. The expert navigation is hidden until a reviewer explicitly chooses **백엔드 구현 보기**.
 
-1. create a normal paid and confirmed pickup order;
-2. make the cancellation message arrive 52 seconds late while settlement and reward are posted;
-3. ask the real reconciliation engine to explain the inconsistency;
-4. apply the deterministic repair plan inside the sandbox.
+A first-time visitor presses **직접 확인해보기** once. The browser then drives the real demo API through the representative story automatically:
 
-The primary UI shows the business result directly: `settlement +9,000 KRW / reward +90P` before repair and `settlement 0 KRW / reward 0P` after repair. It also states that the original evidence is preserved.
+1. create, pay, and confirm a normal 9,000 KRW pickup order;
+2. record a cancellation that reaches the server 52 seconds late;
+3. post the incorrect 9,000 KRW settlement and 90P reward while that cancellation is delayed;
+4. run the real reconciliation engine and show the detected inconsistency.
+
+At that point the visitor has one meaningful action: **문제 복구하기**. Applying it appends the deterministic reversal records and changes the visible result from `settlement 9,000 KRW / reward 90P` to `settlement 0 KRW / reward 0P`.
+
+The general-user layer therefore presents **problem → detection → before/after recovery** first. It does not require the visitor to understand Kafka, event IDs, ledgers, or reconciliation terminology before seeing the value of the system.
 
 ## Technical detail layer
 
