@@ -464,7 +464,7 @@ class DemoOrderCreate(BaseModel):
     store: str = Field(min_length=1, max_length=80)
     items: str = Field(min_length=1, max_length=160)
     total: int = Field(gt=0, le=1_000_000)
-    pickup_at: str = Field(pattern=r"^\\d{2}:\\d{2}$")
+    pickup_at: str = Field(pattern=r"^\d{2}:\d{2}$")
     units: int = Field(ge=1, le=50)
 
 
