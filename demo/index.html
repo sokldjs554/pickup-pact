@@ -134,6 +134,8 @@ button,input{font:inherit}
             <button class="btn" onclick="authorizePayment()">결제 승인</button>
             <button class="btn" onclick="confirmOrder()">픽업 확정</button>
             <button class="btn" onclick="cancelOrder(0)">즉시 취소</button>
+            <button class="btn" onclick="settleNow()">정상 정산 반영</button>
+            <button class="btn" onclick="rewardNow()">포인트 적립</button>
           </div>
         </div>
         <div class="grid g2" style="margin-top:14px">
@@ -333,10 +335,22 @@ async function cancelOrder(delay){
 async function postSettlement(){
   const result=await api("/api/demo/sessions/"+sessionId+"/settlement","POST",{amount:null});
   state=result.state;
+  return result;
 }
 async function postReward(){
   const result=await api("/api/demo/sessions/"+sessionId+"/reward","POST",{amount:null});
   state=result.state;
+  return result;
+}
+async function settleNow(){
+  try{
+    await postSettlement();renderAll();toast("점주 정산 이벤트와 ledger batch를 기록했습니다.");
+  }catch(e){toast(e.message,true)}
+}
+async function rewardNow(){
+  try{
+    await postReward();renderAll();toast("고객 포인트 적립 이벤트와 ledger batch를 기록했습니다.");
+  }catch(e){toast(e.message,true)}
 }
 
 async function injectLateCancel(){
