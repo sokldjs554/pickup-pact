@@ -18,80 +18,85 @@ permissions:
 jobs:
   verify-live-demo:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
     steps:
-      - name: Wait for the expanded public demo release
+      - name: Wait for expanded public demo release
         shell: bash
         run: |
-          set -euo pipefail
-          BASE_URL="https://pickup-pact-demo.onrender.com"
+          python - <<'PY'
+          from __future__ import annotations
 
-          for attempt in $(seq 1 42); do
-            health_ok=false
-            page_ok=false
-
-            if curl --silent --show-error --fail --max-time 15 "$BASE_URL/health" -o /tmp/health.json; then
-              if python - <<'PY'
           import json
-          payload = json.load(open("/tmp/health.json"))
-          raise SystemExit(
-              0
-              if payload.get("status") == "ok"
-              and payload.get("engine") == "services/reconciler/app/engine.py"
-              else 1
-          )
+          import time
+          import urllib.error
+          import urllib.request
+
+          BASE = "https://pickup-pact-demo.onrender.com"
+
+          def request(method: str, path: str, payload=None, timeout=20):
+              data = None if payload is None else json.dumps(payload).encode()
+              req = urllib.request.Request(
+                  BASE + path,
+                  data=data,
+                  method=method,
+                  headers={"Content-Type": "application/json"},
+              )
+              with urllib.request.urlopen(req, timeout=timeout) as response:
+                  body = response.read()
+                  return json.loads(body) if body else None
+
+          def text(path: str):
+              with urllib.request.urlopen(BASE + path, timeout=20) as response:
+                  return response.read().decode()
+
+          for attempt in range(1, 43):
+              try:
+                  health = request("GET", "/health")
+                  page = text("/")
+                  assert health["status"] == "ok"
+                  assert health["engine"] == "services/reconciler/app/engine.py"
+                  for marker in [
+                      "주문 흐름",
+                      "장애 주입",
+                      "정합성 복구",
+                      "정산 · 감사",
+                      "실제 백엔드 정합성 장애를 직접 만들고 탐지·복구",
+                  ]:
+                      assert marker in page
+
+                  session = request("POST", "/api/demo/sessions", {})
+                  sid = session["session_id"]
+                  held = request(
+                      "POST",
+                      f"/api/demo/sessions/{sid}/orders",
+                      {
+                          "store": "deploy-check",
+                          "items": "아메리카노",
+                          "total": 4500,
+                          "pickup_at": "12:30",
+                          "units": 1,
+                      },
+                  )
+                  assert held["state"]["order"]["status"] == "HELD"
+                  print(f"expanded public demo release is ready on attempt {attempt}")
+                  break
+              except Exception as exc:
+                  if attempt == 42:
+                      raise
+                  print(f"attempt {attempt}: {exc}")
+                  time.sleep(10)
           PY
-              then
-                health_ok=true
-              fi
-            fi
-
-            if curl --silent --show-error --fail --max-time 15 "$BASE_URL/" -o /tmp/index.html; then
-              if grep -Fq "주문 흐름" /tmp/index.html                 && grep -Fq "장애 주입" /tmp/index.html                 && grep -Fq "정합성 복구" /tmp/index.html                 && grep -Fq "정산 · 감사" /tmp/index.html                 && grep -Fq "실제 백엔드 정합성 장애를 직접 만들고 탐지·복구" /tmp/index.html; then
-                page_ok=true
-              fi
-            fi
-
-            api_ok=false
-            if [ "$health_ok" = true ] && [ "$page_ok" = true ]; then
-              if curl --silent --show-error --fail --max-time 15                 -X POST "$BASE_URL/api/demo/sessions"                 -H "Content-Type: application/json"                 -d '{}' -o /tmp/session.json; then
-                SESSION_ID="$(python - <<'PY'
-import json
-print(json.load(open("/tmp/session.json"))["session_id"])
-PY
-)"
-                if curl --silent --show-error --fail --max-time 15                   -X POST "$BASE_URL/api/demo/sessions/$SESSION_ID/orders"                   -H "Content-Type: application/json"                   -d '{"store":"deploy-check","items":"아메리카노","total":4500,"pickup_at":"12:30","units":1}'                   -o /tmp/order.json; then
-                  api_ok=true
-                fi
-              fi
-            fi
-
-            if [ "$health_ok" = true ] && [ "$page_ok" = true ] && [ "$api_ok" = true ]; then
-              echo "expanded public demo release is ready"
-              break
-            fi
-
-            if [ "$attempt" -eq 42 ]; then
-              echo "expanded public demo release did not become ready" >&2
-              exit 1
-            fi
-            sleep 10
-          done
 
       - name: Verify fixed interviewer scenarios
         shell: bash
         run: |
-          set -euo pipefail
-          BASE_URL="https://pickup-pact-demo.onrender.com"
-
-          for scenario in late-cancel duplicate capacity-drop conflict; do
-            curl --silent --show-error --fail --max-time 20               "$BASE_URL/api/scenarios/$scenario"               -o "/tmp/$scenario.json"
-          done
-
           python - <<'PY'
-          import json
-          from pathlib import Path
+          from __future__ import annotations
 
+          import json
+          import urllib.request
+
+          BASE = "https://pickup-pact-demo.onrender.com"
           expected = {
               "late-cancel": {"REVERSE_SETTLEMENT", "REVERSE_REWARD"},
               "duplicate": {"NO_OP_DUPLICATE", "REBUILD_PROJECTION"},
@@ -99,10 +104,11 @@ PY
               "conflict": {"MANUAL_REVIEW"},
           }
 
-          for scenario, commands in expected.items():
-              payload = json.loads(Path(f"/tmp/{scenario}.json").read_text())
+          for scenario, required in expected.items():
+              with urllib.request.urlopen(f"{BASE}/api/scenarios/{scenario}", timeout=30) as response:
+                  payload = json.loads(response.read())
               actual = {item["code"] for item in payload["repairs"]}
-              assert not (commands - actual), (scenario, commands, actual, payload)
+              assert required <= actual, (scenario, required, actual, payload)
               assert payload["anomalies"], (scenario, payload)
               assert payload["evidence_event_ids"], (scenario, payload)
               assert payload["engine"] == "services/reconciler/app/engine.py", payload
@@ -113,7 +119,6 @@ PY
       - name: Verify full live operator flow twice
         shell: bash
         run: |
-          set -euo pipefail
           python - <<'PY'
           from __future__ import annotations
 
@@ -157,7 +162,13 @@ PY
               assert held["order"]["status"] == "HELD"
               assert held["order"]["payment_authorized"] is False
 
-              request("POST", f"/api/demo/sessions/{sid}/payment", {"authorization_id": "live-auth"})
+              paid = request(
+                  "POST",
+                  f"/api/demo/sessions/{sid}/payment",
+                  {"authorization_id": "live-auth"},
+              )["state"]
+              assert paid["order"]["payment_authorized"] is True
+
               confirmed = request("POST", f"/api/demo/sessions/{sid}/confirm", {})["state"]
               assert confirmed["order"]["status"] == "CONFIRMED"
 
