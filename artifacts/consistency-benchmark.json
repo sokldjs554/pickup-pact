@@ -1,0 +1,17 @@
+{
+  "benchmark": "synthetic-consistency-race-v1",
+  "seed": 42,
+  "scope": "Synthetic correctness benchmark; not production traffic or latency.",
+  "metrics": {
+    "capacity_oversubscribed_units_baseline": 194,
+    "capacity_oversubscribed_units_pickup_pact": 0,
+    "duplicate_financial_posts_baseline": 1207,
+    "duplicate_financial_posts_pickup_pact": 0,
+    "elapsed_ms": 21.106,
+    "orders": 20000,
+    "repair_commands_emitted": 762,
+    "simulated_events": 101588,
+    "stale_financial_orders_after_late_cancel_baseline": 381,
+    "stale_financial_orders_after_late_cancel_pickup_pact": 0
+  }
+}
