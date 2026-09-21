@@ -1,0 +1,79 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+
+      - name: Install Python test dependencies
+        run: python -m pip install -e './services/reconciler[dev]' -r services/ops-console/requirements.txt pyyaml
+
+      - name: Repository guardrails
+        run: python scripts/verify_repo.py
+
+      - name: Reconciler tests
+        run: python -m pytest -q services/reconciler/tests
+
+      - name: Demo console tests
+        run: python -m pytest -q services/ops-console/tests
+
+      - name: Contract and configuration parse
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          import yaml
+          for path in Path('.').rglob('*.json'):
+              if '.git' not in path.parts:
+                  json.loads(path.read_text())
+          targets = [Path('contracts/openapi.yaml'), Path('contracts/asyncapi.yaml'), Path('docker-compose.yml'), Path('render.yaml')]
+          targets += list(Path('infra/k8s').glob('*.yaml'))
+          for path in targets:
+              list(yaml.safe_load_all(path.read_text()))
+          print('contract/config parse passed')
+          PY
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Spring/Kotlin/Java tests
+        run: mvn -B -DskipTests=false test
+
+      - name: Deterministic consistency evidence
+        run: |
+          python scripts/consistency_benchmark.py --orders 20000 --seed 42 --output artifacts/consistency-benchmark.json
+          python scripts/consistency_matrix.py --orders 20000 --seeds 11,22,33,44,55 --output artifacts/consistency-matrix.json
+
+      - name: Docker configuration and images
+        run: |
+          docker compose config >/dev/null
+          docker compose build commitment-service ledger-service reconciler ops-console
+          docker build -f Dockerfile.demo -t pickup-pact-demo:ci .
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.13.3'
+
+      - name: Terraform static validation
+        run: |
+          terraform -chdir=infra/aws/terraform fmt -check
+          terraform -chdir=infra/aws/terraform init -backend=false
+          terraform -chdir=infra/aws/terraform validate

@@ -1,0 +1,15 @@
+{
+  "event_id": "evt-confirm-001",
+  "aggregate_id": "order-1001",
+  "event_type": "CommitmentConfirmed",
+  "occurred_at": "2026-09-18T03:00:02Z",
+  "correlation_id": "corr-1001",
+  "causation_id": "evt-pay-001",
+  "schema_version": 1,
+  "payload": {
+    "store_id": "store-gangnam-01",
+    "pickup_at": "2026-09-18T03:30:00Z",
+    "capacity_units": 2,
+    "promise_revision": 1
+  }
+}
