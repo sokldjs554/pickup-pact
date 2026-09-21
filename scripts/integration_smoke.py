@@ -430,12 +430,17 @@ def ops_console_flow() -> None:
 
 
 def celery_flow(pass_no: int) -> None:
-    # Import after setting localhost broker/backend for the host-side client.
-    os.environ["REDIS_URL"] = "redis://127.0.0.1:6379/0"
-    from services.reconciler.app.tasks import celery_app
+    # Exercise the containerized worker from the host without importing the
+    # source package by filesystem name (services/reconciler contains a hyphen).
+    # The task name and Redis broker/result backend are the public integration
+    # contract between the smoke test and the worker container.
+    from celery import Celery
+
+    redis_url = "redis://127.0.0.1:6379/0"
+    client = Celery("pickup-pact-integration-smoke", broker=redis_url, backend=redis_url)
 
     _, packet = late_cancel_packet(100 + pass_no)
-    async_result = celery_app.send_task("app.tasks.reconcile_packet", args=[packet])
+    async_result = client.send_task("app.tasks.reconcile_packet", args=[packet])
     result = async_result.get(timeout=45)
     assert "REVERSE_SETTLEMENT" in result["repairs"], result
     assert "REVERSE_REWARD" in result["repairs"], result
