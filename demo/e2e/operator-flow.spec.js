@@ -34,7 +34,7 @@ test('first-time visitor can understand and complete the guided recovery flow', 
   await page.getByRole('button', { name: '4. 안전하게 복구하기', exact: true }).click();
   await expect(page.locator('#guideTitle')).toHaveText('복구가 끝났습니다.');
   await expect(page.locator('#guideAfter')).toContainText('정산 0원 · 포인트 0P');
-  await expect(page.locator('#guideAfter')).toContainText('감사 이력을 보존했습니다.');
+  await expect(page.locator('#guideAfter')).toContainText('변경 이력을 보존했습니다.');
   await expect(page.getByRole('button', { name: '다시 체험하기', exact: true })).toBeVisible();
 
   await page.locator('#page-guided').getByRole('button', { name: '기술 상세 보기', exact: true }).click();
