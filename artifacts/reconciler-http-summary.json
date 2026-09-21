@@ -1,0 +1,35 @@
+{
+  "benchmark": "reconciler-loopback-http-summary-v1",
+  "scope": "Prior local FastAPI /api/v1/reconcile loopback run; persistence disabled; not production traffic.",
+  "environment": {
+    "python": "3.13.5",
+    "linux_kernel": "6.18.44",
+    "logical_cpus": 5
+  },
+  "requests_per_run": 2000,
+  "repeats": 3,
+  "groups": [
+    {
+      "concurrency": 10,
+      "failures": 0,
+      "median_requests_per_s": 666.01,
+      "median_p95_ms": 36.8,
+      "median_p99_ms": 135.17
+    },
+    {
+      "concurrency": 50,
+      "failures": 0,
+      "median_requests_per_s": 753.71,
+      "median_p95_ms": 157.57,
+      "median_p99_ms": 282.9
+    },
+    {
+      "concurrency": 100,
+      "failures": 0,
+      "median_requests_per_s": 833.32,
+      "median_p95_ms": 148.04,
+      "median_p99_ms": 203.92
+    }
+  ],
+  "note": "Raw per-request samples are not committed; this file preserves only the recorded aggregate summary."
+}

@@ -1,5 +1,9 @@
 EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)
-SELECT event_id, event_type, occurred_at, payload_json
-FROM outbox_event
-WHERE aggregate_id = 'order-1001'
-ORDER BY occurred_at, event_id;
+SELECT
+  id AS event_id,
+  event_type,
+  occurred_at,
+  payload
+FROM outbox_events
+WHERE aggregate_id = '00000000-0000-0000-0000-000000001001'::uuid
+ORDER BY occurred_at, id;

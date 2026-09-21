@@ -5,6 +5,8 @@ create table if not exists ledger_batches (
   reason text not null,
   created_at timestamptz not null default now()
 );
+create index if not exists idx_ledger_batches_aggregate_created
+  on ledger_batches(aggregate_id, created_at desc);
 
 create table if not exists ledger_entries (
   id bigserial primary key,
