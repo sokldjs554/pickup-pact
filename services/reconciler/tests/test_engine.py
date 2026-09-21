@@ -70,3 +70,21 @@ def test_capacity_revision_marks_confirmed_promise_at_risk():
     ]))
     assert result.canonical_state.status == "AT_RISK"
     assert "RESLOT_REVIEW" in result.repairs
+
+
+def test_receive_order_preserves_input_order_when_received_timestamps_tie():
+    tied = BASE + timedelta(seconds=1)
+    request = ReconcileRequest(events=[
+        ev("hold", "PickupSlotHeld", 0, 0, {"capacity_units": 1}),
+        ev("pay", "PaymentAuthorized", 1, 1),
+        ev("confirm", "CommitmentConfirmed", 1, 1, {"capacity_units": 1}),
+    ])
+    request.events[1] = request.events[1].model_copy(update={"received_at": tied})
+    request.events[2] = request.events[2].model_copy(update={"received_at": tied})
+
+    result = reconcile(request)
+
+    assert "confirmed_without_payment_authorization" not in result.anomalies
+    assert "MANUAL_REVIEW" not in result.repairs
+    assert result.receive_order_state.payment_authorized is True
+    assert result.receive_order_state.status == "CONFIRMED"

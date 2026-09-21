@@ -59,7 +59,14 @@ def _fold(events: list[EventEnvelope], *, count_duplicates: bool = False) -> tup
 
 def reconcile(request: ReconcileRequest) -> ReconcileResult:
     original=request.events; unique,duplicate_ids,conflicting_duplicate=_unique_by_event_id(original)
-    receive_order=sorted(original,key=lambda e:(e.received_at,e.event_id)); receive_state,receive_anomalies=_fold(receive_order,count_duplicates=True)
+    receive_order = [
+        event
+        for _, event in sorted(
+            enumerate(original),
+            key=lambda pair: (pair[1].received_at, pair[0]),
+        )
+    ]
+    receive_state, receive_anomalies = _fold(receive_order, count_duplicates=True)
     canonical_order=sorted(unique,key=lambda e:(e.occurred_at,_EVENT_PRIORITY.get(e.event_type,999),e.event_id)); canonical_state,canonical_anomalies=_fold(canonical_order)
     anomalies=[]; evidence=set(); repairs=set()
     if duplicate_ids: anomalies.append("duplicate_event_delivery"); evidence.update(duplicate_ids); repairs.add("NO_OP_DUPLICATE")

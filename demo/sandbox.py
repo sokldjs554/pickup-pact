@@ -85,7 +85,7 @@ def _now() -> datetime:
 
 
 def _iso(value: datetime) -> str:
-    return value.isoformat(timespec="seconds")
+    return value.isoformat(timespec="microseconds")
 
 
 def _money(value: Any) -> int:
