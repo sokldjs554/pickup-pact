@@ -48,6 +48,10 @@ resource "aws_msk_serverless_cluster" "events" {
     security_group_ids = [aws_security_group.data.id]
   }
   client_authentication {
-    sasl { iam { enabled = true } }
+    sasl {
+      iam {
+        enabled = true
+      }
+    }
   }
 }
