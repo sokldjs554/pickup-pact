@@ -21,6 +21,55 @@ app = FastAPI(
 
 INDEX = Path(__file__).with_name("index.html")
 
+DEMO_CUSTOMER = {
+    "id": "guest-ha-neul",
+    "name": "하늘",
+    "label": "체험 손님",
+}
+
+CUSTOMER_CATALOG: list[dict[str, Any]] = [
+    {
+        "id": "gangnam-pass-cafe",
+        "name": "패스카페 강남역점",
+        "category": "커피 · 디저트",
+        "pickup_minutes": 8,
+        "distance_m": 180,
+        "notice": "지금 주문하면 빠르게 픽업할 수 있어요.",
+        "menu": [
+            {"id": "americano", "name": "아메리카노", "description": "깔끔하고 진한 기본 커피", "price": 4500, "popular": True},
+            {"id": "cafe-latte", "name": "카페라떼", "description": "고소한 우유와 에스프레소", "price": 5000, "popular": True},
+            {"id": "vanilla-latte", "name": "바닐라라떼", "description": "부드럽고 달콤한 바닐라 라떼", "price": 5500, "popular": False},
+            {"id": "cold-brew", "name": "콜드브루", "description": "천천히 내려 부드러운 커피", "price": 5200, "popular": False},
+        ],
+    },
+    {
+        "id": "seolleung-morning-bean",
+        "name": "모닝빈 선릉점",
+        "category": "커피 · 베이커리",
+        "pickup_minutes": 11,
+        "distance_m": 420,
+        "notice": "샌드위치와 커피를 함께 주문할 수 있어요.",
+        "menu": [
+            {"id": "morning-americano", "name": "아메리카노", "description": "고소한 블렌드 원두", "price": 4300, "popular": True},
+            {"id": "flat-white", "name": "플랫화이트", "description": "진한 커피와 부드러운 우유", "price": 5300, "popular": False},
+            {"id": "ham-sandwich", "name": "햄치즈 샌드위치", "description": "간단하게 먹기 좋은 샌드위치", "price": 6800, "popular": True},
+        ],
+    },
+    {
+        "id": "yeoksam-coffee-on",
+        "name": "커피온 역삼점",
+        "category": "커피 · 티",
+        "pickup_minutes": 6,
+        "distance_m": 510,
+        "notice": "주문이 비교적 빨리 준비되는 매장이에요.",
+        "menu": [
+            {"id": "on-americano", "name": "아메리카노", "description": "산뜻한 산미의 아메리카노", "price": 4200, "popular": True},
+            {"id": "peach-iced-tea", "name": "복숭아 아이스티", "description": "달콤하고 시원한 아이스티", "price": 4000, "popular": False},
+            {"id": "matcha-latte", "name": "말차라떼", "description": "쌉쌀한 말차와 우유", "price": 5600, "popular": True},
+        ],
+    },
+]
+
 EVENT_LABELS = {
     "PickupSlotHeld": "픽업 슬롯 확보",
     "PaymentAuthorized": "결제 승인",
@@ -493,6 +542,16 @@ def _demo_error(exc: Exception) -> HTTPException:
     if isinstance(exc, KeyError):
         return HTTPException(status_code=404, detail="demo session not found")
     return HTTPException(status_code=409, detail=str(exc))
+
+
+@app.get("/api/demo/customer")
+def demo_customer() -> dict[str, str]:
+    return DEMO_CUSTOMER.copy()
+
+
+@app.get("/api/demo/catalog")
+def demo_catalog() -> list[dict[str, Any]]:
+    return CUSTOMER_CATALOG
 
 
 @app.post("/api/demo/sessions")
