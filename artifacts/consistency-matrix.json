@@ -1,0 +1,77 @@
+{
+  "benchmark": "synthetic-consistency-matrix-v1",
+  "scope": "Five deterministic synthetic correctness runs; not production traffic or latency.",
+  "runs": [
+    {
+      "capacity_oversubscribed_units_baseline": 235,
+      "capacity_oversubscribed_units_pickup_pact": 0,
+      "duplicate_financial_posts_baseline": 1188,
+      "duplicate_financial_posts_pickup_pact": 0,
+      "orders": 20000,
+      "repair_commands_emitted": 660,
+      "seed": 11,
+      "simulated_events": 101518,
+      "stale_financial_orders_after_late_cancel_baseline": 330,
+      "stale_financial_orders_after_late_cancel_pickup_pact": 0
+    },
+    {
+      "capacity_oversubscribed_units_baseline": 205,
+      "capacity_oversubscribed_units_pickup_pact": 0,
+      "duplicate_financial_posts_baseline": 1192,
+      "duplicate_financial_posts_pickup_pact": 0,
+      "orders": 20000,
+      "repair_commands_emitted": 704,
+      "seed": 22,
+      "simulated_events": 101544,
+      "stale_financial_orders_after_late_cancel_baseline": 352,
+      "stale_financial_orders_after_late_cancel_pickup_pact": 0
+    },
+    {
+      "capacity_oversubscribed_units_baseline": 206,
+      "capacity_oversubscribed_units_pickup_pact": 0,
+      "duplicate_financial_posts_baseline": 1110,
+      "duplicate_financial_posts_pickup_pact": 0,
+      "orders": 20000,
+      "repair_commands_emitted": 660,
+      "seed": 33,
+      "simulated_events": 101440,
+      "stale_financial_orders_after_late_cancel_baseline": 330,
+      "stale_financial_orders_after_late_cancel_pickup_pact": 0
+    },
+    {
+      "capacity_oversubscribed_units_baseline": 204,
+      "capacity_oversubscribed_units_pickup_pact": 0,
+      "duplicate_financial_posts_baseline": 1208,
+      "duplicate_financial_posts_pickup_pact": 0,
+      "orders": 20000,
+      "repair_commands_emitted": 684,
+      "seed": 44,
+      "simulated_events": 101550,
+      "stale_financial_orders_after_late_cancel_baseline": 342,
+      "stale_financial_orders_after_late_cancel_pickup_pact": 0
+    },
+    {
+      "capacity_oversubscribed_units_baseline": 186,
+      "capacity_oversubscribed_units_pickup_pact": 0,
+      "duplicate_financial_posts_baseline": 1198,
+      "duplicate_financial_posts_pickup_pact": 0,
+      "orders": 20000,
+      "repair_commands_emitted": 704,
+      "seed": 55,
+      "simulated_events": 101550,
+      "stale_financial_orders_after_late_cancel_baseline": 352,
+      "stale_financial_orders_after_late_cancel_pickup_pact": 0
+    }
+  ],
+  "totals": {
+    "capacity_oversubscribed_units_baseline": 1036,
+    "capacity_oversubscribed_units_pickup_pact": 0,
+    "duplicate_financial_posts_baseline": 5896,
+    "duplicate_financial_posts_pickup_pact": 0,
+    "orders": 100000,
+    "repair_commands_emitted": 3412,
+    "simulated_events": 507602,
+    "stale_financial_orders_after_late_cancel_baseline": 1706,
+    "stale_financial_orders_after_late_cancel_pickup_pact": 0
+  }
+}
