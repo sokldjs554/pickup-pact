@@ -1,4 +1,5 @@
 name: demo-ci
+
 on:
   push:
     branches: [main]
@@ -8,22 +9,34 @@ on:
       - "render.yaml"
       - "services/reconciler/app/engine.py"
       - "services/reconciler/app/models.py"
-      - "services/reconciler/app/engine.py"
-      - "services/reconciler/app/models.py"
       - ".github/workflows/demo-ci.yml"
   pull_request:
     paths:
       - "demo/**"
       - "Dockerfile.demo"
       - "render.yaml"
+      - "services/reconciler/app/engine.py"
+      - "services/reconciler/app/models.py"
+      - ".github/workflows/demo-ci.yml"
+
+permissions:
+  contents: read
+
 jobs:
   verify-demo:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install -r demo/requirements.txt
-      - run: pytest -q demo/test_demo.py
-      - run: docker build -f Dockerfile.demo -t pickup-pact-demo .
+
+      - name: Install demo dependencies
+        run: pip install -r demo/requirements.txt
+
+      - name: Run interviewer demo tests
+        run: pytest -q demo/test_demo.py
+
+      - name: Build public demo image
+        run: docker build -f Dockerfile.demo -t pickup-pact-demo:ci .
