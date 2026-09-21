@@ -18,15 +18,15 @@ permissions:
 jobs:
   verify-live-demo:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 10
     steps:
-      - name: Wait for the expected public demo release
+      - name: Wait for the expanded public demo release
         shell: bash
         run: |
           set -euo pipefail
           BASE_URL="https://pickup-pact-demo.onrender.com"
 
-          for attempt in $(seq 1 36); do
+          for attempt in $(seq 1 42); do
             health_ok=false
             page_ok=false
 
@@ -47,25 +47,24 @@ jobs:
             fi
 
             if curl --silent --show-error --fail --max-time 15 "$BASE_URL/" -o /tmp/index.html; then
-              if grep -Fq "고객은 주문을 취소했는데" /tmp/index.html                 && grep -Fq "패스오더 직무를 겨냥한 스마트오더 백엔드 장애 복구 데모" /tmp/index.html                 && grep -Fq "장애 감지 및 복구 계획 계산" /tmp/index.html; then
+              if grep -Fq "주문 흐름" /tmp/index.html                 && grep -Fq "장애 주입" /tmp/index.html                 && grep -Fq "정합성 복구" /tmp/index.html                 && grep -Fq "정산 · 감사" /tmp/index.html                 && grep -Fq "실제 백엔드 정합성 장애를 직접 만들고 탐지·복구" /tmp/index.html; then
                 page_ok=true
               fi
             fi
 
             if [ "$health_ok" = true ] && [ "$page_ok" = true ]; then
-              echo "expected public demo release is ready"
+              echo "expanded public demo release is ready"
               break
             fi
 
-            if [ "$attempt" -eq 36 ]; then
-              echo "expected public demo release did not become ready" >&2
+            if [ "$attempt" -eq 42 ]; then
+              echo "expanded public demo release did not become ready" >&2
               exit 1
             fi
-
             sleep 10
           done
 
-      - name: Verify interviewer scenarios
+      - name: Verify fixed interviewer scenarios
         shell: bash
         run: |
           set -euo pipefail
@@ -89,21 +88,98 @@ jobs:
           for scenario, commands in expected.items():
               payload = json.loads(Path(f"/tmp/{scenario}.json").read_text())
               actual = {item["code"] for item in payload["repairs"]}
-              missing = commands - actual
-              assert not missing, (scenario, missing, payload)
+              assert not (commands - actual), (scenario, commands, actual, payload)
               assert payload["anomalies"], (scenario, payload)
               assert payload["evidence_event_ids"], (scenario, payload)
               assert payload["engine"] == "services/reconciler/app/engine.py", payload
 
-          print("live demo smoke passed for all four scenarios")
+          print("fixed interviewer scenarios passed")
           PY
 
-      - name: Verify interviewer landing page
+      - name: Verify full live operator flow twice
         shell: bash
         run: |
           set -euo pipefail
-          curl --silent --show-error --fail --max-time 20             https://pickup-pact-demo.onrender.com/             -o /tmp/index.html
+          python - <<'PY'
+          from __future__ import annotations
 
-          grep -F "고객은 주문을 취소했는데" /tmp/index.html
-          grep -F "패스오더 직무를 겨냥한 스마트오더 백엔드 장애 복구 데모" /tmp/index.html
-          grep -F "장애 감지 및 복구 계획 계산" /tmp/index.html
+          import json
+          import urllib.error
+          import urllib.request
+
+          BASE = "https://pickup-pact-demo.onrender.com"
+
+          def request(method: str, path: str, payload=None):
+              body = None if payload is None else json.dumps(payload).encode()
+              req = urllib.request.Request(
+                  BASE + path,
+                  data=body,
+                  method=method,
+                  headers={"Content-Type": "application/json"},
+              )
+              try:
+                  with urllib.request.urlopen(req, timeout=30) as response:
+                      return json.loads(response.read())
+              except urllib.error.HTTPError as exc:
+                  raise AssertionError(
+                      f"{method} {path} failed: {exc.code} {exc.read().decode()}"
+                  ) from exc
+
+          def one_pass():
+              session = request("POST", "/api/demo/sessions", {})
+              sid = session["session_id"]
+
+              held = request(
+                  "POST",
+                  f"/api/demo/sessions/{sid}/orders",
+                  {
+                      "store": "Live Smoke 강남점",
+                      "items": "아메리카노 2잔",
+                      "total": 9000,
+                      "pickup_at": "12:30",
+                      "units": 2,
+                  },
+              )["state"]
+              assert held["order"]["status"] == "HELD"
+              assert held["order"]["payment_authorized"] is False
+
+              request("POST", f"/api/demo/sessions/{sid}/payment", {"authorization_id": "live-auth"})
+              confirmed = request("POST", f"/api/demo/sessions/{sid}/confirm", {})["state"]
+              assert confirmed["order"]["status"] == "CONFIRMED"
+
+              cancelled = request(
+                  "POST",
+                  f"/api/demo/sessions/{sid}/cancel",
+                  {"delay_seconds": 52},
+              )
+              assert cancelled["event"]["received_at"] > cancelled["event"]["occurred_at"]
+
+              request("POST", f"/api/demo/sessions/{sid}/settlement", {"amount": 9000})
+              request("POST", f"/api/demo/sessions/{sid}/reward", {"amount": 90})
+
+              reconciled = request("POST", f"/api/demo/sessions/{sid}/reconcile", {})
+              repairs = {item["code"] for item in reconciled["reconciliation"]["repairs"]}
+              assert {"REVERSE_SETTLEMENT", "REVERSE_REWARD"} <= repairs, reconciled
+
+              repaired = request("POST", f"/api/demo/sessions/{sid}/repairs/apply", {})
+              assert {"REVERSE_SETTLEMENT", "REVERSE_REWARD"} <= set(repaired["applied"]), repaired
+              assert repaired["state"]["metrics"]["net_settlement"] == 0, repaired
+              assert repaired["state"]["metrics"]["reward_balance"] == 0, repaired
+              assert any(
+                  row["posting_type"] == "REVERSE_SETTLEMENT"
+                  for row in repaired["state"]["ledger_batches"]
+              )
+              assert any(
+                  row["posting_type"] == "REVERSE_REWARD"
+                  for row in repaired["state"]["ledger_batches"]
+              )
+
+              second = request("POST", "/api/demo/sessions", {})
+              second_state = request("GET", f"/api/demo/sessions/{second['session_id']}")
+              assert second_state["order"] is None
+              assert second_state["events"] == []
+
+          one_pass()
+          one_pass()
+          print("full public operator flow passed twice")
+          PY
