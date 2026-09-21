@@ -10,7 +10,7 @@ This document makes the job-description mapping auditable instead of listing tec
 | Python | FastAPI reconciliation, Celery tasks, benchmark and verification scripts |
 | Spring | both JVM services |
 | WebFlux | reactive commitment command edge and R2DBC/Redis adapters |
-| FastAPI | canonical replay/reconciliation API and public interviewer demo |
+| FastAPI | canonical replay/reconciliation API plus the public synthetic customer/catalog/order demo API |
 | Flask | operator replay console |
 | PostgreSQL | commitment state, outbox, append-only ledger, reconciliation-run audit |
 | MongoDB | distinct event-delivery evidence archive; conflicting copies of one event ID are preserved |
@@ -22,6 +22,8 @@ This document makes the job-description mapping auditable instead of listing tec
 | EDA | versioned domain envelopes and AsyncAPI contract |
 | CQRS | command-owned invariants + explicit PostgreSQL projection rebuild/query API from canonical event-time replay |
 | Distributed consistency | outbox, at-least-once delivery, event-level idempotency, conflict quarantine, compensation |
+| Customer requirements → product | public virtual-customer flow: store selection, menu/cart quantity changes, order/payment/confirmation, pickup status and cancellation; Chromium E2E verifies the journey |
+| Order/payment/settlement/reward domains | customer checkout exercises order/payment/confirmation; hidden cancellation race exercises settlement/reward reconciliation and compensation |
 | REST/OpenAPI | explicit OpenAPI 3.1 contract for hold → payment authorization → confirm/cancel + tracking, ledger posting/history/conflicts, reconciliation |
 | SQL tuning | committed timeline indexes + executable `EXPLAIN (ANALYZE, BUFFERS)` query template |
 | Performance troubleshooting | deterministic race benchmark + loopback HTTP baseline + runbook |
@@ -40,4 +42,4 @@ This document makes the job-description mapping auditable instead of listing tec
 
 The project is not presented as “I used many tools.” The primary story is one production-shaped failure mode: **a pickup promise crosses capacity, payment, settlement and rewards while events may be delayed, duplicated or reordered**.
 
-The public demo deliberately explains the customer/merchant impact first. Technical evidence is then traceable to code, contracts, tests, measured artifacts, or clearly labeled blueprints.
+The public URL behaves as a customer smart-order product first. Backend recovery and operator controls are not exposed to the customer route; reviewers enter them separately through `/?dev=1`. Technical evidence remains traceable to code, contracts, tests, measured artifacts, or clearly labeled blueprints.
