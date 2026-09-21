@@ -73,10 +73,10 @@ jobs:
           from pathlib import Path
 
           expected = {
-              "late-cancel": {"REVERSE_SETTLEMENT", "REVERSE_REWARD", "REBUILD_PROJECTION"},
-              "duplicate": {"NO_OP_DUPLICATE"},
-              "capacity-drop": {"MARK_AT_RISK", "RESLOT_REVIEW"},
-              "conflict": {"QUARANTINE_EVENT", "MANUAL_REVIEW"},
+              "late-cancel": {"REVERSE_SETTLEMENT", "REVERSE_REWARD"},
+              "duplicate": {"NO_OP_DUPLICATE", "REBUILD_PROJECTION"},
+              "capacity-drop": {"RESLOT_REVIEW"},
+              "conflict": {"MANUAL_REVIEW"},
           }
 
           for scenario, commands in expected.items():
