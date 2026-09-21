@@ -16,6 +16,27 @@ RECONCILER = "http://127.0.0.1:8000"
 OPS = "http://127.0.0.1:5000"
 
 
+def postgres_connection():
+    import psycopg
+    return psycopg.connect(
+        "postgresql://pickuppact:pickuppact@127.0.0.1:5432/pickuppact"
+    )
+
+
+def wait_until(predicate, *, timeout_s: int = 30, interval_s: float = 0.5, label: str) -> None:
+    deadline = time.time() + timeout_s
+    last = None
+    while time.time() < deadline:
+        try:
+            last = predicate()
+            if last:
+                return
+        except Exception as exc:
+            last = repr(exc)
+        time.sleep(interval_s)
+    raise AssertionError(f"timed out waiting for {label}: last={last!r}")
+
+
 def wait_http(url: str, *, timeout_s: int = 180) -> None:
     deadline = time.time() + timeout_s
     last: str | None = None
@@ -60,6 +81,11 @@ def commitment_flow(pass_no: int) -> None:
     assert held["state"] == "HELD", held
     assert held["paymentAuthorized"] is False, held
     commitment_id = held["id"]
+    lease_key = held["leaseToken"].split("|", 1)[0]
+
+    import redis
+    redis_client = redis.Redis(host="127.0.0.1", port=6379, decode_responses=True)
+    assert redis_client.exists(lease_key) == 1, held
 
     paid = expect(
         httpx.post(
@@ -98,6 +124,30 @@ def commitment_flow(pass_no: int) -> None:
         200,
     )
     assert cancelled["state"] == "CANCELLED", cancelled
+    assert redis_client.exists(lease_key) == 0, {
+        "lease_key": lease_key,
+        "cancelled": cancelled,
+    }
+
+    def outbox_published():
+        with postgres_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    select count(*) filter (where published_at is not null), count(*)
+                    from outbox_events
+                    where aggregate_id = %s::uuid
+                    """,
+                    (commitment_id,),
+                )
+                published, total = cursor.fetchone()
+                return total >= 4 and published == total
+
+    wait_until(
+        outbox_published,
+        timeout_s=30,
+        label="commitment outbox delivery to Kafka",
+    )
 
 
 def ledger_flow(pass_no: int) -> None:
@@ -222,6 +272,31 @@ def reconciler_flow(pass_no: int) -> None:
     assert "REVERSE_SETTLEMENT" in result["repairs"], result
     assert "REVERSE_REWARD" in result["repairs"], result
     assert "settlement_posted_after_prior_cancellation" in result["anomalies"], result
+
+    def postgres_audit_written():
+        with postgres_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "select count(*) from reconciliation_run where aggregate_id = %s",
+                    (aggregate,),
+                )
+                return cursor.fetchone()[0] >= 1
+
+    wait_until(
+        postgres_audit_written,
+        timeout_s=20,
+        label="PostgreSQL reconciliation audit",
+    )
+
+    from pymongo import MongoClient
+    mongo = MongoClient("mongodb://127.0.0.1:27017/pickup_pact", serverSelectionTimeoutMS=5000)
+    wait_until(
+        lambda: mongo.pickup_pact.raw_event_deliveries.count_documents(
+            {"aggregate_id": aggregate}
+        ) >= len(packet["events"]),
+        timeout_s=20,
+        label="MongoDB raw event deliveries",
+    )
 
     # Persistence path: Elasticsearch indexing is near-real-time, so retry the query.
     deadline = time.time() + 30
