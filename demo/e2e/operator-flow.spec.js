@@ -38,7 +38,9 @@ test('first-time visitor can understand and complete the guided recovery flow', 
   await expect(page.getByRole('button', { name: '다시 체험하기', exact: true })).toBeVisible();
 
   await page.locator('#page-guided').getByRole('button', { name: '기술 상세 보기', exact: true }).click();
-  await expect(page.locator('#anomalyList')).toContainText('취소 뒤에 점주 정산이 반영되었습니다.');
+  await expect(page.locator('#anomalyList')).toContainText('현재 탐지된 정합성 이상이 없습니다.');
+  await expect(page.locator('#receivedTimeline')).toContainText('SettlementReversed');
+  await expect(page.locator('#receivedTimeline')).toContainText('RewardReversed');
 
   await openPage(page, '정산 · 감사');
   await expect(page.locator('#ledgerSettlement')).toHaveText('0');
