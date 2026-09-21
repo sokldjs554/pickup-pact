@@ -1,37 +1,59 @@
 pipeline {
   agent any
-  options { timestamps(); disableConcurrentBuilds() }
+
+  options {
+    timestamps()
+    disableConcurrentBuilds()
+  }
+
   stages {
     stage('Repository guardrails') {
-      steps { sh 'python3 scripts/verify_repo.py' }
-    }
-    stage('Python tests') {
-      steps { sh 'python3 -m pytest -q services/reconciler/tests' }
-    }
-    stage('Pure JVM domain smoke') {
-      steps { sh 'bash scripts/jvm_domain_smoke.sh' }
-    }
-    stage('Consistency benchmark') {
-      steps { sh 'python3 scripts/consistency_benchmark.py --orders 20000 --seed 42 --output artifacts/consistency-benchmark.json'
-        sh 'python3 scripts/consistency_matrix.py --orders 20000 --seeds 11,22,33,44,55 --output artifacts/consistency-matrix.json' }
-    }
-    stage('JVM build when Maven is available') {
       steps {
-        sh '''
-          if command -v mvn >/dev/null 2>&1; then
-            mvn -B -DskipTests=false test
-          else
-            echo "Maven is not installed on this runner; pure-domain smoke compilation already ran."
-          fi
-        '''
+        sh 'python3 scripts/verify_repo.py'
       }
     }
+
+    stage('Python tests') {
+      parallel {
+        stage('Reconciler') {
+          steps { sh 'python3 -m pytest -q services/reconciler/tests' }
+        }
+        stage('Interview demo') {
+          steps { sh 'python3 -m pytest -q demo/test_demo.py' }
+        }
+        stage('Flask ops console') {
+          steps { sh 'python3 -m pytest -q services/ops-console/tests' }
+        }
+      }
+    }
+
+    stage('JVM tests') {
+      steps {
+        sh 'mvn -B -DskipTests=false test'
+        sh 'bash scripts/jvm_domain_smoke.sh'
+      }
+    }
+
+    stage('Reproduce committed evidence') {
+      steps {
+        sh 'python3 scripts/consistency_benchmark.py --orders 20000 --seed 42 --output /tmp/pickup-pact-benchmark.json'
+        sh 'python3 scripts/consistency_matrix.py --orders 20000 --seeds 11,22,33,44,55 --output /tmp/pickup-pact-matrix.json'
+        sh 'python3 scripts/verify_evidence.py --benchmark-actual /tmp/pickup-pact-benchmark.json --matrix-actual /tmp/pickup-pact-matrix.json'
+      }
+    }
+
     stage('Container build') {
-      when { expression { sh(script: 'command -v docker >/dev/null 2>&1', returnStatus: true) == 0 } }
-      steps { sh 'docker compose build' }
+      steps {
+        sh 'docker compose config >/dev/null'
+        sh 'docker compose build commitment ledger reconciler ops-console'
+        sh 'docker build -f Dockerfile.demo -t pickup-pact-demo:jenkins .'
+      }
     }
   }
+
   post {
-    always { archiveArtifacts artifacts: 'artifacts/*.json', allowEmptyArchive: true }
+    always {
+      archiveArtifacts artifacts: 'artifacts/*.json', allowEmptyArchive: true
+    }
   }
 }

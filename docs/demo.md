@@ -1,17 +1,38 @@
 # Interview demo
 
-The demo is intentionally product-first: an interviewer should understand the backend failure boundary before reading architecture diagrams.
+The public demo is a **session-isolated smart-order operations sandbox**, not a static architecture page.
 
-## What one click proves
+## Reviewer flow
 
-The browser calls the FastAPI backend at `GET /api/scenarios/{id}`. The backend reconstructs canonical event-time order, detects a domain anomaly, and returns deterministic repair commands plus evidence event IDs.
+A reviewer can:
 
-The default scenario is a late cancellation:
-1. pickup was confirmed;
-2. cancellation actually occurred at 12:14:10;
-3. settlement and reward occurred later;
-4. the cancellation arrived over the network only at 12:15:02;
-5. receive-order processing would leave stale money/reward state;
-6. Pickup Pact emits compensating ledger/reward commands and a CQRS rebuild.
+1. create a HELD pickup order;
+2. attach payment authorization;
+3. confirm the pickup promise;
+4. post normal settlement and reward events;
+5. inject late cancellation, exact Kafka redelivery, conflicting payload, or capacity reduction;
+6. run the real `services/reconciler/app/engine.py`;
+7. compare receive-time ordering with business-time ordering;
+8. inspect deterministic repair proposals and evidence IDs;
+9. apply supported repair plans **inside the demo sandbox only**;
+10. inspect reversal ledger batches and the operator audit trail.
 
-No external provider is called. All data is synthetic.
+Each browser stores its own demo session ID. The Render instance keeps only in-memory synthetic demo state; it is not connected to real merchants, customers, or payment providers.
+
+## Representative late-cancellation flow
+
+1. pickup is held, paid, and confirmed;
+2. cancellation occurs first but is recorded with a later `received_at`;
+3. settlement and reward are posted before that cancellation delivery arrives;
+4. reconciliation detects that settlement/reward happened after an earlier business-time cancellation;
+5. it proposes `REVERSE_SETTLEMENT` and `REVERSE_REWARD`;
+6. applying the plan in the sandbox appends reversal batches rather than deleting the original ledger evidence;
+7. net settlement and reward balance return to zero.
+
+A projection rebuild is proposed only when receive-order folding actually differs from canonical business-time folding. It is not hard-coded into every late-cancellation case.
+
+## Public-demo boundary
+
+The public demo packages the real reconciliation engine but intentionally does not boot Kafka, PostgreSQL, Redis, MongoDB, Elasticsearch, both Spring services, and Celery on the free Render process. Those integrations are represented by the service code, Compose topology, contracts, infrastructure manifests, tests, and evidence artifacts in the repository.
+
+All data is synthetic.

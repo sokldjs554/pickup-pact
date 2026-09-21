@@ -90,6 +90,14 @@ assert "financial_event_receipt" not in domain_model
 assert "OutboxPublisher" not in architecture
 assert "services.reconciler.app.engine" in demo
 assert "COPY services /app/services" in demo_dockerfile
+env_example = (ROOT / ".env.example").read_text()
+assert "MONGODB_URL=" in env_example
+assert "REDIS_URL=" in env_example
+assert "MONGO_URL=" not in env_example
+assert "CELERY_BROKER_URL=" not in env_example
+demo_doc = (ROOT / "docs/demo.md").read_text()
+assert "session-isolated smart-order operations sandbox" in demo_doc
+assert "REVERSE_SETTLEMENT" in demo_doc and "REVERSE_REWARD" in demo_doc
 
 # Check relative Markdown links so README/docs do not point to files that are absent.
 link_pattern = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
