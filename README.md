@@ -123,7 +123,7 @@ flowchart LR
 | Elasticsearch | incident 검색/포렌식 index |
 | Kafka | commitment/financial domain events |
 | Celery | 비동기 replay worker와 retry/backoff |
-| DDD / EDA / CQRS | bounded context, domain event, rebuildable projection |
+| DDD / EDA / CQRS | bounded context, domain event, explicit canonical projection rebuild/query API |
 | Docker / Kubernetes | 서비스 이미지, Compose, K8s deployment |
 | AWS | RDS PostgreSQL · ElastiCache Redis · MSK Serverless Terraform blueprint |
 | Jenkins | JVM/Python/Docker 검증 pipeline |

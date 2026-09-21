@@ -68,3 +68,13 @@ The ledger service exposes read-only operational queries in addition to posting:
 - `GET /api/v1/ledger/conflicts` returns quarantined reused-event-ID conflicts.
 
 The Kafka consumer acknowledges a conflicting event only after the conflict evidence is persisted. It does not append a second financial batch.
+
+
+## CQRS projection
+
+The command contexts keep business invariants, while the reconciler owns an explicit rebuildable read model.
+
+- `POST /api/v1/projections/rebuild` folds one aggregate's evidence into canonical event-time state and upserts `commitment_projection`.
+- `GET /api/v1/projections/{aggregateId}` returns the latest rebuilt snapshot.
+- The projection stores a SHA-256 `canonical_hash` so an operator can compare rebuild results without mutating the original event evidence.
+- Projection rebuild is non-financial. Settlement/reward compensation still goes through the ledger boundary.

@@ -20,7 +20,7 @@ This document makes the job-description mapping auditable instead of listing tec
 | Celery | asynchronous replay worker and retry/backoff policy |
 | DDD | Pickup Commitment + Financial Ledger bounded contexts and invariants |
 | EDA | versioned domain envelopes and AsyncAPI contract |
-| CQRS | command-owned invariants; rebuildable projections and replay repair |
+| CQRS | command-owned invariants + explicit PostgreSQL projection rebuild/query API from canonical event-time replay |
 | Distributed consistency | outbox, at-least-once delivery, event-level idempotency, conflict quarantine, compensation |
 | REST/OpenAPI | explicit OpenAPI 3.1 contract for hold → payment authorization → confirm/cancel + tracking, ledger posting/history/conflicts, reconciliation |
 | SQL tuning | committed timeline indexes + executable `EXPLAIN (ANALYZE, BUFFERS)` query template |

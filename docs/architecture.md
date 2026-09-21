@@ -49,7 +49,7 @@ The pickup-command path coordinates Redis, R2DBC, and asynchronous event publica
 
 ## CQRS boundary
 
-The command model owns invariants. Search/operator views are rebuildable projections. Reconciliation never edits an original event merely to make a projection look correct.
+The command model owns invariants. `POST /api/v1/projections/rebuild` explicitly upserts the canonical snapshot into PostgreSQL `commitment_projection`, and `GET /api/v1/projections/{aggregateId}` exposes that read model. Reconciliation never edits an original event merely to make a projection look correct.
 
 ## Temporal model
 

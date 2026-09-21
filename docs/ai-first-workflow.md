@@ -55,6 +55,6 @@ Hard boundary: AI cannot create, add, or execute financial repair commands. `ser
 
 ## What is actually verified
 
-GitHub Actions verifies repository guardrails, Python reconciliation tests, Flask console tests, contract/config parsing, Kotlin/Java Maven tests, deterministic consistency benchmarks, Docker builds, and Terraform validation. A separate live-demo smoke test verifies the public Render page and all four interviewer scenarios.
+GitHub Actions verifies repository guardrails, Python reconciliation tests, Flask console tests, contract/config parsing, Kotlin/Java Maven tests, deterministic consistency benchmarks, Docker builds, and Terraform validation. A separate live-demo smoke test verifies the public Render page, fixed failure scenarios, and the complete session-based operator flow. The release gate repeats unit/integration verification and boots the full Docker topology for runtime smoke.
 
 This document describes a reproducible workflow and guardrails, not a claim that every provider was called on every commit.
