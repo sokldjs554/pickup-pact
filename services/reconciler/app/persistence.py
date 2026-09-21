@@ -1,50 +1,24 @@
 from __future__ import annotations
-import os
-from typing import Any
 
-class EvidenceStore:
-    """Optional persistence adapters. Reconciliation remains deterministic if external stores are unavailable."""
+import hashlib,json,os,uuid
+from datetime import UTC,datetime
+from .models import EventEnvelope,ReconcileResult
 
-    def __init__(self) -> None:
-        self.mongo_url = os.getenv("MONGO_URL")
-        self.elasticsearch_url = os.getenv("ELASTICSEARCH_URL")
-        self.postgres_dsn = os.getenv("POSTGRES_DSN")
+def _stable_digest(payload: object)->str:
+    return hashlib.sha256(json.dumps(payload,sort_keys=True,separators=(",",":"),default=str).encode()).hexdigest()
 
-    async def archive_raw_event(self, event: dict[str, Any]) -> None:
-        if not self.mongo_url:
-            return
-        from motor.motor_asyncio import AsyncIOMotorClient
-        client = AsyncIOMotorClient(self.mongo_url)
-        try:
-            await client.pickuppact.raw_events.update_one(
-                {"event_id": event["event_id"]},
-                {"$setOnInsert": event},
-                upsert=True,
-            )
-        finally:
-            client.close()
+def archive_raw_events(events:list[EventEnvelope])->None:
+    from pymongo import MongoClient
+    client=MongoClient(os.environ["MONGODB_URL"],serverSelectionTimeoutMS=2000); collection=client.pickup_pact.raw_events; collection.create_index("event_id",unique=True)
+    for event in events: collection.update_one({"event_id":event.event_id},{"$setOnInsert":event.model_dump(mode="json")},upsert=True)
 
-    async def index_incident(self, incident: dict[str, Any]) -> None:
-        if not self.elasticsearch_url:
-            return
-        from elasticsearch import AsyncElasticsearch
-        es = AsyncElasticsearch(self.elasticsearch_url)
-        try:
-            await es.index(index="pickup-pact-incidents", document=incident)
-        finally:
-            await es.close()
+def index_reconciliation(result:ReconcileResult)->None:
+    from elasticsearch import Elasticsearch
+    document=result.model_dump(mode="json"); document_id=f"{result.aggregate_id}:{_stable_digest(document)[:24]}"; es=Elasticsearch(os.environ["ELASTICSEARCH_URL"],request_timeout=2); es.index(index="pickup-pact-incidents-v1",id=document_id,document={**document,"indexed_at":datetime.now(UTC).isoformat()})
 
-    async def append_audit(self, aggregate_id: str, result: dict[str, Any]) -> None:
-        if not self.postgres_dsn:
-            return
-        import asyncpg, json
-        conn = await asyncpg.connect(self.postgres_dsn)
-        try:
-            await conn.execute(
-                """insert into reconciliation_audit(aggregate_id, result_json)
-                   values($1, $2::jsonb)""",
-                aggregate_id,
-                json.dumps(result, default=str),
-            )
-        finally:
-            await conn.close()
+def record_reconciliation(result:ReconcileResult)->str:
+    import psycopg
+    canonical=result.canonical_state.model_dump(mode="json"); canonical_hash=_stable_digest(canonical); run_fingerprint=_stable_digest({"aggregate_id":result.aggregate_id,"canonical_hash":canonical_hash,"anomalies":result.anomalies,"repairs":result.repairs,"evidence_event_ids":result.evidence_event_ids}); run_id=str(uuid.uuid5(uuid.NAMESPACE_URL,f"pickup-pact:{run_fingerprint}"))
+    with psycopg.connect(os.environ["POSTGRES_DSN"]) as connection:
+        with connection.cursor() as cursor: cursor.execute("INSERT INTO reconciliation_run(run_id, aggregate_id, canonical_hash, anomaly_count, repair_count) VALUES (%s,%s,%s,%s,%s) ON CONFLICT (run_id) DO NOTHING",(run_id,result.aggregate_id,canonical_hash,len(result.anomalies),len(result.repairs)))
+    return run_id

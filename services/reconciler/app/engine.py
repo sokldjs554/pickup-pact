@@ -1,91 +1,76 @@
 from __future__ import annotations
+
 from collections import defaultdict
-from .models import DomainEvent, RepairCommand, ReconcileResponse
 
-FINANCIAL = {"SETTLED", "REWARD_GRANTED"}
+from .models import EventEnvelope, ReconcileRequest, ReconcileResult, Snapshot
 
-def reconcile(aggregate_id: str, events: list[DomainEvent]) -> ReconcileResponse:
-    if any(e.aggregate_id != aggregate_id for e in events):
-        raise ValueError("all events must belong to aggregate_id")
+_EVENT_PRIORITY = {
+    "PickupSlotHeld": 10,
+    "PaymentAuthorized": 20,
+    "CommitmentConfirmed": 30,
+    "CapacityRevised": 40,
+    "CommitmentCancelled": 50,
+    "SettlementPosted": 60,
+    "RewardGranted": 70,
+    "SettlementReversed": 80,
+    "RewardReversed": 90,
+}
 
-    canonical = sorted(events, key=lambda e: (e.occurred_at, e.received_at, e.event_id))
-    by_id: dict[str, list[DomainEvent]] = defaultdict(list)
+_REPAIR_ORDER = ["NO_OP_DUPLICATE","REBUILD_PROJECTION","REVERSE_SETTLEMENT","REVERSE_REWARD","RESLOT_REVIEW","MANUAL_REVIEW"]
+
+
+def _unique_by_event_id(events: list[EventEnvelope]) -> tuple[list[EventEnvelope], list[str], bool]:
+    grouped: dict[str, list[EventEnvelope]] = defaultdict(list)
     for event in events:
-        by_id[event.event_id].append(event)
+        grouped[event.event_id].append(event)
+    duplicates = sorted(event_id for event_id, copies in grouped.items() if len(copies) > 1)
+    conflicting = False
+    unique: list[EventEnvelope] = []
+    for copies in grouped.values():
+        chosen = min(copies, key=lambda e: (e.received_at, e.occurred_at, e.event_type))
+        def semantic_payload(event: EventEnvelope) -> dict:
+            data = event.model_dump(mode="json"); data.pop("received_at", None); return data
+        canonical_payload = semantic_payload(chosen)
+        if any(semantic_payload(copy) != canonical_payload for copy in copies): conflicting = True
+        unique.append(chosen)
+    return unique, duplicates, conflicting
 
-    anomalies: list[str] = []
-    commands: list[RepairCommand] = []
-    duplicate_ids: list[str] = []
 
-    for event_id, copies in by_id.items():
-        if len(copies) < 2:
-            continue
-        fingerprints = {(e.type, e.amount, tuple(sorted(e.payload.items()))) for e in copies}
-        duplicate_ids.append(event_id)
-        if len(fingerprints) == 1:
-            anomalies.append("SAFE_REDELIVERY")
-            commands.append(RepairCommand(
-                command="NO_OP_DUPLICATE",
-                reason="same event_id and semantic fingerprint",
-                evidence_event_ids=[event_id],
-            ))
-        else:
-            anomalies.append("CONFLICTING_EVENT_REUSE")
-            commands.extend([
-                RepairCommand(command="QUARANTINE_EVENT", reason="same event_id carries conflicting business meaning", evidence_event_ids=[event_id]),
-                RepairCommand(command="MANUAL_REVIEW", reason="money-changing repair is blocked until evidence is reviewed", evidence_event_ids=[event_id]),
-            ])
+def _fold(events: list[EventEnvelope], *, count_duplicates: bool = False) -> tuple[Snapshot, list[str]]:
+    state = Snapshot(); anomalies: list[str] = []; seen: set[str] = set(); required_capacity = 1
+    for event in events:
+        if not count_duplicates and event.event_id in seen: continue
+        seen.add(event.event_id)
+        if event.event_type == "PickupSlotHeld": state.status="HELD"; required_capacity=int(event.payload.get("capacity_units", required_capacity))
+        elif event.event_type == "PaymentAuthorized": state.payment_authorized=True
+        elif event.event_type == "CommitmentConfirmed":
+            if not state.payment_authorized: anomalies.append("confirmed_without_payment_authorization")
+            state.status="CONFIRMED"; required_capacity=int(event.payload.get("capacity_units", required_capacity))
+        elif event.event_type == "CapacityRevised":
+            state.capacity_revision=int(event.payload.get("revision", state.capacity_revision+1)); available=event.payload.get("available_units")
+            if state.status=="CONFIRMED" and available is not None and int(available)<required_capacity: state.status="AT_RISK"; anomalies.append("confirmed_promise_exceeds_revised_capacity")
+        elif event.event_type == "CommitmentCancelled": state.status="CANCELLED"
+        elif event.event_type == "SettlementPosted": state.settlement_post_count+=1; state.settled=True
+        elif event.event_type == "RewardGranted": state.reward_post_count+=1; state.rewarded=True
+        elif event.event_type == "SettlementReversed": state.settled=False
+        elif event.event_type == "RewardReversed": state.rewarded=False
+    return state, anomalies
 
-    cancellations = [e for e in canonical if e.type == "PICKUP_CANCELLED"]
-    if cancellations:
-        cancel = cancellations[0]
-        stale = [e for e in canonical if e.type in FINANCIAL and e.occurred_at > cancel.occurred_at]
-        if stale:
-            anomalies.append("LATE_FACT_CAUSALITY")
-            if any(e.type == "SETTLED" for e in stale):
-                commands.append(RepairCommand(
-                    command="REVERSE_SETTLEMENT",
-                    reason="settlement occurred after the earlier business-time cancellation",
-                    evidence_event_ids=[cancel.event_id] + [e.event_id for e in stale if e.type == "SETTLED"],
-                ))
-            if any(e.type == "REWARD_GRANTED" for e in stale):
-                commands.append(RepairCommand(
-                    command="REVERSE_REWARD",
-                    reason="reward occurred after the earlier business-time cancellation",
-                    evidence_event_ids=[cancel.event_id] + [e.event_id for e in stale if e.type == "REWARD_GRANTED"],
-                ))
-            commands.append(RepairCommand(
-                command="REBUILD_PROJECTION",
-                reason="CQRS read model must be rebuilt from canonical event-time order",
-                evidence_event_ids=[e.event_id for e in canonical],
-            ))
 
-    revisions = [e for e in canonical if e.type == "CAPACITY_REVISED"]
-    if revisions and any(e.type == "PICKUP_CONFIRMED" for e in canonical):
-        for rev in revisions:
-            promised = int(rev.payload.get("promised_units", 0))
-            available = int(rev.payload.get("available_units", rev.amount or 0))
-            if promised > available:
-                anomalies.append("PROMISE_CAPACITY_DRIFT")
-                commands.extend([
-                    RepairCommand(command="MARK_AT_RISK", reason="confirmed pickup exceeds revised preparation capacity", evidence_event_ids=[rev.event_id]),
-                    RepairCommand(command="RESLOT_REVIEW", reason="operator must choose a feasible replacement slot", evidence_event_ids=[rev.event_id]),
-                ])
-                break
-
-    unique_anomalies = list(dict.fromkeys(anomalies))
-    deduped: list[RepairCommand] = []
-    seen = set()
-    for command in commands:
-        key = (command.command, tuple(command.evidence_event_ids))
-        if key not in seen:
-            seen.add(key)
-            deduped.append(command)
-
-    return ReconcileResponse(
-        aggregate_id=aggregate_id,
-        anomaly_codes=unique_anomalies,
-        commands=deduped,
-        canonical_event_ids=[e.event_id for e in canonical],
-        duplicate_event_ids=sorted(duplicate_ids),
-    )
+def reconcile(request: ReconcileRequest) -> ReconcileResult:
+    original=request.events; unique,duplicate_ids,conflicting_duplicate=_unique_by_event_id(original)
+    receive_order=sorted(original,key=lambda e:(e.received_at,e.event_id)); receive_state,receive_anomalies=_fold(receive_order,count_duplicates=True)
+    canonical_order=sorted(unique,key=lambda e:(e.occurred_at,_EVENT_PRIORITY.get(e.event_type,999),e.event_id)); canonical_state,canonical_anomalies=_fold(canonical_order)
+    anomalies=[]; evidence=set(); repairs=set()
+    if duplicate_ids: anomalies.append("duplicate_event_delivery"); evidence.update(duplicate_ids); repairs.add("NO_OP_DUPLICATE")
+    if conflicting_duplicate: anomalies.append("conflicting_duplicate_payload"); repairs.add("MANUAL_REVIEW")
+    if receive_state != canonical_state: anomalies.append("receive_order_projection_drift"); repairs.add("REBUILD_PROJECTION")
+    anomalies.extend(x for x in canonical_anomalies if x not in anomalies); anomalies.extend(x for x in receive_anomalies if x not in anomalies)
+    cancels=[e for e in canonical_order if e.event_type=="CommitmentCancelled"]; settlements=[e for e in canonical_order if e.event_type=="SettlementPosted"]; rewards=[e for e in canonical_order if e.event_type=="RewardGranted"]
+    if cancels:
+        cancel=min(cancels,key=lambda e:e.occurred_at); bad_settlements=[e for e in settlements if cancel.occurred_at<=e.occurred_at]; bad_rewards=[e for e in rewards if cancel.occurred_at<=e.occurred_at]
+        if bad_settlements and canonical_state.settled: anomalies.append("settlement_posted_after_prior_cancellation"); evidence.update([cancel.event_id,*[e.event_id for e in bad_settlements]]); repairs.add("REVERSE_SETTLEMENT")
+        if bad_rewards and canonical_state.rewarded: anomalies.append("reward_granted_after_prior_cancellation"); evidence.update([cancel.event_id,*[e.event_id for e in bad_rewards]]); repairs.add("REVERSE_REWARD")
+    if "confirmed_promise_exceeds_revised_capacity" in anomalies: repairs.add("RESLOT_REVIEW"); evidence.update(e.event_id for e in canonical_order if e.event_type=="CapacityRevised")
+    if "confirmed_without_payment_authorization" in anomalies: repairs.add("MANUAL_REVIEW"); evidence.update(e.event_id for e in canonical_order if e.event_type=="CommitmentConfirmed")
+    return ReconcileResult(aggregate_id=original[0].aggregate_id,receive_order_state=receive_state,canonical_state=canonical_state,anomalies=anomalies,repairs=[r for r in _REPAIR_ORDER if r in repairs],duplicate_event_ids=duplicate_ids,evidence_event_ids=sorted(evidence))

@@ -1,25 +1,85 @@
-from fastapi import FastAPI, HTTPException
-from .engine import reconcile
-from .models import ReconcileRequest, ReconcileResponse
-from .persistence import EvidenceStore
+from __future__ import annotations
 
-app = FastAPI(title="Pickup Pact Reconciler", version="0.1.0")
-store = EvidenceStore()
+import os
+
+if os.getenv("DD_TRACE_ENABLED", "false").lower() == "true":
+    from ddtrace import patch_all
+
+    patch_all()
+
+from fastapi import FastAPI
+
+from .ai_review import provider_from_env
+from .engine import reconcile
+from .models import ReconcileRequest, ReconcileResult
+
+app = FastAPI(
+    title="Pickup Pact Reconciler",
+    version="0.1.0",
+    description="Canonical event-time replay and deterministic repair planning.",
+)
+
+if os.getenv("ELASTIC_APM_ENABLED", "false").lower() == "true":
+    from elasticapm.contrib.starlette import ElasticAPM, make_apm_client
+
+    apm_client = make_apm_client(
+        {
+            "SERVICE_NAME": os.getenv("ELASTIC_APM_SERVICE_NAME", "pickup-pact-reconciler"),
+            "SERVER_URL": os.environ["ELASTIC_APM_SERVER_URL"],
+            "ENVIRONMENT": os.getenv("ENVIRONMENT", "local"),
+        }
+    )
+    app.add_middleware(ElasticAPM, client=apm_client)
+
 
 @app.get("/health")
-async def health() -> dict[str, str]:
+def health() -> dict[str, str]:
     return {"status": "ok"}
 
-@app.post("/api/v1/reconcile", response_model=ReconcileResponse)
-async def reconcile_endpoint(request: ReconcileRequest) -> ReconcileResponse:
+
+@app.post("/api/v1/reconcile", response_model=ReconcileResult)
+def reconcile_api(request: ReconcileRequest) -> ReconcileResult:
+    result = reconcile(request)
+    if os.getenv("PERSIST_RECONCILIATION", "false").lower() == "true":
+        from .persistence import archive_raw_events, index_reconciliation, record_reconciliation
+
+        archive_raw_events(request.events)
+        index_reconciliation(result)
+        record_reconciliation(result)
+    return result
+
+
+@app.post("/api/v1/replay")
+def replay_api(request: ReconcileRequest) -> dict:
+    result = reconcile(request)
+    review = provider_from_env().review(result)
+    return {
+        "reconciliation": result.model_dump(mode="json"),
+        "ai_review": {
+            "provider": review.provider,
+            "summary": review.summary,
+            "hypotheses": list(review.hypotheses),
+            "evidence_event_ids": list(review.evidence_event_ids),
+            "advisory_only": True,
+        },
+    }
+
+
+@app.get("/api/v1/incidents/{aggregate_id}")
+def incidents_api(aggregate_id: str) -> dict:
+    from elasticsearch import Elasticsearch, NotFoundError
+
+    es = Elasticsearch(os.environ.get("ELASTICSEARCH_URL", "http://localhost:9200"), request_timeout=2)
     try:
-        for event in request.events:
-            await store.archive_raw_event(event.model_dump(mode="json"))
-        result = reconcile(request.aggregate_id, request.events)
-        payload = result.model_dump(mode="json")
-        if result.anomaly_codes:
-            await store.index_incident(payload)
-        await store.append_audit(request.aggregate_id, payload)
-        return result
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        response = es.search(
+            index="pickup-pact-incidents-v1",
+            query={"term": {"aggregate_id.keyword": aggregate_id}},
+            sort=[{"indexed_at": {"order": "desc"}}],
+            size=50,
+        )
+    except NotFoundError:
+        return {"aggregate_id": aggregate_id, "incidents": []}
+    return {
+        "aggregate_id": aggregate_id,
+        "incidents": [hit["_source"] for hit in response["hits"]["hits"]],
+    }
