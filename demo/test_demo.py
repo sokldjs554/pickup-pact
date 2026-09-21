@@ -264,3 +264,28 @@ def test_normal_confirmed_order_can_post_settlement_and_reward():
         "SETTLEMENT",
         "REWARD",
     ]
+
+
+def test_duplicate_preset_keeps_only_one_financial_side_effect():
+    session_id = create_session()
+    state = client.post(
+        f"/api/demo/sessions/{session_id}/presets/duplicate"
+    ).json()
+
+    assert state["metrics"]["ledger_batch_count"] == 1
+    assert state["metrics"]["net_settlement"] == 5500
+    codes = {item["code"] for item in state["reconciliation"]["repairs"]}
+    assert "NO_OP_DUPLICATE" in codes
+    assert "MANUAL_REVIEW" not in codes
+
+
+def test_conflict_preset_quarantines_meaning_without_second_financial_effect():
+    session_id = create_session()
+    state = client.post(
+        f"/api/demo/sessions/{session_id}/presets/conflict"
+    ).json()
+
+    assert state["metrics"]["ledger_batch_count"] == 1
+    assert state["metrics"]["net_settlement"] == 11500
+    codes = {item["code"] for item in state["reconciliation"]["repairs"]}
+    assert "MANUAL_REVIEW" in codes
