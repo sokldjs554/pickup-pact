@@ -1,0 +1,11 @@
+spring:
+  application:
+    name: pickup-pact-ledger
+  datasource:
+    url: ${POSTGRES_JDBC_URL:jdbc:postgresql://localhost:5432/pickuppact}
+    username: ${POSTGRES_USER:pickuppact}
+    password: ${POSTGRES_PASSWORD:pickuppact}
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+server:
+  port: ${PORT:8081}

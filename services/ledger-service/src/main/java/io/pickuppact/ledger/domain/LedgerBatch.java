@@ -1,0 +1,28 @@
+package io.pickuppact.ledger.domain;
+
+import java.math.BigDecimal;
+import java.util.List;
+import java.util.Objects;
+
+public record LedgerBatch(
+        String eventId,
+        String semanticFingerprint,
+        String aggregateId,
+        String reason,
+        List<LedgerEntry> entries
+) {
+    public LedgerBatch {
+        Objects.requireNonNull(eventId);
+        Objects.requireNonNull(semanticFingerprint);
+        entries = List.copyOf(entries);
+        BigDecimal debit = entries.stream()
+                .filter(e -> e.direction() == LedgerDirection.DEBIT)
+                .map(LedgerEntry::amount).reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal credit = entries.stream()
+                .filter(e -> e.direction() == LedgerDirection.CREDIT)
+                .map(LedgerEntry::amount).reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (debit.compareTo(credit) != 0) {
+            throw new IllegalArgumentException("double-entry batch must balance");
+        }
+    }
+}
