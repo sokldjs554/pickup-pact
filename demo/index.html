@@ -479,15 +479,19 @@ async function refresh(){
 }
 
 async function loadPreset(name){
-  await waitForSession();
-  state=await api("/api/demo/sessions/"+sessionId+"/presets/"+name,"POST",{});
-  renderAll();toast("시나리오를 불러왔습니다: "+name);
+  try{
+    await waitForSession();
+    state=await api("/api/demo/sessions/"+sessionId+"/presets/"+name,"POST",{});
+    renderAll();toast("시나리오를 불러왔습니다: "+name);
+  }catch(e){toast(e.message,true)}
 }
 
 async function resetBlank(){
-  await waitForSession();
-  state=await api("/api/demo/sessions/"+sessionId+"/reset","POST",{});
-  renderAll();toast("빈 세션으로 초기화했습니다.");
+  try{
+    await waitForSession();
+    state=await api("/api/demo/sessions/"+sessionId+"/reset","POST",{});
+    renderAll();toast("빈 세션으로 초기화했습니다.");
+  }catch(e){toast(e.message,true)}
 }
 
 async function createOrder(){
