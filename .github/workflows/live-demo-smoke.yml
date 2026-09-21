@@ -7,6 +7,8 @@ on:
       - "demo/**"
       - "Dockerfile.demo"
       - "render.yaml"
+      - "services/reconciler/app/engine.py"
+      - "services/reconciler/app/models.py"
       - ".github/workflows/live-demo-smoke.yml"
   workflow_dispatch:
 
@@ -32,7 +34,12 @@ jobs:
               if python - <<'PY'
           import json
           payload = json.load(open("/tmp/health.json"))
-          raise SystemExit(0 if payload.get("status") == "ok" else 1)
+          raise SystemExit(
+              0
+              if payload.get("status") == "ok"
+              and payload.get("engine") == "services/reconciler/app/engine.py"
+              else 1
+          )
           PY
               then
                 health_ok=true
@@ -95,7 +102,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          curl --silent --show-error --fail --max-time 20             https://pickup-pact-demo.onrender.com/ -o /tmp/index.html
+          curl --silent --show-error --fail --max-time 20             https://pickup-pact-demo.onrender.com/             -o /tmp/index.html
 
           grep -F "고객은 주문을 취소했는데" /tmp/index.html
           grep -F "패스오더 직무를 겨냥한 스마트오더 백엔드 장애 복구 데모" /tmp/index.html
