@@ -1,0 +1,25 @@
+name: demo-ci
+on:
+  push:
+    branches: [main]
+    paths:
+      - "demo/**"
+      - "Dockerfile.demo"
+      - "render.yaml"
+      - ".github/workflows/demo-ci.yml"
+  pull_request:
+    paths:
+      - "demo/**"
+      - "Dockerfile.demo"
+      - "render.yaml"
+jobs:
+  verify-demo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r demo/requirements.txt
+      - run: pytest -q demo/test_demo.py
+      - run: docker build -f Dockerfile.demo -t pickup-pact-demo .

@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pickup Pact — 픽업 약속 정합성 데모</title>
+<style>
+:root{--bg:#07111f;--panel:#0d1b2d;--panel2:#10233a;--text:#eef5ff;--muted:#9fb2c9;--line:#203958;--blue:#66a8ff;--cyan:#55e6d2;--yellow:#ffd166;--red:#ff7b8b;--green:#65dfa0}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(1100px 600px at 80% -10%,#153963 0,transparent 65%),var(--bg);color:var(--text);font-family:Inter,Pretendard,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+.wrap{max-width:1180px;margin:auto;padding:42px 24px 80px}.topbar{display:flex;align-items:center;justify-content:space-between;gap:16px}.brand{font-weight:800;letter-spacing:.08em}.live{font-size:13px;color:var(--green);border:1px solid #276349;background:#0c2b22;padding:8px 12px;border-radius:99px}
+.hero{padding:62px 0 34px}.eyebrow{color:var(--cyan);font-weight:700;font-size:14px;letter-spacing:.08em}.hero h1{font-size:clamp(38px,6vw,72px);line-height:1.04;margin:12px 0 18px;letter-spacing:-.045em;max-width:950px}.hero p{font-size:20px;line-height:1.6;color:var(--muted);max-width:830px;margin:0}.promise{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:28px 0 42px}.promise div{border:1px solid var(--line);background:linear-gradient(145deg,#0c192a,#0a1624);border-radius:18px;padding:19px}.promise b{display:block;color:white;margin-bottom:7px}.promise span{color:var(--muted);font-size:14px;line-height:1.5}
+.section-title{display:flex;justify-content:space-between;align-items:end;margin:38px 0 14px}.section-title h2{font-size:24px;margin:0}.section-title p{margin:0;color:var(--muted);font-size:14px}
+.tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.tab{appearance:none;text-align:left;border:1px solid var(--line);background:#0a1727;color:var(--muted);padding:16px;border-radius:14px;cursor:pointer;transition:.18s}.tab:hover,.tab.active{transform:translateY(-2px);border-color:#3d77bd;background:#102844;color:white}.tab strong{display:block;font-size:15px;margin-bottom:5px}.tab span{font-size:12px;line-height:1.4}
+.board{margin-top:12px;border:1px solid var(--line);background:rgba(11,24,40,.9);border-radius:22px;overflow:hidden;box-shadow:0 24px 80px rgba(0,0,0,.22)}
+.board-head{padding:24px 26px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:20px;align-items:start}.board-head h3{font-size:27px;margin:0 0 7px}.board-head p{margin:0;color:var(--muted)}.customer{white-space:nowrap;color:#dceaff;font-size:13px;background:#142b45;border:1px solid #264766;padding:9px 12px;border-radius:10px}
+.explain{padding:18px 26px;background:#0a1523;border-bottom:1px solid var(--line);color:#d5e2f1}.explain b{color:var(--yellow)}
+.flow{display:grid;grid-template-columns:1.2fr .8fr;min-height:430px}.timeline{padding:25px 26px;border-right:1px solid var(--line)}.timeline-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}.timeline-head b{font-size:16px}.switch{display:flex;background:#07111f;border:1px solid var(--line);border-radius:10px;padding:3px}.switch button{border:0;background:transparent;color:var(--muted);padding:7px 10px;border-radius:7px;cursor:pointer}.switch button.active{background:#1c3b5f;color:white}
+.event{display:grid;grid-template-columns:82px 14px 1fr;gap:12px;align-items:start;margin:0 0 17px}.time{font-variant-numeric:tabular-nums;font-size:13px;color:var(--cyan);padding-top:4px}.dot{width:11px;height:11px;border-radius:50%;background:var(--blue);margin-top:5px;box-shadow:0 0 0 5px rgba(102,168,255,.12)}.event-card{border:1px solid var(--line);border-radius:12px;background:#0d1b2c;padding:12px 14px}.event-card strong{font-size:13px}.event-card p{margin:5px 0 0;color:var(--muted);font-size:13px}.event-card small{display:block;color:#617f9f;margin-top:7px}
+.result{padding:25px 26px}.result h4{margin:0 0 12px;font-size:14px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}.alert{border-left:3px solid var(--red);background:#25161e;padding:12px 14px;border-radius:7px;margin-bottom:9px}.alert b{font-size:13px}.alert p{font-size:12px;color:#e6bec5;margin:5px 0 0;line-height:1.5}.repair{border:1px solid #214e45;background:#0b2825;padding:12px 14px;border-radius:10px;margin-bottom:9px}.repair code{color:var(--cyan);font-weight:700}.repair p{font-size:12px;color:#a9d4c8;margin:5px 0 0;line-height:1.5}.state{display:flex;gap:10px;align-items:center;margin-top:20px}.state div{flex:1;padding:12px;border-radius:10px;background:#0a1624;border:1px solid var(--line);text-align:center;font-size:13px}.state .after{border-color:#2f725a;color:var(--green)}.arrow{color:var(--muted)}
+.run{width:100%;border:0;background:linear-gradient(90deg,#4b8fff,#56dfcf);color:#04101d;font-weight:800;padding:15px 18px;cursor:pointer;font-size:15px}.run:disabled{opacity:.55}
+.evidence{padding:14px 26px;border-top:1px solid var(--line);font-size:12px;color:var(--muted);display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:34px 0}.metric{background:#0c1929;border:1px solid var(--line);border-radius:16px;padding:18px}.metric b{font-size:26px;display:block}.metric span{color:var(--muted);font-size:12px}.metric .zero{color:var(--green)}
+.stack{border:1px solid var(--line);border-radius:20px;padding:24px;background:#0a1726}.stack h2{margin:0 0 6px}.stack>p{color:var(--muted);margin-top:0}.chips{display:flex;flex-wrap:wrap;gap:8px}.chip{font-size:12px;padding:8px 10px;border-radius:9px;background:#10233a;border:1px solid #254362;color:#cfe3fb}
+.foot{margin-top:38px;color:#738aa5;font-size:12px;line-height:1.6}
+@media(max-width:850px){.promise,.tabs,.metrics{grid-template-columns:1fr 1fr}.flow{grid-template-columns:1fr}.timeline{border-right:0;border-bottom:1px solid var(--line)}.board-head{flex-direction:column}.customer{white-space:normal}}
+@media(max-width:560px){.promise,.tabs,.metrics{grid-template-columns:1fr}.wrap{padding:25px 15px 60px}.hero{padding-top:42px}.hero p{font-size:17px}.event{grid-template-columns:68px 12px 1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar"><div class="brand">PICKUP PACT</div><div class="live" id="health">● backend 연결 확인 중</div></div>
+  <section class="hero">
+    <div class="eyebrow">SCHEDULED PICKUP CONSISTENCY ENGINE</div>
+    <h1>“12:30에 준비됩니다”라는 약속을<br>분산 시스템에서도 지킵니다.</h1>
+    <p>주문 CRUD가 아니라, <b>지연·중복·역순 이벤트와 매장 수용량 변화</b>가 생겼을 때 결제·정산·적립·픽업 상태를 어떻게 다시 일치시키는지 보여주는 백엔드 프로젝트입니다.</p>
+  </section>
+  <div class="promise">
+    <div><b>① 실제 발생 시각을 복원</b><span>received_at 순서가 아니라 occurred_at과 인과관계로 canonical timeline을 만듭니다.</span></div>
+    <div><b>② 금전 기록은 삭제하지 않음</b><span>잘못 반영된 정산·적립은 compensating entry로 되돌려 감사 가능성을 유지합니다.</span></div>
+    <div><b>③ AI는 설명, 복구는 결정론적</b><span>AI 제안이 직접 돈을 움직이지 않습니다. repair command는 규칙과 검증된 계약에서만 생성됩니다.</span></div>
+  </div>
+
+  <div class="section-title"><h2>30초 시나리오</h2><p>하나를 고르고 “백엔드로 재생”을 누르세요.</p></div>
+  <div class="tabs" id="tabs"></div>
+
+  <section class="board">
+    <div class="board-head">
+      <div><h3 id="title">-</h3><p id="subtitle">-</p></div>
+      <div class="customer" id="customer">-</div>
+    </div>
+    <div class="explain"><b>문제:</b> <span id="problem">-</span></div>
+    <div class="flow">
+      <div class="timeline">
+        <div class="timeline-head">
+          <b>이벤트 타임라인</b>
+          <div class="switch"><button id="receivedBtn">수신 순서</button><button id="canonicalBtn" class="active">실제 발생 순서</button></div>
+        </div>
+        <div id="events"></div>
+      </div>
+      <div class="result">
+        <h4>Detected anomaly</h4><div id="anomalies"></div>
+        <h4 style="margin-top:22px">Deterministic repair</h4><div id="repairs"></div>
+        <div class="state"><div id="before">-</div><span class="arrow">→</span><div class="after" id="after">-</div></div>
+      </div>
+    </div>
+    <button class="run" id="run">백엔드로 재생하기 →</button>
+    <div class="evidence"><span id="engine">engine: -</span><span id="evidence">evidence: -</span></div>
+  </section>
+
+  <div class="section-title"><h2>검증 결과</h2><p>합성 correctness benchmark · production TPS 주장이 아닙니다.</p></div>
+  <div class="metrics">
+    <div class="metric"><b>20,000</b><span>seed 42 simulated orders</span></div>
+    <div class="metric"><b>1,207 → <span class="zero">0</span></b><span>duplicate financial posts</span></div>
+    <div class="metric"><b>381 → <span class="zero">0</span></b><span>late-cancel stale financial orders</span></div>
+    <div class="metric"><b>194 → <span class="zero">0</span></b><span>capacity oversubscribed units</span></div>
+  </div>
+
+  <section class="stack">
+    <h2>공고 기술을 어디에 쓰는가</h2>
+    <p>기술 이름을 붙이는 대신 도메인 경계와 장애 지점에 역할을 배치했습니다.</p>
+    <div class="chips">
+      <span class="chip">Kotlin · Spring WebFlux — Pickup Commitment</span>
+      <span class="chip">Java · Spring — Double-entry Ledger</span>
+      <span class="chip">Python · FastAPI — Temporal Reconciler</span>
+      <span class="chip">Flask — Ops Console</span>
+      <span class="chip">PostgreSQL — Aggregate · Outbox · Ledger</span>
+      <span class="chip">Redis — Atomic Capacity Lease</span>
+      <span class="chip">Kafka — At-least-once Domain Events</span>
+      <span class="chip">MongoDB — Raw Event Evidence</span>
+      <span class="chip">Elasticsearch — Incident Search</span>
+      <span class="chip">Celery — Async Replay Worker</span>
+      <span class="chip">DDD · EDA · CQRS</span>
+      <span class="chip">Docker · Kubernetes · AWS · Jenkins</span>
+      <span class="chip">Datadog · Elastic APM</span>
+      <span class="chip">AI-first — review/triage only, deterministic money path</span>
+    </div>
+  </section>
+  <div class="foot">모든 시나리오와 수치는 합성 데이터입니다. 외부 결제사·실제 매장·실제 고객 데이터는 사용하지 않습니다. 이 화면의 “재생”은 FastAPI 백엔드에서 시나리오를 다시 계산하고 anomaly/repair/evidence를 JSON으로 반환합니다.</div>
+</div>
+<script>
+const defs=[
+ {id:"late-cancel",title:"늦게 도착한 취소",sub:"event-time vs receive-time"},
+ {id:"duplicate",title:"Kafka 중복 전달",sub:"idempotent financial side effect"},
+ {id:"capacity-drop",title:"매장 수용량 급감",sub:"pickup promise at risk"},
+ {id:"conflict",title:"동일 ID 금액 충돌",sub:"quarantine vs dedupe"}
+];
+let current="late-cancel",data=null,mode="canonical";
+const $=id=>document.getElementById(id);
+function tabs(){ $("tabs").innerHTML=defs.map(x=>`<button class="tab ${x.id===current?"active":""}" data-id="${x.id}"><strong>${x.title}</strong><span>${x.sub}</span></button>`).join(""); document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{current=b.dataset.id;tabs();run();});}
+function render(){
+ $("title").textContent=data.title;$("subtitle").textContent=data.subtitle;$("customer").textContent=data.customer;$("problem").textContent=data.problem;
+ const list=mode==="canonical"?data.canonical_order:data.received_order;
+ $("events").innerHTML=list.map(e=>`<div class="event"><div class="time">${mode==="canonical"?e.occurred_at:e.received_at}</div><div class="dot"></div><div class="event-card"><strong>${e.type}</strong><p>${e.detail}</p><small>event_id: ${e.event_id} · occurred ${e.occurred_at} · received ${e.received_at}</small></div></div>`).join("");
+ $("anomalies").innerHTML=data.anomalies.map(a=>`<div class="alert"><b>${a.code} · ${a.title}</b><p>${a.detail}</p></div>`).join("");
+ $("repairs").innerHTML=data.repairs.map(r=>`<div class="repair"><code>${r.command}</code><p>${r.why}</p></div>`).join("");
+ $("before").textContent=data.state_before;$("after").textContent=data.state_after;$("engine").textContent="engine: "+data.engine;$("evidence").textContent="evidence: "+data.evidence_event_ids.join(", ");
+ $("canonicalBtn").classList.toggle("active",mode==="canonical");$("receivedBtn").classList.toggle("active",mode==="received");
+}
+async function run(){
+ const btn=$("run");btn.disabled=true;btn.textContent="백엔드 재생 중…";
+ try{const r=await fetch("/api/scenarios/"+current,{cache:"no-store"});if(!r.ok)throw new Error("HTTP "+r.status);data=await r.json();render();btn.textContent="백엔드 재생 완료 ✓ · 다시 실행";}
+ catch(e){btn.textContent="재생 실패 · 다시 시도";console.error(e);}
+ finally{btn.disabled=false;}
+}
+$("receivedBtn").onclick=()=>{mode="received";render()};$("canonicalBtn").onclick=()=>{mode="canonical";render()};$("run").onclick=run;
+fetch("/health").then(r=>r.json()).then(()=>{$("health").textContent="● FastAPI backend live";}).catch(()=>{$("health").textContent="○ backend unavailable";$("health").style.color="#ff7b8b";});
+tabs();run();
+</script>
+</body></html>
