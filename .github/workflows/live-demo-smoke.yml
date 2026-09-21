@@ -18,24 +18,43 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
-      - name: Wait for public demo
+      - name: Wait for the expected public demo release
         shell: bash
         run: |
           set -euo pipefail
           BASE_URL="https://pickup-pact-demo.onrender.com"
-          for attempt in $(seq 1 24); do
+
+          for attempt in $(seq 1 36); do
+            health_ok=false
+            page_ok=false
+
             if curl --silent --show-error --fail --max-time 15 "$BASE_URL/health" -o /tmp/health.json; then
-              python - <<'PY'
+              if python - <<'PY'
           import json
           payload = json.load(open("/tmp/health.json"))
-          assert payload["status"] == "ok", payload
+          raise SystemExit(0 if payload.get("status") == "ok" else 1)
           PY
+              then
+                health_ok=true
+              fi
+            fi
+
+            if curl --silent --show-error --fail --max-time 15 "$BASE_URL/" -o /tmp/index.html; then
+              if grep -Fq "고객은 주문을 취소했는데" /tmp/index.html                 && grep -Fq "카페 스마트오더 · 예약 픽업 장애 복구 데모" /tmp/index.html                 && grep -Fq "문제 재현 → 백엔드 복구 실행" /tmp/index.html; then
+                page_ok=true
+              fi
+            fi
+
+            if [ "$health_ok" = true ] && [ "$page_ok" = true ]; then
+              echo "expected public demo release is ready"
               break
             fi
-            if [ "$attempt" -eq 24 ]; then
-              echo "live demo did not become ready" >&2
+
+            if [ "$attempt" -eq 36 ]; then
+              echo "expected public demo release did not become ready" >&2
               exit 1
             fi
+
             sleep 10
           done
 
@@ -44,6 +63,7 @@ jobs:
         run: |
           set -euo pipefail
           BASE_URL="https://pickup-pact-demo.onrender.com"
+
           for scenario in late-cancel duplicate capacity-drop conflict; do
             curl --silent --show-error --fail --max-time 20               "$BASE_URL/api/scenarios/$scenario"               -o "/tmp/$scenario.json"
           done
@@ -76,6 +96,7 @@ jobs:
         run: |
           set -euo pipefail
           curl --silent --show-error --fail --max-time 20             https://pickup-pact-demo.onrender.com/ -o /tmp/index.html
+
           grep -F "고객은 주문을 취소했는데" /tmp/index.html
           grep -F "카페 스마트오더 · 예약 픽업 장애 복구 데모" /tmp/index.html
           grep -F "문제 재현 → 백엔드 복구 실행" /tmp/index.html
