@@ -52,7 +52,21 @@ jobs:
               fi
             fi
 
+            api_ok=false
             if [ "$health_ok" = true ] && [ "$page_ok" = true ]; then
+              if curl --silent --show-error --fail --max-time 15                 -X POST "$BASE_URL/api/demo/sessions"                 -H "Content-Type: application/json"                 -d '{}' -o /tmp/session.json; then
+                SESSION_ID="$(python - <<'PY'
+import json
+print(json.load(open("/tmp/session.json"))["session_id"])
+PY
+)"
+                if curl --silent --show-error --fail --max-time 15                   -X POST "$BASE_URL/api/demo/sessions/$SESSION_ID/orders"                   -H "Content-Type: application/json"                   -d '{"store":"deploy-check","items":"아메리카노","total":4500,"pickup_at":"12:30","units":1}'                   -o /tmp/order.json; then
+                  api_ok=true
+                fi
+              fi
+            fi
+
+            if [ "$health_ok" = true ] && [ "$page_ok" = true ] && [ "$api_ok" = true ]; then
               echo "expanded public demo release is ready"
               break
             fi
