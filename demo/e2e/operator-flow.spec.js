@@ -97,12 +97,14 @@ test('capacity and conflict labs expose distinct operator outcomes', async ({ pa
   await page.goto('/');
 
   await page.locator('.preset').filter({ hasText: '매장이 처리할 수 있는 주문 수 감소' }).click();
+  await expect(page.locator('#mAnomalies')).not.toHaveText('0');
   await openPage(page, '정합성 복구');
   await expect(page.locator('#anomalyList')).toContainText('확정한 픽업 약속을 현재 매장 처리량으로 지킬 수 없습니다.');
   await expect(page.locator('#repairList')).toContainText('대체 픽업 시간 검토');
 
   await openPage(page, '홈');
   await page.locator('.preset').filter({ hasText: '같은 메시지 번호인데 금액 충돌' }).click();
+  await expect(page.locator('#mAnomalies')).not.toHaveText('0');
   await openPage(page, '정합성 복구');
   await expect(page.locator('#anomalyList')).toContainText('같은 이벤트 ID인데 내용이 다릅니다.');
   await expect(page.locator('#repairList')).toContainText('자동 처리 중단');
@@ -138,8 +140,10 @@ test('guided quick start remains usable on a narrow mobile viewport', async ({ p
   await expect(page.locator('#guideTitle')).toBeVisible();
 
   await page.getByRole('button', { name: '1. 정상 주문 만들기', exact: true }).click();
+  await expect(page.locator('#guideTitle')).toHaveText('정상 주문이 준비됐습니다.');
   await expect(page.locator('#guideOrder')).toContainText('픽업 확정');
 
   await page.getByRole('button', { name: '2. 52초 지연 취소 만들기', exact: true }).click();
+  await expect(page.locator('#guideTitle')).toHaveText('문제가 발생했습니다.');
   await expect(page.locator('#guideBefore')).toContainText('정산 +9,000원 · 포인트 +90P');
 });
