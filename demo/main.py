@@ -39,7 +39,7 @@ ANOMALY_COPY = {
         "Kafka의 at-least-once 전달 때문에 동일한 금전 이벤트가 재전달되었습니다.",
     ),
     "conflicting_duplicate_payload": (
-        "같은 이벤트 ID인데 금액이 다릅니다.",
+        "같은 이벤트 ID인데 내용이 다릅니다.",
         "안전한 재전달로 볼 수 없어 자동 반영을 중단하고 사람 검토가 필요합니다.",
     ),
     "receive_order_projection_drift": (
@@ -51,7 +51,7 @@ ANOMALY_COPY = {
         "픽업 약속을 확정하기 위한 선행 조건이 충족되지 않았습니다.",
     ),
     "confirmed_promise_exceeds_revised_capacity": (
-        "이미 약속한 픽업 수량을 매장이 처리할 수 없습니다.",
+        "확정한 픽업 약속을 현재 매장 처리량으로 지킬 수 없습니다.",
         "확정 뒤 매장 처리 가능 수량이 줄어 기존 픽업 약속이 위험 상태가 되었습니다.",
     ),
     "settlement_posted_after_prior_cancellation": (
@@ -74,7 +74,7 @@ REPAIR_COPY = {
         "실제 발생 순서를 기준으로 고객/점주 화면의 상태를 다시 계산합니다.",
     ),
     "REVERSE_SETTLEMENT": (
-        "잘못된 점주 정산 취소",
+        "점주 정산 보상 분개",
         "기존 정산 기록은 삭제하지 않고 반대 분개를 새로 만들어 감사 이력을 유지합니다.",
     ),
     "REVERSE_REWARD": (
@@ -86,7 +86,7 @@ REPAIR_COPY = {
         "현재 처리량으로 지킬 수 있는 가장 가까운 슬롯을 다시 검토합니다.",
     ),
     "MANUAL_REVIEW": (
-        "자동 금전 변경 중단",
+        "자동 처리 중단",
         "이벤트 의미가 충돌하므로 자동 보정 대신 근거를 묶어 운영자 검토로 보냅니다.",
     ),
 }
