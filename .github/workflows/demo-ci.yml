@@ -6,6 +6,10 @@ on:
       - "demo/**"
       - "Dockerfile.demo"
       - "render.yaml"
+      - "services/reconciler/app/engine.py"
+      - "services/reconciler/app/models.py"
+      - "services/reconciler/app/engine.py"
+      - "services/reconciler/app/models.py"
       - ".github/workflows/demo-ci.yml"
   pull_request:
     paths:
