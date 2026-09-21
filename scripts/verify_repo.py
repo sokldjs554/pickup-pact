@@ -12,6 +12,10 @@ required = [
     "Jenkinsfile",
     ".github/workflows/ci.yml",
     ".github/workflows/live-demo-smoke.yml",
+    ".github/workflows/ui-e2e.yml",
+    "demo/index.html",
+    "demo/e2e/operator-flow.spec.js",
+    "demo/VERIFICATION.md",
     "docker-compose.yml",
     "contracts/openapi.yaml",
     "contracts/asyncapi.yaml",
@@ -106,8 +110,29 @@ assert "REDIS_URL=" in env_example
 assert "MONGO_URL=" not in env_example
 assert "CELERY_BROKER_URL=" not in env_example
 demo_doc = (ROOT / "docs/demo.md").read_text()
-assert "session-isolated smart-order operations sandbox" in demo_doc
+demo_index = (ROOT / "demo/index.html").read_text()
+demo_verification = (ROOT / "demo/VERIFICATION.md").read_text()
+assert "session-isolated smart-order recovery sandbox" in demo_doc
+assert "First-time guided flow" in demo_doc
+assert "Technical detail layer" in demo_doc
 assert "REVERSE_SETTLEMENT" in demo_doc and "REVERSE_REWARD" in demo_doc
+for marker in [
+    "주문은 취소됐는데",
+    "3분 데모 시작",
+    "정상 주문 만들기",
+    "52초 지연 취소 만들기",
+    "안전하게 복구하기",
+    "정산 0원 · 포인트 0P",
+]:
+    assert marker in demo_index, f"guided demo marker missing: {marker}"
+for marker in [
+    "ui-e2e",
+    "live-demo-smoke",
+    "release-gate",
+    "same commit",
+    "deployed public URL",
+]:
+    assert marker in demo_verification, f"verification contract marker missing: {marker}"
 
 # Check relative Markdown links so README/docs do not point to files that are absent.
 link_pattern = re.compile(r"\[[^\]]+\]\(([^)]+)\)")

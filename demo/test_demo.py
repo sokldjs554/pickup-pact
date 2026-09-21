@@ -40,11 +40,18 @@ def test_health_points_to_real_reconciliation_engine():
     assert payload["engine"] == "services/reconciler/app/engine.py"
 
 
-def test_landing_page_exposes_full_operations_modules():
+def test_landing_page_exposes_guided_and_expert_layers():
     response = client.get("/")
     assert response.status_code == 200
     body = response.text
     for label in [
+        "주문은 취소됐는데",
+        "3분 데모 시작",
+        "기술 용어를 몰라도",
+        "정상 주문 만들기",
+        "52초 지연 취소 만들기",
+        "안전하게 복구하기",
+        "정산 0원 · 포인트 0P",
         "주문 흐름",
         "매장 처리량",
         "장애 주입",
