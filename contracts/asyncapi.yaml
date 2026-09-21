@@ -1,0 +1,36 @@
+asyncapi: 3.0.0
+info:
+  title: Pickup Pact Domain Events
+  version: 0.1.0
+channels:
+  commitmentEvents:
+    address: pickup.commitment.events.v1
+    messages:
+      pickupConfirmed:
+        payload:
+          type: object
+          required: [event_id, aggregate_id, type, occurred_at]
+          properties:
+            event_id: {type: string}
+            aggregate_id: {type: string}
+            type: {const: PICKUP_CONFIRMED}
+            occurred_at: {type: string, format: date-time}
+  financialEvents:
+    address: pickup.financial.events.v1
+    messages:
+      settlement:
+        payload:
+          type: object
+          required: [eventId, aggregateId, reason, amount]
+          properties:
+            eventId: {type: string}
+            aggregateId: {type: string}
+            reason: {type: string}
+            amount: {type: number}
+  repairCommands:
+    address: pickup.repair.commands.v1
+    messages:
+      repair:
+        payload:
+          type: object
+          required: [command, aggregate_id, evidence_event_ids]

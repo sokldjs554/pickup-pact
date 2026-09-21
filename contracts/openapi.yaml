@@ -1,0 +1,37 @@
+openapi: 3.1.0
+info:
+  title: Pickup Pact API
+  version: 0.1.0
+paths:
+  /api/v1/commitments/hold:
+    post:
+      summary: Lease preparation capacity and create a HELD pickup commitment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [storeId, pickupAt, units, paymentAuthorized]
+              properties:
+                storeId: {type: string}
+                pickupAt: {type: string, format: date-time}
+                units: {type: integer, minimum: 1}
+                paymentAuthorized: {type: boolean}
+      responses:
+        "200": {description: Held commitment}
+  /api/v1/commitments/{id}/confirm:
+    post:
+      summary: Confirm only after capacity and payment invariants hold
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        "200": {description: Confirmed commitment}
+  /api/v1/reconcile:
+    post:
+      summary: Reconstruct canonical event-time state and propose deterministic repairs
+      responses:
+        "200": {description: Reconciliation result}
