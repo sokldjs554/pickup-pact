@@ -395,6 +395,26 @@ def reconciler_flow(pass_no: int) -> None:
     assert replay["ai_review"]["advisory_only"] is True, replay
     assert replay["ai_review"]["provider"] == "offline", replay
 
+    rebuilt = expect(
+        httpx.post(
+            f"{RECONCILER}/api/v1/projections/rebuild",
+            json=packet,
+            timeout=20,
+        ),
+        200,
+    )
+    assert rebuilt["projection"]["status"] == "CANCELLED", rebuilt
+
+    stored_projection = expect(
+        httpx.get(
+            f"{RECONCILER}/api/v1/projections/{aggregate}",
+            timeout=15,
+        ),
+        200,
+    )
+    assert stored_projection["projection"]["status"] == "CANCELLED", stored_projection
+    assert len(stored_projection["projection"]["canonical_hash"]) == 64, stored_projection
+
 
 def ops_console_flow() -> None:
     health = expect(httpx.get(f"{OPS}/health", timeout=10), 200)

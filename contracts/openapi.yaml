@@ -126,6 +126,30 @@ paths:
         "200": {description: Reconciliation result}
         "422": {description: Invalid or multi-aggregate evidence packet}
 
+  /api/v1/projections/rebuild:
+    post:
+      summary: Explicitly rebuild the CQRS commitment projection from canonical event time
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReconcileRequest"
+      responses:
+        "200": {description: Rebuilt projection}
+
+  /api/v1/projections/{aggregateId}:
+    get:
+      summary: Read the current rebuilt CQRS projection
+      parameters:
+        - in: path
+          name: aggregateId
+          required: true
+          schema: {type: string, minLength: 1}
+      responses:
+        "200": {description: Current projection}
+        "404": {description: Projection not found}
+
 components:
   parameters:
     CommitmentId:

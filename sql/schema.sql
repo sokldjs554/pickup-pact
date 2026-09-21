@@ -69,3 +69,17 @@ create table if not exists reconciliation_run (
 );
 create index if not exists idx_reconciliation_run_aggregate_created
   on reconciliation_run(aggregate_id, created_at desc);
+
+
+create table if not exists commitment_projection (
+  aggregate_id text primary key,
+  status text not null,
+  payment_authorized boolean not null,
+  settled boolean not null,
+  rewarded boolean not null,
+  capacity_revision integer not null,
+  settlement_post_count integer not null,
+  reward_post_count integer not null,
+  canonical_hash char(64) not null,
+  rebuilt_at timestamptz not null default now()
+);

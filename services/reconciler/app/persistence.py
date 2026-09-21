@@ -95,3 +95,69 @@ def record_reconciliation(result: ReconcileResult) -> str:
                 ),
             )
     return run_id
+
+
+
+def rebuild_projection(result: ReconcileResult) -> dict:
+    """Explicitly rebuild the CQRS read model from the canonical event-time snapshot."""
+    import psycopg
+
+    snapshot = result.canonical_state.model_dump(mode="json")
+    canonical_hash = _stable_digest(snapshot)
+    with psycopg.connect(os.environ["POSTGRES_DSN"]) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                insert into commitment_projection(
+                  aggregate_id, status, payment_authorized, settled, rewarded,
+                  capacity_revision, settlement_post_count, reward_post_count,
+                  canonical_hash, rebuilt_at
+                )
+                values (%s,%s,%s,%s,%s,%s,%s,%s,%s,now())
+                on conflict (aggregate_id) do update set
+                  status = excluded.status,
+                  payment_authorized = excluded.payment_authorized,
+                  settled = excluded.settled,
+                  rewarded = excluded.rewarded,
+                  capacity_revision = excluded.capacity_revision,
+                  settlement_post_count = excluded.settlement_post_count,
+                  reward_post_count = excluded.reward_post_count,
+                  canonical_hash = excluded.canonical_hash,
+                  rebuilt_at = now()
+                """,
+                (
+                    result.aggregate_id,
+                    snapshot["status"],
+                    snapshot["payment_authorized"],
+                    snapshot["settled"],
+                    snapshot["rewarded"],
+                    snapshot["capacity_revision"],
+                    snapshot["settlement_post_count"],
+                    snapshot["reward_post_count"],
+                    canonical_hash,
+                ),
+            )
+    return {**snapshot, "canonical_hash": canonical_hash}
+
+
+def get_projection(aggregate_id: str) -> dict | None:
+    import psycopg
+    from psycopg.rows import dict_row
+
+    with psycopg.connect(
+        os.environ["POSTGRES_DSN"],
+        row_factory=dict_row,
+    ) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                select aggregate_id, status, payment_authorized, settled, rewarded,
+                       capacity_revision, settlement_post_count, reward_post_count,
+                       canonical_hash, rebuilt_at
+                from commitment_projection
+                where aggregate_id = %s
+                """,
+                (aggregate_id,),
+            )
+            row = cursor.fetchone()
+    return None if row is None else dict(row)

@@ -7,7 +7,7 @@ if os.getenv("DD_TRACE_ENABLED", "false").lower() == "true":
 
     patch_all()
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 
 from .ai_review import provider_from_env
 from .engine import reconcile
@@ -82,4 +82,30 @@ def incidents_api(aggregate_id: str) -> dict:
     return {
         "aggregate_id": aggregate_id,
         "incidents": [hit["_source"] for hit in response["hits"]["hits"]],
+    }
+
+
+@app.post("/api/v1/projections/rebuild")
+def rebuild_projection_api(request: ReconcileRequest) -> dict:
+    from .persistence import rebuild_projection
+
+    result = reconcile(request)
+    projection = rebuild_projection(result)
+    return {
+        "aggregate_id": result.aggregate_id,
+        "source": "canonical-event-time",
+        "projection": projection,
+    }
+
+
+@app.get("/api/v1/projections/{aggregate_id}")
+def projection_api(aggregate_id: str) -> dict:
+    from .persistence import get_projection
+
+    projection = get_projection(aggregate_id)
+    if projection is None:
+        raise HTTPException(status_code=404, detail="projection not found")
+    return {
+        "aggregate_id": aggregate_id,
+        "projection": projection,
     }
