@@ -2,20 +2,20 @@
 
 The public demo is a **session-isolated smart-order recovery sandbox** with two UX layers.
 
-## First-time recruiter story
+## Product recovery experience
 
-The default landing page explains the business problem before exposing infrastructure terms. The expert navigation is hidden until a reviewer explicitly chooses **백엔드 구현 보기**.
+The default public route is rendered as a product-style **order protection and recovery center**, not an operator console. The dark backend sidebar is not present in the default experience. A compact product header, a protected-order preview, and recovery-focused cards explain the system through business state rather than infrastructure terminology.
 
-A first-time visitor presses **직접 확인해보기** once. The browser then drives the real demo API through the representative story automatically:
+A first-time visitor presses **복구 시나리오 체험하기** once. The browser then drives the real demo API through the representative incident:
 
 1. create, pay, and confirm a normal 9,000 KRW pickup order;
 2. record a cancellation that reaches the server 52 seconds late;
 3. post the incorrect 9,000 KRW settlement and 90P reward while that cancellation is delayed;
-4. run the real reconciliation engine and show the detected inconsistency.
+4. run the real reconciliation engine and surface a product-level warning.
 
-At that point the visitor has one meaningful action: **문제 복구하기**. Applying it appends the deterministic reversal records and changes the visible result from `settlement 9,000 KRW / reward 90P` to `settlement 0 KRW / reward 0P`.
+The recovery center shows the order summary, a five-step status strip, the incorrect financial state, and a plain-language explanation. The visitor then chooses **잘못된 처리 되돌리기**. The result changes from `settlement 9,000 KRW / reward 90P` to `settlement 0 KRW / reward 0P`, while the UI states that the original history remains preserved.
 
-The general-user layer therefore presents **problem → detection → before/after recovery** first. It does not require the visitor to understand Kafka, event IDs, ledgers, or reconciliation terminology before seeing the value of the system.
+Backend navigation becomes visible only after the reviewer explicitly selects **개발자 구현 보기** or **개발자 화면 열기**.
 
 ## Technical detail layer
 
