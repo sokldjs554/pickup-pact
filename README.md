@@ -1,31 +1,40 @@
 # Pickup Pact
 
-**예약 픽업 약속의 시간적 정합성을 지키는 백엔드 시스템**
+**스마트오더에서 늦은 취소·중복 메시지·매장 처리량 변화 때문에 주문/정산/적립 상태가 어긋났을 때, 실제 업무 발생 순서를 복원해 안전한 복구 계획을 만드는 백엔드 프로젝트입니다.**
 
 **Live Demo:** <https://pickup-pact-demo.onrender.com>  
-**Demo:** FastAPI 기반 인터랙티브 운영 콘솔 · 합성 데이터만 사용
+**Public demo engine:** `services/reconciler/app/engine.py` · 합성 데이터만 사용
 
-> “12:30에 준비됩니다”라고 확정한 뒤, 취소 이벤트가 늦게 도착하거나 Kafka가 결제 이벤트를 중복 전달하고, 매장 제조 수용량이 갑자기 줄어들면 주문·결제·정산·적립 상태를 어떻게 다시 맞출 것인가?
+### 대표 시나리오
 
-Pickup Pact는 메뉴/장바구니 CRUD 클론이 아니라 **확정된 픽업 약속 이후 분산 시스템에서 발생하는 정합성 문제**를 다룹니다. 핵심은 `occurred_at`과 `received_at`을 분리하고, 삭제가 아닌 보상 분개와 replay 가능한 근거를 통해 상태를 복구하는 것입니다.
+고객이 **12:14:10에 9,000원짜리 12:30 픽업 주문을 취소**했지만 취소 메시지가 52초 늦게 도착합니다. 그 사이 점주 정산 9,000원과 고객 포인트 90P가 먼저 반영됩니다.
 
-## 30초 데모
+Pickup Pact는 서버가 받은 순서만 믿지 않고 `occurred_at`과 `received_at`을 분리합니다. 그 결과 **취소가 실제로 정산보다 먼저 발생했다는 사실을 복원하고, 기존 금전 이력을 삭제하지 않은 채 정산 reversal과 포인트 회수 계획을 생성**합니다.
 
-첫 화면에서 바로 네 가지 장애 시나리오를 실행할 수 있습니다.
+이 주제를 선택한 이유는 주문/결제/정산/적립 같은 비즈니스 로직, Kafka 기반 비동기 처리, CQRS, Redis, 분산 트랜잭션과 데이터 정합성, 장애 추적이라는 페이타랩 백엔드 공고의 핵심 문제와 직접 연결되면서도 흔한 주문 CRUD/음식배달 MSA 클론과 다른 문제를 보여주기 위해서입니다.
 
-1. **늦게 도착한 취소** — 취소가 실제로는 먼저 일어났지만 정산·포인트 적립 후 서버에 도착
-2. **Kafka 중복 전달** — 동일 financial event가 다시 전달되지만 금전 부작용은 한 번만 허용
-3. **매장 수용량 급감** — 이미 확정한 픽업 수량보다 제조 가능 수량이 작아짐
-4. **동일 event_id 금액 충돌** — 안전한 redelivery와 상류 시스템 오류를 semantic fingerprint로 구분
+## 면접관용 데모
 
-데모에서 `수신 순서`와 `실제 발생 순서`를 바꿔 보면 왜 단순 message-order 처리로는 문제를 해결할 수 없는지 바로 확인할 수 있습니다. **“백엔드로 재생하기”** 버튼은 정적 애니메이션이 아니라 FastAPI API를 호출해 anomaly, repair command, evidence event IDs를 다시 계산합니다.
+첫 화면은 기술 용어가 아니라 **고객 주문 → 어떤 문제가 생겼는지 → 고객/점주/서비스 영향 → 백엔드가 계산한 복구 결과** 순서로 읽히도록 구성했습니다.
+
+데모에서 확인할 수 있는 네 가지 장애 상황은 다음과 같습니다.
+
+1. **취소 메시지 지연** — 취소는 먼저 발생했지만 정산·적립 이후 서버에 도착
+2. **Kafka 중복 전달** — 동일 정산 이벤트를 두 번 받아도 금전 반영은 한 번만 유지
+3. **매장 처리량 감소** — 확정한 픽업 약속보다 현재 제조 가능량이 작아짐
+4. **동일 event_id 금액 충돌** — 안전한 redelivery와 상류 금액 충돌을 구분
+
+**“장애 감지 및 복구 계획 계산”** 버튼은 데모용 별도 알고리즘이 아니라 저장소의 실제 reconciliation engine을 호출합니다. 화면의 “서버가 받은 순서”와 “실제로 발생한 순서”도 같은 scenario payload에서 계산됩니다.
 
 로컬 실행:
 
 ```bash
+pip install -r demo/requirements.txt
+uvicorn demo.main:app --host 0.0.0.0 --port 10000
+
+# 또는 동일한 공개 데모 이미지
 docker build -f Dockerfile.demo -t pickup-pact-demo .
 docker run --rm -p 10000:10000 pickup-pact-demo
-# http://localhost:10000
 ```
 
 ## 핵심 설계
@@ -147,7 +156,7 @@ cp .env.example .env
 docker compose up --build
 ```
 
-GitHub Actions는 Python reconciler, demo tests/Docker build, Kotlin/Java Maven tests, OpenAPI/AsyncAPI parse, Terraform validate를 분리해 검증합니다. Jenkinsfile도 같은 검증 경계를 사용합니다.
+GitHub Actions는 Python reconciler, interviewer demo tests/live smoke, Docker build, Kotlin/Java Maven tests, OpenAPI/AsyncAPI parse, Terraform validate를 검증합니다. Jenkinsfile도 같은 핵심 검증 경계를 사용합니다.
 
 ## 왜 이 주제인가
 
@@ -162,7 +171,7 @@ GitHub Actions는 Python reconciler, demo tests/Docker build, Kotlin/Java Maven 
 - 실제 고객·점주·결제 데이터는 사용하지 않았습니다.
 - AWS/Kubernetes/Datadog/Elastic APM 설정은 실행 가능한 배포/관측 blueprint이며, 별도 실행 증거가 없는 외부 운영 환경을 실제 운영했다고 표현하지 않습니다.
 - Slack/Jira/Notion/n8n/Make는 integration artifact이며 실제 SaaS 계정 연결을 주장하지 않습니다.
-- 공개 데모는 빠른 검토를 위해 compact FastAPI process로 배포하며, 전체 분산 topology와 동일하다고 가장하지 않습니다.
+- 공개 데모는 빠른 검토를 위해 FastAPI 단일 프로세스로 배포하지만, anomaly/repair 계산은 실제 `services/reconciler/app/engine.py`를 사용합니다. 전체 Kafka/PostgreSQL/Redis/MongoDB/Elasticsearch topology가 공개 데모에서 함께 기동된다고 주장하지 않습니다.
 - AI 결과는 advisory-only이고 정산·포인트·환불 repair는 deterministic boundary에서만 생성합니다.
 
 ## License
