@@ -14,7 +14,7 @@ test('reviewer can operate order, inject a late-cancel incident, reconcile, and 
 
   await openPage(page, '주문 흐름');
   await page.getByRole('button', { name: '빈 세션으로 초기화', exact: true }).click();
-  await expect(page.getByText('주문이 없습니다. 주문 흐름에서 새 주문을 만들어보세요.')).toBeVisible();
+  await expect(page.locator('#orderDetail').getByText('주문이 없습니다. 주문 흐름에서 새 주문을 만들어보세요.')).toBeVisible();
 
   await page.getByRole('button', { name: '주문 HOLD 생성', exact: true }).click();
   await expect(page.locator('#orderDetail')).toContainText('HELD');
