@@ -954,6 +954,7 @@ function renderCustomerOrder(){
   const o=state.order;
   const cancelled=o.status==="CANCELLED"||customerOrderStage==="cancelled";
   const stage=cancelled?"cancelled":customerOrderStage==="ready"?"ready":customerOrderStage==="preparing"?"preparing":"received";
+  view.dataset.stage=stage;
   const statusTitle=cancelled?"주문이 취소됐어요.":stage==="ready"?"픽업 준비됐어요.":stage==="preparing"?"음료를 만들고 있어요.":"주문됐어요.";
   const statusText=cancelled?money(o.total)+"원 결제 취소와 포인트 정리가 끝났어요.":stage==="ready"?"매장에서 주문번호를 보여주고 받아가세요.":stage==="preparing"?"조금만 기다려주세요. 준비되면 바로 알려드릴게요.":"매장에서 주문을 확인했어요.";
   const icon=cancelled?"✓":stage==="ready"?"✓":stage==="preparing"?"…":"✓";
