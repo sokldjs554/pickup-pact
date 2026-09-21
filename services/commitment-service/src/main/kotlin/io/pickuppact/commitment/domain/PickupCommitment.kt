@@ -19,6 +19,12 @@ data class PickupCommitment(
         require(units > 0) { "units must be positive" }
     }
 
+    fun authorizePayment(): PickupCommitment {
+        require(state == CommitmentState.HELD) { "payment can only be attached to a HELD commitment" }
+        require(!paymentAuthorized) { "payment is already authorized" }
+        return copy(paymentAuthorized = true, version = version + 1)
+    }
+
     fun confirm(now: Instant): PickupCommitment {
         require(state == CommitmentState.HELD) { "only HELD can be confirmed" }
         require(paymentAuthorized) { "payment authorization is required" }

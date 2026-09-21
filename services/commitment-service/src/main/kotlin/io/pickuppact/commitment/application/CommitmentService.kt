@@ -8,7 +8,7 @@ import java.time.Duration
 import java.time.Instant
 import java.util.UUID
 
-data class HoldCommand(val storeId: String, val pickupAt: Instant, val units: Int, val paymentAuthorized: Boolean)
+data class HoldCommand(val storeId: String, val pickupAt: Instant, val units: Int)
 
 @Service
 class CommitmentService(
@@ -26,12 +26,23 @@ class CommitmentService(
                         pickupAt = command.pickupAt,
                         units = command.units,
                         leaseToken = token,
-                        paymentAuthorized = command.paymentAuthorized,
+                        paymentAuthorized = false,
                         state = CommitmentState.HELD
                     )
                 )
             }
     }
+
+    fun authorizePayment(id: UUID, authorizationId: String): Mono<PickupCommitment> =
+        repository.find(id)
+            .map { it.authorizePayment() }
+            .flatMap { saved ->
+                repository.saveWithEvent(
+                    saved,
+                    "PaymentAuthorized",
+                    mapOf("authorization_id" to authorizationId)
+                )
+            }
 
     fun confirm(id: UUID): Mono<PickupCommitment> =
         repository.find(id)
