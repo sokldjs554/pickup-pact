@@ -1,5 +1,6 @@
 package io.pickuppact.commitment.infra
 
+import com.fasterxml.jackson.databind.ObjectMapper
 import org.springframework.context.annotation.Profile
 import org.springframework.kafka.core.KafkaTemplate
 import org.springframework.r2dbc.core.DatabaseClient
@@ -13,7 +14,8 @@ import java.util.UUID
 @Profile("postgres", "kafka")
 class OutboxRelay(
     private val db: DatabaseClient,
-    private val kafka: KafkaTemplate<String, String>
+    private val kafka: KafkaTemplate<String, String>,
+    private val objectMapper: ObjectMapper
 ) {
     @Scheduled(fixedDelayString = "\${pickup.outbox.poll-ms:500}")
     fun relay(): Mono<Void> =
@@ -30,19 +32,29 @@ class OutboxRelay(
                     row.get("payload", String::class.java)!!,
                     row.get("occurred_at", OffsetDateTime::class.java)!!
                 )
-            }.all()
+            }
+            .all()
             .concatMap { row ->
-                val envelope = "{"event_id":"" + row.id +
-                    "","aggregate_id":"" + row.aggregateId +
-                    "","event_type":"" + row.eventType +
-                    "","occurred_at":"" + row.occurredAt.toInstant() +
-                    "","schema_version":1,"payload":" + row.payload + "}"
+                val envelope = objectMapper.writeValueAsString(
+                    mapOf(
+                        "event_id" to row.id.toString(),
+                        "aggregate_id" to row.aggregateId.toString(),
+                        "event_type" to row.eventType,
+                        "occurred_at" to row.occurredAt.toInstant().toString(),
+                        "schema_version" to 1,
+                        "payload" to objectMapper.readTree(row.payload)
+                    )
+                )
                 Mono.fromFuture(kafka.send("pickup.commitment.events.v1", row.aggregateId.toString(), envelope))
                     .then(
                         db.sql("update outbox_events set published_at = now() where id = :id and published_at is null")
-                            .bind("id", row.id).fetch().rowsUpdated().then()
+                            .bind("id", row.id)
+                            .fetch()
+                            .rowsUpdated()
+                            .then()
                     )
-            }.then()
+            }
+            .then()
 
     private data class OutboxRow(
         val id: UUID,
