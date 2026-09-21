@@ -64,11 +64,12 @@ jobs:
                       EXPECTED_COMMIT,
                   )
                   for marker in [
-                      "주문은 취소됐는데",
-                      "3분 데모 시작",
-                      "기술 용어를 몰라도",
-                      "정상 주문 만들기",
-                      "안전하게 복구하기",
+                      "주문 취소가 늦게 전달되면",
+                      "직접 확인해보기",
+                      "버튼 한 번으로 시작",
+                      "자동 데모 시작",
+                      "문제 복구하기",
+                      "백엔드 구현 보기",
                       "주문 흐름",
                       "장애 주입",
                       "정합성 복구",
@@ -233,7 +234,7 @@ jobs:
           npm install --no-audit --no-fund
           npx playwright install --with-deps chromium
 
-      - name: Verify guided and expert flows in the deployed public UI
+      - name: Verify recruiter and expert flows in the deployed public UI
         working-directory: demo
         env:
           DEMO_BASE_URL: https://pickup-pact-demo.onrender.com
