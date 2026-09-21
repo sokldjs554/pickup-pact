@@ -1,25 +1,32 @@
 # Public demo
 
-The public demo is a **session-isolated smart-order recovery sandbox** with two UX layers.
+The public demo is a **session-isolated smart-order customer demo** with a separate hidden backend console.
 
-## Product recovery experience
+## Customer smart-order experience
 
-The default public route is rendered as a product-style **order protection and recovery center**, not an operator console. The dark backend sidebar is not present in the default experience. A compact product header, a protected-order preview, and recovery-focused cards explain the system through business state rather than infrastructure terminology.
+The default route behaves like a small consumer smart-order product rather than an incident/recovery tool.
 
-A first-time visitor presses **복구 시나리오 체험하기** once. The browser then drives the real demo API through the representative incident:
+Synthetic customer and catalog data come from real demo API endpoints:
 
-1. create, pay, and confirm a normal 9,000 KRW pickup order;
-2. record a cancellation that reaches the server 52 seconds late;
-3. post the incorrect 9,000 KRW settlement and 90P reward while that cancellation is delayed;
-4. run the real reconciliation engine and surface a product-level warning.
+- `GET /api/demo/customer`
+- `GET /api/demo/catalog`
 
-The recovery center shows the order summary, a five-step status strip, the incorrect financial state, and a plain-language explanation. The visitor then chooses **잘못된 처리 되돌리기**. The result changes from `settlement 9,000 KRW / reward 90P` to `settlement 0 KRW / reward 0P`, while the UI states that the original history remains preserved.
+The visitor can:
 
-Backend navigation becomes visible only after the reviewer explicitly selects **개발자 구현 보기** or **개발자 화면 열기**.
+1. choose one of three synthetic nearby stores;
+2. add menu items to a cart;
+3. increase or decrease item quantities and see totals recalculate;
+4. place an order, which calls the real session order/payment/confirm APIs;
+5. follow the order through received, preparing, and pickup-ready presentation states;
+6. cancel the order through a customer-facing confirmation dialog.
+
+The cancellation UI intentionally stays simple. The demo silently reproduces a late-cancellation race behind the customer experience, runs reconciliation, applies deterministic `REVERSE_SETTLEMENT` and `REVERSE_REWARD`, and then shows only the customer-relevant outcome: the order is cancelled and payment/points are cleaned up.
+
+The customer-facing route does not expose backend navigation or recovery terminology.
 
 ## Technical detail layer
 
-Reviewers who want implementation detail can use the same session to inspect:
+Backend reviewers use `/?dev=1` to enter the separate operator console. That console exposes:
 
 - manual order lifecycle operations;
 - pickup-capacity revision;
@@ -31,15 +38,15 @@ Reviewers who want implementation detail can use the same session to inspect:
 
 Each browser stores its own demo session ID. The Render instance keeps only in-memory synthetic demo state; it is not connected to real merchants, customers, or payment providers.
 
-## Representative late-cancellation flow
+## Representative hidden late-cancellation flow
 
-1. pickup is held, paid, and confirmed;
-2. cancellation occurs first but is recorded with a later `received_at`;
-3. settlement and reward are posted before that cancellation delivery arrives;
-4. reconciliation detects that settlement/reward happened after an earlier business-time cancellation;
-5. it proposes `REVERSE_SETTLEMENT` and `REVERSE_REWARD`;
-6. applying the plan in the sandbox appends reversal batches rather than deleting the original ledger evidence;
-7. net settlement and reward balance return to zero.
+1. the customer order is held, paid, and confirmed;
+2. cancellation occurs first but reaches the demo backend 52 seconds later;
+3. settlement and reward are posted during that delay;
+4. reconciliation detects the stale financial state;
+5. `REVERSE_SETTLEMENT` and `REVERSE_REWARD` are proposed and applied;
+6. the customer sees a simple cancellation-complete state;
+7. the expert console preserves the ledger and audit evidence.
 
 A projection rebuild is proposed only when receive-order folding actually differs from canonical business-time folding. It is not hard-coded into every late-cancellation case.
 
@@ -47,4 +54,4 @@ A projection rebuild is proposed only when receive-order folding actually differ
 
 The public demo packages the real reconciliation engine but intentionally does not boot Kafka, PostgreSQL, Redis, MongoDB, Elasticsearch, both Spring services, and Celery on the free Render process. Those integrations are represented by the service code, Compose topology, contracts, infrastructure manifests, tests, and evidence artifacts in the repository.
 
-All data is synthetic.
+All customer, store, menu, order, payment, and reward data in the public demo is synthetic.

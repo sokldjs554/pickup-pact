@@ -40,20 +40,34 @@ def test_health_points_to_real_reconciliation_engine():
     assert payload["engine"] == "services/reconciler/app/engine.py"
     assert payload["release_commit"]
 
+def test_customer_catalog_is_real_demo_api_data():
+    customer = client.get("/api/demo/customer")
+    assert customer.status_code == 200
+    assert customer.json()["label"] == "체험 손님"
+
+    response = client.get("/api/demo/catalog")
+    assert response.status_code == 200
+    stores = response.json()
+    assert len(stores) >= 3
+    assert stores[0]["name"] == "패스카페 강남역점"
+    assert stores[0]["pickup_minutes"] > 0
+    assert any(item["name"] == "아메리카노" for item in stores[0]["menu"])
+    assert all(item["price"] > 0 for store in stores for item in store["menu"])
+
+
 
 def test_landing_page_exposes_guided_and_expert_layers():
     response = client.get("/")
     assert response.status_code == 200
     body = response.text
     for label in [
-        "주문 보호 기능이 켜져 있습니다",
-        "취소된 주문의",
-        "복구 시나리오 체험하기",
-        "ORDER RECOVERY CENTER",
-        "잘못된 처리 되돌리기",
-        "개발자 구현 보기",
-        "개발자 화면 열기",
-        "정산 0원 · 포인트 0P",
+        "커피, 미리 주문해요.",
+        "근처 매장",
+        "장바구니 보기",
+        "내 주문",
+        "체험 손님",
+        "메뉴 보기",
+        "주문 취소",
         "주문 흐름",
         "매장 처리량",
         "장애 주입",
