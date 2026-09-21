@@ -18,3 +18,16 @@ create table if not exists ledger_entries (
   occurred_at timestamptz not null
 );
 create index if not exists idx_ledger_entries_event on ledger_entries(event_id);
+
+create table if not exists ledger_conflicts (
+  id bigserial primary key,
+  event_id text not null,
+  aggregate_id text not null,
+  reason text not null,
+  existing_fingerprint char(64) not null,
+  incoming_fingerprint char(64) not null,
+  observed_at timestamptz not null default now(),
+  unique(event_id, incoming_fingerprint)
+);
+create index if not exists idx_ledger_conflicts_observed
+  on ledger_conflicts(observed_at desc);

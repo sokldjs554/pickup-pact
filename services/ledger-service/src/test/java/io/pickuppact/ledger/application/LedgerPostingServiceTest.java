@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class LedgerPostingServiceTest {
@@ -24,7 +25,7 @@ class LedgerPostingServiceTest {
     }
 
     @Test
-    void reusedEventIdWithDifferentMeaningIsConflict() {
+    void reusedEventIdWithDifferentMeaningIsQuarantined() {
         var repository = mock(LedgerRepository.class);
         var service = new LedgerPostingService(repository);
         var batch = LedgerPostingPolicy.settlement("evt-2", "order-1", new BigDecimal("12000"));
@@ -33,5 +34,6 @@ class LedgerPostingServiceTest {
         when(repository.fingerprint("evt-2")).thenReturn(Optional.of("different-fingerprint"));
 
         assertEquals(LedgerPostingService.Result.CONFLICTING_EVENT_ID, service.post(batch));
+        verify(repository).recordConflict(batch, "different-fingerprint");
     }
 }

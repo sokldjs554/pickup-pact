@@ -1,10 +1,13 @@
 package io.pickuppact.ledger.application;
 
 import io.pickuppact.ledger.domain.LedgerBatch;
+import io.pickuppact.ledger.domain.LedgerBatchSummary;
+import io.pickuppact.ledger.domain.LedgerConflict;
 import io.pickuppact.ledger.domain.LedgerPostingPolicy;
 import io.pickuppact.ledger.domain.LedgerPostingType;
 import io.pickuppact.ledger.infra.LedgerRepository;
 import java.math.BigDecimal;
+import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,14 +28,23 @@ public class LedgerPostingService {
 
     @Transactional
     public Result post(LedgerBatch batch) {
-        if (repository.appendIfAbsent(batch)) {
-            return Result.POSTED;
-        }
+        if (repository.appendIfAbsent(batch)) return Result.POSTED;
 
         var current = repository.fingerprint(batch.eventId())
                 .orElseThrow(() -> new IllegalStateException("event ID exists without ledger batch fingerprint"));
-        return current.equals(batch.semanticFingerprint())
-                ? Result.DUPLICATE_NOOP
-                : Result.CONFLICTING_EVENT_ID;
+        if (current.equals(batch.semanticFingerprint())) return Result.DUPLICATE_NOOP;
+
+        repository.recordConflict(batch, current);
+        return Result.CONFLICTING_EVENT_ID;
+    }
+
+    @Transactional(readOnly = true)
+    public List<LedgerBatchSummary> history(String aggregateId, int limit) {
+        return repository.history(aggregateId, limit);
+    }
+
+    @Transactional(readOnly = true)
+    public List<LedgerConflict> conflicts(int limit) {
+        return repository.conflicts(limit);
     }
 }
