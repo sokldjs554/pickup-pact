@@ -11,7 +11,7 @@ import java.time.OffsetDateTime
 import java.util.UUID
 
 @Component
-@Profile("postgres", "kafka")
+@Profile("postgres & kafka")
 class OutboxRelay(
     private val db: DatabaseClient,
     private val kafka: KafkaTemplate<String, String>,

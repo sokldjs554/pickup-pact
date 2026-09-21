@@ -21,19 +21,31 @@ class ReactiveRedisCapacityLease(
         local current = tonumber(redis.call('GET', KEYS[1]) or '0')
         local requested = tonumber(ARGV[1])
         local capacity = tonumber(ARGV[2])
-        if current + requested > capacity then return -1 end
+        local requested_ttl = tonumber(ARGV[3])
+
+        if current + requested > capacity then
+          return -1
+        end
+
         local updated = redis.call('INCRBY', KEYS[1], requested)
-        redis.call('PEXPIRE', KEYS[1], ARGV[3])
+        local current_ttl = redis.call('PTTL', KEYS[1])
+        if current_ttl < requested_ttl then
+          redis.call('PEXPIRE', KEYS[1], requested_ttl)
+        end
         return updated
         """.trimIndent(),
         Long::class.java
     )
+
     private val releaseScript = DefaultRedisScript<Long>(
         """
         local current = tonumber(redis.call('GET', KEYS[1]) or '0')
         local units = tonumber(ARGV[1])
         local updated = current - units
-        if updated <= 0 then redis.call('DEL', KEYS[1]); return 0 end
+        if updated <= 0 then
+          redis.call('DEL', KEYS[1])
+          return 0
+        end
         redis.call('SET', KEYS[1], updated, 'KEEPTTL')
         return updated
         """.trimIndent(),
@@ -41,9 +53,15 @@ class ReactiveRedisCapacityLease(
     )
 
     override fun acquire(storeId: String, pickupAt: Instant, units: Int, ttlSeconds: Long): Mono<String> {
+        require(units > 0) { "units must be positive" }
         val slot = pickupAt.epochSecond / 300
         val key = "pickup:capacity:" + storeId + ":" + slot
-        val args = listOf(units.toString(), defaultCapacity.toString(), (ttlSeconds * 1000).toString())
+        val args = listOf(
+            units.toString(),
+            defaultCapacity.toString(),
+            (ttlSeconds * 1000).toString()
+        )
+
         return redis.execute(acquireScript, listOf(key), args)
             .single()
             .flatMap { updated ->

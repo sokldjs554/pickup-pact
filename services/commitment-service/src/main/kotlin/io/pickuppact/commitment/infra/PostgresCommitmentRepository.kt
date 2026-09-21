@@ -43,7 +43,8 @@ class PostgresCommitmentRepository(
             .bind("payment", c.paymentAuthorized)
             .bind("state", c.state.name)
             .bind("version", c.version)
-            .fetch().rowsUpdated()
+            .fetch()
+            .rowsUpdated()
             .flatMap { changed ->
                 if (changed == 0L) Mono.error(IllegalStateException("optimistic version conflict"))
                 else Mono.just(c)
@@ -66,8 +67,13 @@ class PostgresCommitmentRepository(
             .bind("aggregate", commitment.id)
             .bind("type", eventType)
             .bind("payload", json)
-            .fetch().rowsUpdated().then()
-        return tx.transactional(upsert(commitment).flatMap { saved -> writeEvent.thenReturn(saved) })
+            .fetch()
+            .rowsUpdated()
+            .then()
+
+        return tx.transactional(
+            upsert(commitment).flatMap { saved -> writeEvent.thenReturn(saved) }
+        )
     }
 
     override fun find(id: UUID): Mono<PickupCommitment> =
@@ -87,5 +93,7 @@ class PostgresCommitmentRepository(
                     state = CommitmentState.valueOf(row.get("state", String::class.java)!!),
                     version = row.get("version", java.lang.Long::class.java)!!.toLong()
                 )
-            }.one()
+            }
+            .one()
+            .switchIfEmpty(Mono.error(NoSuchElementException("commitment not found: $id")))
 }

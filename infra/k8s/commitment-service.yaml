@@ -16,7 +16,9 @@ spec:
         - name: commitment-service
           image: pickup-pact/commitment-service:0.1.0
           ports: [{containerPort: 8080}]
-          envFrom: [{configMapRef: {name: pickup-pact-config}}]
+          envFrom:
+            - {configMapRef: {name: pickup-pact-config}}
+            - {secretRef: {name: pickup-pact-secrets}}
           env:
             - {name: DD_SERVICE, value: pickup-pact-commitment}
             - {name: ELASTIC_APM_SERVICE_NAME, value: pickup-pact-commitment}

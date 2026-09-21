@@ -9,12 +9,15 @@ spec:
     matchLabels: {app: reconciler}
   template:
     metadata:
-      labels: {app: reconciler}
+      labels: {app: reconciler, tags.datadoghq.com/service: pickup-pact-reconciler, tags.datadoghq.com/env: staging}
     spec:
       containers:
         - name: reconciler
           image: ghcr.io/sokldjs554/pickup-pact-reconciler:latest
           ports: [{containerPort: 8000}]
+          envFrom:
+            - {configMapRef: {name: pickup-pact-config}}
+            - {secretRef: {name: pickup-pact-secrets}}
           env:
             - {name: DD_SERVICE, value: pickup-pact-reconciler}
             - {name: ELASTIC_APM_SERVICE_NAME, value: pickup-pact-reconciler}
@@ -22,6 +25,10 @@ spec:
             httpGet: {path: /health, port: 8000}
             initialDelaySeconds: 5
             periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /health, port: 8000}
+            initialDelaySeconds: 15
+            periodSeconds: 15
           resources:
             requests: {cpu: "100m", memory: "128Mi"}
             limits: {cpu: "1000m", memory: "512Mi"}

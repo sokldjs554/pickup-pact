@@ -14,11 +14,14 @@ spec:
         - name: ledger-service
           image: pickup-pact/ledger-service:0.1.0
           ports: [{containerPort: 8081}]
-          envFrom: [{configMapRef: {name: pickup-pact-config}}]
+          envFrom:
+            - {configMapRef: {name: pickup-pact-config}}
+            - {secretRef: {name: pickup-pact-secrets}}
           env:
             - {name: DD_SERVICE, value: pickup-pact-ledger}
             - {name: ELASTIC_APM_SERVICE_NAME, value: pickup-pact-ledger}
           readinessProbe: {httpGet: {path: /actuator/health/readiness, port: 8081}, initialDelaySeconds: 10, periodSeconds: 5}
+          livenessProbe: {httpGet: {path: /actuator/health/liveness, port: 8081}, initialDelaySeconds: 20, periodSeconds: 10}
           resources:
             requests: {cpu: 200m, memory: 384Mi}
             limits: {cpu: "1", memory: 768Mi}
