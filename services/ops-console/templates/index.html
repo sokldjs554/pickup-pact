@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Pickup Pact Ops Console</title>
+  <style>
+    body{font-family:system-ui,-apple-system,sans-serif;margin:0;background:#f6f7fb;color:#172033}
+    main{max-width:1040px;margin:auto;padding:48px 24px}
+    .hero,.card{background:#fff;border:1px solid #e5e7eb;border-radius:20px;padding:28px;margin-bottom:18px}
+    .hero{background:#172033;color:#fff}.hero p{color:#ccd4df;line-height:1.7}.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+    button{border:0;border-radius:12px;padding:12px 16px;background:#ff5a36;color:#fff;font-weight:800;cursor:pointer}
+    code{background:#eef1f5;padding:2px 6px;border-radius:6px}.muted{color:#697386}.result{white-space:pre-wrap;background:#0f172a;color:#e5e7eb;padding:16px;border-radius:12px;min-height:90px}
+    @media(max-width:720px){.grid{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+<main>
+  <section class="hero">
+    <small>Pickup Pact · 운영 콘솔</small>
+    <h1>취소가 늦게 도착해도 주문·정산·적립을 다시 맞추는 백엔드</h1>
+    <p><strong>30초 안에 이해하는 백엔드</strong> — 수신 순서와 실제 발생 순서가 다른 이벤트를 replay해 이상을 찾고, 삭제 대신 보상 분개와 조회 모델 재구성 계획을 만듭니다.</p>
+  </section>
+  <section class="card">
+    <h2>장애 시나리오</h2>
+    <p class="muted">버튼을 누르면 Flask 운영 콘솔이 FastAPI reconciler를 호출합니다.</p>
+    <div class="grid">
+      {% for id, s in bootstrap.scenarios.items() %}
+      <article class="card">
+        <small>{{ s.eyebrow }}</small>
+        <h3>{{ s.title }}</h3>
+        <p>{{ s.summary }}</p>
+        <button onclick="runScenario('{{ id }}')">replay 실행</button>
+      </article>
+      {% endfor %}
+    </div>
+  </section>
+  <section class="card">
+    <h2>판정 결과</h2>
+    <div id="result" class="result">시나리오를 선택하세요.</div>
+  </section>
+  <section class="card">
+    <h2>합성 정합성 벤치마크</h2>
+    <p>운영 TPS 주장이 아니라 deterministic correctness 실험입니다. 상세 수치는 README와 <code>docs/performance.md</code>에서 확인할 수 있습니다.</p>
+  </section>
+</main>
+<script>
+async function runScenario(id){
+  const out=document.getElementById('result');
+  out.textContent='replay 중…';
+  try{
+    const r=await fetch('/api/demo/run/'+id,{method:'POST'});
+    const j=await r.json();
+    if(!r.ok) throw new Error(j.message||j.hint||'실행 실패');
+    const x=j.result.reconciliation;
+    out.textContent=[
+      'aggregate: '+x.aggregate_id,
+      'anomalies: '+(x.anomalies.join(', ')||'없음'),
+      'repairs: '+(x.repairs.join(', ')||'없음'),
+      'evidence: '+x.evidence_event_ids.join(', ')
+    ].join('\n');
+  }catch(e){out.textContent='오류: '+e.message}
+}
+</script>
+</body>
+</html>
