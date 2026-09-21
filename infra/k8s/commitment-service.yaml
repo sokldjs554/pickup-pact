@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: commitment-service
+  namespace: pickup-pact
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: commitment-service}}
+  template:
+    metadata:
+      labels: {app: commitment-service, tags.datadoghq.com/service: pickup-pact-commitment, tags.datadoghq.com/env: staging}
+      annotations:
+        ad.datadoghq.com/commitment-service.logs: '[{"source":"java","service":"pickup-pact-commitment"}]'
+    spec:
+      containers:
+        - name: commitment-service
+          image: pickup-pact/commitment-service:0.1.0
+          ports: [{containerPort: 8080}]
+          envFrom: [{configMapRef: {name: pickup-pact-config}}]
+          env:
+            - {name: DD_SERVICE, value: pickup-pact-commitment}
+            - {name: ELASTIC_APM_SERVICE_NAME, value: pickup-pact-commitment}
+          readinessProbe: {httpGet: {path: /actuator/health/readiness, port: 8080}, initialDelaySeconds: 10, periodSeconds: 5}
+          livenessProbe: {httpGet: {path: /actuator/health/liveness, port: 8080}, initialDelaySeconds: 20, periodSeconds: 10}
+          resources:
+            requests: {cpu: 250m, memory: 384Mi}
+            limits: {cpu: "1", memory: 768Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: commitment-service
+  namespace: pickup-pact
+spec:
+  selector: {app: commitment-service}
+  ports: [{port: 8080, targetPort: 8080}]

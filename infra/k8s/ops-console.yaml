@@ -1,0 +1,30 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ops-console
+  namespace: pickup-pact
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: ops-console}}
+  template:
+    metadata: {labels: {app: ops-console}}
+    spec:
+      containers:
+        - name: ops-console
+          image: pickup-pact/ops-console:0.1.0
+          ports: [{containerPort: 5000}]
+          env:
+            - {name: RECONCILER_URL, value: http://reconciler:8000}
+          readinessProbe: {httpGet: {path: /health, port: 5000}, initialDelaySeconds: 5, periodSeconds: 5}
+          resources:
+            requests: {cpu: 50m, memory: 96Mi}
+            limits: {cpu: 250m, memory: 256Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ops-console
+  namespace: pickup-pact
+spec:
+  selector: {app: ops-console}
+  ports: [{port: 5000, targetPort: 5000}]

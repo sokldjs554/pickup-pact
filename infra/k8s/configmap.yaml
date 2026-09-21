@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pickup-pact-config
+  namespace: pickup-pact
+data:
+  KAFKA_BOOTSTRAP_SERVERS: kafka.bootstrap.example:9092
+  POSTGRES_HOST: postgres.example
+  REDIS_HOST: redis.example
+  REDIS_URL: redis://redis.example:6379/0
+  MONGODB_URL: mongodb://mongo.example:27017/pickup_pact
+  ELASTICSEARCH_URL: https://elasticsearch.example
+  DD_ENV: staging
+  DD_VERSION: 0.1.0
+  ELASTIC_APM_SERVER_URL: http://apm-server.observability.svc:8200

@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ledger-service
+  namespace: pickup-pact
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: ledger-service}}
+  template:
+    metadata:
+      labels: {app: ledger-service, tags.datadoghq.com/service: pickup-pact-ledger, tags.datadoghq.com/env: staging}
+    spec:
+      containers:
+        - name: ledger-service
+          image: pickup-pact/ledger-service:0.1.0
+          ports: [{containerPort: 8081}]
+          envFrom: [{configMapRef: {name: pickup-pact-config}}]
+          env:
+            - {name: DD_SERVICE, value: pickup-pact-ledger}
+            - {name: ELASTIC_APM_SERVICE_NAME, value: pickup-pact-ledger}
+          readinessProbe: {httpGet: {path: /actuator/health/readiness, port: 8081}, initialDelaySeconds: 10, periodSeconds: 5}
+          resources:
+            requests: {cpu: 200m, memory: 384Mi}
+            limits: {cpu: "1", memory: 768Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ledger-service
+  namespace: pickup-pact
+spec:
+  selector: {app: ledger-service}
+  ports: [{port: 8081, targetPort: 8081}]
