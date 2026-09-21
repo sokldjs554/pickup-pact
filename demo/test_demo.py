@@ -50,7 +50,7 @@ def test_landing_page_exposes_full_operations_modules():
         "장애 주입",
         "정합성 복구",
         "정산 · 감사",
-        "장애 감지 및 복구 계획 계산",
+        "정합성 다시 계산",
     ]:
         assert label in body
 
