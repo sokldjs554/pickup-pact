@@ -1,8 +1,13 @@
 services:
   - type: web
     name: pickup-pact-demo
-    runtime: docker
+    runtime: python
     plan: free
-    dockerfilePath: ./Dockerfile.demo
+    region: singapore
+    buildCommand: pip install -r demo/requirements.txt
+    startCommand: uvicorn demo.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.14
