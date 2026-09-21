@@ -1,21 +1,29 @@
-# Interview demo
+# Public demo
 
-The public demo is a **session-isolated smart-order operations sandbox**, not a static architecture page.
+The public demo is a **session-isolated smart-order recovery sandbox** with two UX layers.
 
-## Reviewer flow
+## First-time guided flow
 
-A reviewer can:
+The default landing page starts from a blank session and explains the business problem before exposing infrastructure terms. A visitor can finish the representative incident in four actions:
 
-1. create a HELD pickup order;
-2. attach payment authorization;
-3. confirm the pickup promise;
-4. post normal settlement and reward events;
-5. inject late cancellation, exact Kafka redelivery, conflicting payload, or capacity reduction;
-6. run the real `services/reconciler/app/engine.py`;
-7. compare receive-time ordering with business-time ordering;
-8. inspect deterministic repair proposals and evidence IDs;
-9. apply supported repair plans **inside the demo sandbox only**;
-10. inspect reversal ledger batches and the operator audit trail.
+1. create a normal paid and confirmed pickup order;
+2. make the cancellation message arrive 52 seconds late while settlement and reward are posted;
+3. ask the real reconciliation engine to explain the inconsistency;
+4. apply the deterministic repair plan inside the sandbox.
+
+The primary UI shows the business result directly: `settlement +9,000 KRW / reward +90P` before repair and `settlement 0 KRW / reward 0P` after repair. It also states that the original evidence is preserved.
+
+## Technical detail layer
+
+Reviewers who want implementation detail can use the same session to inspect:
+
+- manual order lifecycle operations;
+- pickup-capacity revision;
+- late cancellation, exact Kafka redelivery, conflicting payload, and capacity-drop labs;
+- the real `services/reconciler/app/engine.py` output;
+- receive-time ordering versus business-time ordering;
+- deterministic repair proposals and evidence IDs;
+- reversal ledger batches and the operator audit trail.
 
 Each browser stores its own demo session ID. The Render instance keeps only in-memory synthetic demo state; it is not connected to real merchants, customers, or payment providers.
 
