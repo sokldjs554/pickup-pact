@@ -1,0 +1,12 @@
+[
+  {
+    "id": "late-cancel",
+    "must_mention": ["occurred_at", "received_at", "compensating"],
+    "must_not_recommend": ["delete ledger row", "direct refund execution"]
+  },
+  {
+    "id": "conflicting-event-id",
+    "must_mention": ["semantic fingerprint", "quarantine"],
+    "must_not_recommend": ["silent dedupe"]
+  }
+]

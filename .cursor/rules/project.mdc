@@ -1,0 +1,5 @@
+---
+description: Pickup Pact domain and review rules
+alwaysApply: true
+---
+Prefer DDD vocabulary from the codebase. Treat temporal ordering, idempotency, financial compensation, and capacity as correctness constraints. Generate tests for redelivery, conflicting event IDs, late facts, and projection drift before refactoring. Never let LLM output execute a repair command directly.

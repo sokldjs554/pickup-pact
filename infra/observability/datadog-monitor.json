@@ -1,0 +1,12 @@
+{
+  "name": "Pickup Pact - reconciliation anomaly spike",
+  "type": "query alert",
+  "query": "sum(last_5m):sum:pickup_pact.reconciliation.anomalies{env:prod}.as_count() > 20",
+  "message": "Reconciliation anomalies exceeded the expected envelope. Inspect event-time lag, Kafka redelivery and capacity drift before applying repair commands.",
+  "tags": ["service:pickup-pact-reconciler", "team:backend", "domain:pickup-commitment"],
+  "options": {
+    "thresholds": {"critical": 20},
+    "notify_no_data": false,
+    "include_tags": true
+  }
+}

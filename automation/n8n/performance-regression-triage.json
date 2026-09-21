@@ -1,0 +1,14 @@
+{
+  "name": "Pickup Pact regression triage",
+  "nodes": [
+    {"parameters": {}, "name": "Webhook", "type": "n8n-nodes-base.webhook", "typeVersion": 2, "position": [0,0]},
+    {"parameters": {"conditions": {"number": [{"value1": "={{$json.failure_count}}", "operation": "larger", "value2": 0}]}}, "name": "Regression?", "type": "n8n-nodes-base.if", "typeVersion": 2, "position": [240,0]},
+    {"parameters": {"url": "={{$env.TRIAGE_API_URL}}", "sendBody": true, "jsonBody": "={{$json}}"}, "name": "AI triage advisory", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4, "position": [500,-80]},
+    {"parameters": {"url": "={{$env.SLACK_WEBHOOK_URL}}", "sendBody": true, "jsonBody": "={\"text\":\"Pickup Pact regression: {{$json.summary}}\"}"}, "name": "Slack", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4, "position": [760,-80]}
+  ],
+  "connections": {
+    "Webhook": {"main": [[{"node": "Regression?", "type": "main", "index": 0}]]},
+    "Regression?": {"main": [[{"node": "AI triage advisory", "type": "main", "index": 0}]]},
+    "AI triage advisory": {"main": [[{"node": "Slack", "type": "main", "index": 0}]]}
+  }
+}
