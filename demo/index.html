@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Pickup Pact — 주문 정합성 복구 데모</title>
+<title>Pickup Pact — 주문 복구 센터</title>
 <style>
 :root{
   --bg:#f4f6fa;--surface:#fff;--surface2:#f8fafc;--text:#101828;--muted:#667085;
@@ -76,24 +76,88 @@ body.expert-mode .expert-nav{display:grid}
 .recruiter-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
 .recruiter-actions .btn.primary{padding:11px 15px;font-size:12px}
 .compat-hidden{display:none!important}
+
+/* Product shell: default visitor experience. The operator console returns only in expert mode. */
+body:not(.expert-mode){background:#f7f8fa}
+body:not(.expert-mode) .app{display:block;min-height:100vh}
+body:not(.expert-mode) .sidebar{display:none}
+body:not(.expert-mode) .main{min-height:100vh}
+body:not(.expert-mode) .topbar{height:72px;padding:0 32px;background:rgba(255,255,255,.96);backdrop-filter:blur(12px);border-bottom:1px solid #eaecf0}
+body:not(.expert-mode) .content{max-width:1180px;padding:42px 28px 76px}
+body:not(.expert-mode) .expert-page-title,body:not(.expert-mode) .expert-session-action{display:none}
+body.expert-mode .product-brand,body.expert-mode .product-tabs,body.expert-mode .product-expert-action{display:none}
+body.expert-mode .expert-page-title{display:block}
+body.expert-mode .expert-session-action{display:inline-flex}
+.product-brand{display:flex;align-items:center;gap:12px;min-width:0}
+.brand-home{display:flex;align-items:center;gap:10px;border:0;background:transparent;padding:0;cursor:pointer;color:var(--text)}
+.brand-mark{width:34px;height:34px;border-radius:11px;background:var(--nav);color:#fff;display:grid;place-items:center;font-size:12px;font-weight:950;letter-spacing:-.04em}
+.brand-copy{display:grid;text-align:left;line-height:1.1}.brand-copy strong{font-size:15px;letter-spacing:-.02em}.brand-copy small{font-size:9px;color:#98a2b3;font-weight:850;letter-spacing:.08em;margin-top:4px}
+.product-tabs{display:flex;align-items:center;gap:4px;margin-left:18px;padding-left:18px;border-left:1px solid var(--line)}
+.product-tabs button{border:0;background:transparent;padding:9px 11px;border-radius:9px;color:#667085;font-size:12px;font-weight:850;cursor:pointer}
+.product-tabs button:hover,.product-tabs button.active{background:#f2f4f7;color:#101828}
+.product-expert-action{border:1px solid var(--line);background:#fff;border-radius:10px;padding:9px 12px;font-size:11px;font-weight:850;cursor:pointer}
+.product-shell{display:grid;gap:18px}
+.product-hero{background:#fff;border:1px solid #eaecf0;border-radius:26px;box-shadow:0 24px 70px rgba(16,24,40,.07);overflow:hidden;display:grid;grid-template-columns:1.12fr .88fr}
+.product-hero-copy{padding:54px 50px}
+.product-kicker{display:inline-flex;align-items:center;gap:7px;font-size:11px;font-weight:900;color:var(--green);background:var(--green-bg);border:1px solid #abefc6;padding:7px 10px;border-radius:999px;margin-bottom:18px}
+.product-kicker-dot{width:7px;height:7px;border-radius:50%;background:#12b76a;box-shadow:0 0 0 4px rgba(18,183,106,.12)}
+.product-hero h2{font-size:42px;line-height:1.12;letter-spacing:-.055em;margin:0 0 16px;max-width:650px}
+.product-hero-copy>p{font-size:15px;line-height:1.75;color:#475467;margin:0;max-width:650px}
+.product-hero-actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:25px}
+.product-primary{border:0;background:var(--nav);color:#fff;border-radius:12px;padding:13px 17px;font-size:12px;font-weight:900;cursor:pointer;box-shadow:0 7px 18px rgba(15,23,42,.16)}
+.product-primary:hover{background:#1d2939}
+.product-secondary{border:1px solid var(--line);background:#fff;color:#344054;border-radius:12px;padding:12px 15px;font-size:12px;font-weight:850;cursor:pointer}
+.product-trust{display:flex;gap:15px;flex-wrap:wrap;margin-top:23px;color:#667085;font-size:10px;font-weight:750}
+.product-trust span::before{content:"✓";color:var(--green);font-weight:950;margin-right:5px}
+.protection-preview{background:linear-gradient(155deg,#101828,#1d2939);color:#fff;padding:32px;display:flex;flex-direction:column;justify-content:center}
+.preview-head{display:flex;justify-content:space-between;gap:14px;align-items:center;margin-bottom:20px}.preview-head span:first-child{font-size:11px;color:#98a2b3;font-weight:850}
+.preview-status{font-size:10px;font-weight:900;color:#75e0a7;background:rgba(6,118,71,.24);border:1px solid rgba(117,224,167,.32);padding:6px 9px;border-radius:999px}
+.preview-order{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:18px;padding:20px}
+.preview-order .preview-label{font-size:9px;color:#98a2b3;font-weight:900;letter-spacing:.08em}.preview-order h3{font-size:20px;margin:7px 0 3px}.preview-order p{font-size:11px;color:#d0d5dd;margin:0}
+.preview-rows{display:grid;gap:9px;margin-top:17px}.preview-row{display:flex;justify-content:space-between;gap:12px;padding-top:9px;border-top:1px solid rgba(255,255,255,.08);font-size:11px}.preview-row span{color:#98a2b3}.preview-row b{font-weight:850}
+.preview-protection{display:grid;gap:10px;margin-top:16px}.preview-protection div{display:flex;gap:9px;align-items:center;color:#d0d5dd;font-size:10px}.preview-check{width:20px;height:20px;border-radius:50%;background:rgba(18,183,106,.17);color:#75e0a7;display:grid;place-items:center;font-weight:950}
+.product-section{background:#fff;border:1px solid #eaecf0;border-radius:22px;padding:26px}
+.product-section-title{display:flex;align-items:end;justify-content:space-between;gap:18px;margin-bottom:18px}.product-section-title h3{font-size:19px;margin:0;letter-spacing:-.025em}.product-section-title p{font-size:11px;color:#667085;margin:0}
+.product-feature-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.product-feature{border:1px solid #eaecf0;border-radius:16px;padding:18px}.feature-icon{width:34px;height:34px;border-radius:11px;background:#f2f4f7;display:grid;place-items:center;font-size:13px;font-weight:950;color:#344054}.product-feature b{display:block;font-size:13px;margin:12px 0 6px}.product-feature span{font-size:11px;line-height:1.55;color:#667085}
+.product-footnote{text-align:center;font-size:10px;color:#98a2b3;margin-top:4px}
+.recovery-shell{display:grid;gap:16px}
+.recovery-head{display:flex;align-items:flex-start;justify-content:space-between;gap:20px}.recovery-head .eyebrow{font-size:10px;font-weight:900;color:#667085;letter-spacing:.08em}.recovery-head h2{font-size:28px;letter-spacing:-.04em;margin:5px 0 6px}.recovery-head p{font-size:12px;color:#667085;margin:0;line-height:1.55}
+.recovery-banner{display:flex;align-items:center;gap:14px;background:#fff;border:1px solid #eaecf0;border-radius:18px;padding:16px 18px}.recovery-banner-icon{width:38px;height:38px;border-radius:12px;background:#f2f4f7;display:grid;place-items:center;font-weight:950;color:#475467;flex:0 0 auto}.recovery-banner-copy{min-width:0}.recovery-banner-copy b{display:block;font-size:13px;margin-bottom:3px}.recovery-banner-copy span{font-size:11px;color:#667085;line-height:1.45}.recovery-banner.problem{border-color:#fecdca;background:#fffafa}.recovery-banner.problem .recovery-banner-icon{background:var(--red-bg);color:var(--red)}.recovery-banner.success{border-color:#abefc6;background:#f8fff9}.recovery-banner.success .recovery-banner-icon{background:var(--green-bg);color:var(--green)}
+.recovery-workspace{display:grid;grid-template-columns:1.18fr .82fr;gap:14px}
+.recovery-card{background:#fff;border:1px solid #eaecf0;border-radius:20px;padding:22px;box-shadow:0 8px 30px rgba(16,24,40,.035)}
+.recovery-card .micro{letter-spacing:.08em}
+.recovery-card h3{font-size:22px;letter-spacing:-.03em;margin:7px 0 8px}.recovery-card>p{font-size:12px;line-height:1.65;color:#667085;margin:0}
+.recovery-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:18px}
+.recovery-actions .product-primary{padding:12px 16px}
+.order-summary-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:14px}.order-summary-head h3{font-size:13px;margin:0}.order-live-badge{font-size:9px;font-weight:900;color:var(--green);background:var(--green-bg);border:1px solid #abefc6;padding:5px 8px;border-radius:999px}
+.product-order-title{font-size:20px;font-weight:950;letter-spacing:-.03em;margin-bottom:3px}.product-order-store{font-size:11px;color:#667085;margin-bottom:15px}.product-order-kv{display:grid;gap:9px}.product-order-kv div{display:flex;justify-content:space-between;gap:12px;padding-top:9px;border-top:1px solid #f2f4f7;font-size:11px}.product-order-kv span{color:#667085}.product-order-kv b{font-weight:900}
+.recruiter-progress{background:#fff;border:1px solid #eaecf0;border-radius:18px;padding:10px;gap:6px;margin:0}.recruiter-progress .guide-step{border:0;background:transparent;border-radius:11px;min-width:0;padding:9px}.recruiter-progress .guide-step.active{background:#fff4ed;box-shadow:none}.recruiter-progress .guide-step.done{background:#f0fdf4}
+.product-results{background:#fff;border:1px solid #eaecf0;border-radius:20px;padding:22px}.product-results-head{display:flex;justify-content:space-between;gap:14px;align-items:end;margin-bottom:14px}.product-results-head h3{font-size:17px;margin:0}.product-results-head span{font-size:10px;color:#98a2b3}
+.product-results .result-card{box-shadow:none}.product-results .result-card .value{font-size:21px}
+.product-problem-section{background:#fff;border:1px solid #eaecf0;border-radius:20px;padding:22px}.product-problem-section h3{font-size:17px;margin:0 0 4px}.product-problem-section>p{font-size:10px;color:#98a2b3;margin:0 0 14px}
+.product-expert-link{display:flex;justify-content:space-between;align-items:center;gap:18px;border:1px dashed #d0d5dd;border-radius:16px;padding:16px 18px;background:#fcfcfd}.product-expert-link b{font-size:12px}.product-expert-link span{display:block;font-size:10px;color:#667085;margin-top:4px;line-height:1.45}
+body.expert-mode .app{display:grid;grid-template-columns:235px 1fr}
+body.expert-mode .sidebar{display:block}
+body.expert-mode .topbar{height:68px}
+body.expert-mode .content{max-width:1450px}
 @media(max-width:1100px){.app{grid-template-columns:185px 1fr}.g4{grid-template-columns:repeat(2,1fr)}.g3{grid-template-columns:1fr 1fr}.form{grid-template-columns:1fr 1fr 1fr}}
 @media(max-width:1100px){.story-flow{grid-template-columns:1fr}.story-arrow{transform:rotate(90deg);min-height:18px}.guide-main{grid-template-columns:1fr}}
-@media(max-width:760px){.app{display:block}.sidebar{position:relative;height:auto}.sidebar-foot{display:none}.nav{grid-template-columns:repeat(2,1fr)}.content{padding:18px 14px 48px}.topbar{position:relative;padding:0 14px}.g4,.g3,.g2,.timeline-grid,.form,.guide-progress{grid-template-columns:1fr}.hero h2{font-size:29px}.audit-item{grid-template-columns:1fr}.story-flow{grid-template-columns:1fr}.story-arrow{transform:rotate(90deg);min-height:18px}.result-grid{grid-template-columns:1fr}.result-arrow{transform:rotate(90deg)}.expert-callout{align-items:flex-start;flex-direction:column}.top-actions .small-btn{display:none}}
+@media(max-width:760px){.app{display:block}.sidebar{position:relative;height:auto}.sidebar-foot{display:none}.nav{grid-template-columns:repeat(2,1fr)}.content{padding:18px 14px 48px}.topbar{position:relative;padding:0 14px}.g4,.g3,.g2,.timeline-grid,.form,.guide-progress{grid-template-columns:1fr}.hero h2{font-size:29px}.audit-item{grid-template-columns:1fr}.story-flow{grid-template-columns:1fr}.story-arrow{transform:rotate(90deg);min-height:18px}.result-grid{grid-template-columns:1fr}.result-arrow{transform:rotate(90deg)}.expert-callout{align-items:flex-start;flex-direction:column}.top-actions .small-btn{display:none}
+body:not(.expert-mode) .topbar{height:auto;min-height:68px;padding:12px 14px;align-items:flex-start;gap:10px}.brand-copy small{display:none}.product-tabs{margin-left:8px;padding-left:8px}.product-tabs button{padding:8px 7px;font-size:11px}.product-expert-action{padding:8px 9px;font-size:10px}.health{display:none}
+body:not(.expert-mode) .content{padding:22px 14px 48px}.product-hero{grid-template-columns:1fr;border-radius:20px}.product-hero-copy{padding:28px 22px}.product-hero h2{font-size:31px}.protection-preview{padding:22px}.product-feature-grid,.recovery-workspace{grid-template-columns:1fr}.product-section{padding:20px}.product-section-title,.recovery-head,.product-results-head,.product-expert-link{align-items:flex-start;flex-direction:column}.recruiter-progress{grid-template-columns:repeat(5,minmax(84px,1fr));overflow-x:auto}.recruiter-progress .guide-step{min-width:84px}.recovery-card,.product-results,.product-problem-section{padding:18px}
+body.expert-mode .app{display:block}body.expert-mode .sidebar{position:relative;height:auto}body.expert-mode .topbar{position:relative;padding:0 14px}
+}
 </style>
 </head>
 <body>
 <div class="app">
   <aside class="sidebar">
     <div class="logo"><b>Pickup</b> Pact</div>
-    <div class="side-caption">일반 데모</div>
-    <div class="nav">
-      <button class="active" data-page="overview">처음 보기</button>
-      <button data-page="guided">문제 복구 체험</button>
+    <div class="expert-entry" style="margin-top:0">
+      <button type="button" onclick="leaveExpertMode()">← 제품 화면으로 돌아가기</button>
     </div>
-    <div class="expert-entry">
-      <button type="button" onclick="enterExpertMode('orders')">백엔드 구현 보기</button>
-    </div>
-    <div class="side-caption expert-caption" style="margin-top:14px">전문가 모드</div>
+    <div class="side-caption" style="margin-top:16px">BACKEND CONSOLE</div>
     <div class="nav expert-nav">
       <button data-page="orders" data-expert="true">주문 흐름</button>
       <button data-page="capacity" data-expert="true">매장 처리량</button>
@@ -102,51 +166,100 @@ body.expert-mode .expert-nav{display:grid}
       <button data-page="ledger" data-expert="true">정산 · 감사</button>
     </div>
     <div class="sidebar-foot">
-      체험용 가상 데이터만 사용합니다.<br>
-      실제 결제·실제 점주 계정과 연결되지 않습니다.
+      개발자용 운영 화면입니다.<br>
+      체험용 가상 데이터만 사용합니다.
     </div>
   </aside>
 
   <main class="main">
     <header class="topbar">
-      <h1 id="pageTitle">홈</h1>
+      <div class="product-brand">
+        <button class="brand-home" type="button" onclick="goProductPage('overview')" aria-label="Pickup Pact 홈">
+          <span class="brand-mark">PP</span>
+          <span class="brand-copy"><strong>Pickup Pact</strong><small>ORDER PROTECTION</small></span>
+        </button>
+        <nav class="product-tabs" aria-label="제품 메뉴">
+          <button class="active" data-product-page="overview" type="button" onclick="goProductPage('overview')">홈</button>
+          <button data-product-page="guided" type="button" onclick="goProductPage('guided')">복구 체험</button>
+        </nav>
+      </div>
+      <h1 class="expert-page-title" id="pageTitle">주문 흐름</h1>
       <div class="top-actions">
-        <span class="health" id="health">● 백엔드 확인 중</span>
-        <button class="small-btn" onclick="newSession()">새 세션</button>
+        <span class="health" id="health">● 서비스 확인 중</span>
+        <button class="product-expert-action" type="button" onclick="enterExpertMode('orders')">개발자 보기</button>
+        <button class="small-btn expert-session-action" type="button" onclick="newSession()">새 세션</button>
       </div>
     </header>
 
     <div class="content">
       <section class="page active" id="page-overview">
-        <div class="hero">
-          <div class="badge">일반 사용자용 데모</div>
-          <h2>주문 취소가 늦게 전달되면<br>어떻게 될까요?</h2>
-          <p>
-            고객은 이미 주문을 취소했지만 취소 정보가 서버에 늦게 도착할 수 있습니다.
-            그 사이 매장에는 <strong>9,000원</strong>이 정산되고 고객에게 <strong>90P</strong>가 지급되면,
-            Pickup Pact가 잘못된 결과를 찾아 원래 상태로 되돌리는 과정을 실제 API로 보여줍니다.
-          </p>
-          <div class="hero-actions">
-            <button class="btn primary large" onclick="runRecruiterDemo()">직접 확인해보기</button>
-            <button class="btn large" onclick="enterExpertMode('orders')">백엔드 구현 보기</button>
+        <div class="product-shell">
+          <div class="product-hero">
+            <div class="product-hero-copy">
+              <div class="product-kicker"><span class="product-kicker-dot"></span> 주문 보호 기능이 켜져 있습니다</div>
+              <h2>취소된 주문의<br>잘못된 정산을 되돌립니다.</h2>
+              <p>
+                주문 취소 정보가 늦게 도착해 매장 정산이나 고객 포인트가 잘못 반영돼도,
+                Pickup Pact가 처리 순서를 다시 확인하고 안전한 복구 결과를 보여줍니다.
+              </p>
+              <div class="product-hero-actions">
+                <button class="product-primary" type="button" onclick="runRecruiterDemo()">복구 시나리오 체험하기</button>
+                <button class="product-secondary" type="button" onclick="enterExpertMode('orders')">개발자 구현 보기</button>
+              </div>
+              <div class="product-trust">
+                <span>실제 데모 API 사용</span>
+                <span>원본 기록 보존</span>
+                <span>독립된 체험 세션</span>
+              </div>
+            </div>
+            <div class="protection-preview" aria-label="주문 보호 미리보기">
+              <div class="preview-head">
+                <span>체험 주문</span>
+                <span class="preview-status">● 보호 중</span>
+              </div>
+              <div class="preview-order">
+                <div class="preview-label">PICKUP ORDER</div>
+                <h3>아메리카노 2잔</h3>
+                <p>패스카페 강남역점 · 12:30 픽업</p>
+                <div class="preview-rows">
+                  <div class="preview-row"><span>주문 금액</span><b>9,000원</b></div>
+                  <div class="preview-row"><span>정산 상태</span><b>자동 확인</b></div>
+                  <div class="preview-row"><span>포인트 상태</span><b>자동 확인</b></div>
+                </div>
+              </div>
+              <div class="preview-protection">
+                <div><span class="preview-check">✓</span> 취소와 정산의 순서를 다시 확인합니다.</div>
+                <div><span class="preview-check">✓</span> 잘못된 금액은 기록을 남기고 되돌립니다.</div>
+                <div><span class="preview-check">✓</span> 복구 전후 결과를 바로 비교할 수 있습니다.</div>
+              </div>
+            </div>
           </div>
-          <div class="promise-row">
-            <span class="promise-chip">버튼 한 번으로 시작</span>
-            <span class="promise-chip">잘못된 9,000원 · 90P 확인</span>
-            <span class="promise-chip">복구 전후 비교</span>
+
+          <div class="product-section">
+            <div class="product-section-title">
+              <div><h3>주문이 꼬였을 때 필요한 세 가지</h3></div>
+              <p>복잡한 기술 정보는 개발자 화면에서 따로 확인할 수 있습니다.</p>
+            </div>
+            <div class="product-feature-grid">
+              <div class="product-feature">
+                <span class="feature-icon">01</span>
+                <b>문제 감지</b>
+                <span>취소보다 뒤에 남은 정산과 포인트처럼 서로 맞지 않는 상태를 찾습니다.</span>
+              </div>
+              <div class="product-feature">
+                <span class="feature-icon">02</span>
+                <b>안전한 복구</b>
+                <span>기존 내역을 지우지 않고 반대 기록을 추가해 금액과 포인트를 원래대로 돌립니다.</span>
+              </div>
+              <div class="product-feature">
+                <span class="feature-icon">03</span>
+                <b>변경 기록 보존</b>
+                <span>무엇을 왜 되돌렸는지 남겨 이후에도 복구 과정을 확인할 수 있습니다.</span>
+              </div>
+            </div>
           </div>
-        </div>
 
-        <div class="section-head"><h2>이 데모에서 보는 것</h2><p>기술 용어보다 실제 사용자에게 생기는 문제와 결과부터 보여줍니다.</p></div>
-        <div class="recruiter-intro">
-          <div class="card"><div class="micro">1 · 문제</div><b>취소는 먼저 했는데 처리 순서가 뒤바뀜</b><span>서버가 취소 정보를 늦게 받아 정산과 포인트가 잘못 남는 상황입니다.</span></div>
-          <div class="card"><div class="micro">2 · 확인</div><b>시스템이 실제 발생 순서를 다시 확인</b><span>어떤 처리가 잘못됐는지 찾아내고 되돌려야 할 항목을 준비합니다.</span></div>
-          <div class="card"><div class="micro">3 · 결과</div><b>9,000원 · 90P → 0원 · 0P</b><span>기존 기록을 지우지 않고 반대 기록을 추가해 결과를 정상화합니다.</span></div>
-        </div>
-
-        <div class="expert-callout">
-          <div><strong>구현을 보고 싶다면 전문가 모드로 전환할 수 있습니다.</strong><span>주문 이벤트, 장애 주입, 시간 순서 비교, 복구 계획, ledger와 audit 기록을 별도 화면에서 확인합니다.</span></div>
-          <button class="btn" onclick="enterExpertMode('orders')">백엔드 구현 보기</button>
+          <div class="product-footnote">이 화면은 합성 주문 데이터로 동작하는 공개 체험 서비스입니다. 실제 결제·매장 계정과 연결되지 않습니다.</div>
         </div>
 
         <div class="compat-hidden" aria-hidden="true">
@@ -156,49 +269,72 @@ body.expert-mode .expert-nav{display:grid}
       </section>
 
       <section class="page" id="page-guided">
-        <div class="section-head">
-          <div><h2>주문 취소 오류 복구 체험</h2><p>처음 세 단계는 자동으로 진행됩니다. 잘못된 결과가 보이면 복구만 직접 눌러보세요.</p></div>
-          <button class="small-btn" onclick="resetRecruiterDemo()">처음부터 다시</button>
-        </div>
+        <div class="recovery-shell">
+          <div class="recovery-head">
+            <div>
+              <div class="eyebrow">ORDER RECOVERY CENTER</div>
+              <h2>주문 복구 센터</h2>
+              <p>취소 정보가 늦게 도착했을 때 잘못 반영된 정산과 포인트를 확인하고 되돌립니다.</p>
+            </div>
+            <button class="product-secondary" type="button" onclick="resetRecruiterDemo()">새로 시작</button>
+          </div>
 
-        <div class="guide-progress recruiter-progress" id="guideProgress">
-          <div class="guide-step" data-story-step="1"><span class="dot">1</span><span>정상 주문</span></div>
-          <div class="guide-step" data-story-step="2"><span class="dot">2</span><span>취소 발생</span></div>
-          <div class="guide-step" data-story-step="3"><span class="dot">3</span><span>잘못된 지급</span></div>
-          <div class="guide-step" data-story-step="4"><span class="dot">4</span><span>문제 발견</span></div>
-          <div class="guide-step" data-story-step="5"><span class="dot">5</span><span>정상 복구</span></div>
-        </div>
-
-        <div class="guide-main">
-          <div class="card guide-status recruiter-status">
-            <div class="micro">지금 일어나는 일</div>
-            <h3 id="guideTitle">버튼 한 번으로 시작할 수 있습니다.</h3>
-            <p id="guideDescription">정상 주문부터 취소 지연, 잘못된 정산·포인트 지급, 문제 탐지까지 자동으로 보여줍니다.</p>
-            <div class="recruiter-actions">
-              <button class="btn primary" id="guideStart" onclick="runRecruiterDemo()">자동 데모 시작</button>
-              <button class="btn primary" id="guideRepair" onclick="repairRecruiterDemo()" style="display:none">문제 복구하기</button>
-              <button class="btn" id="guideAgain" onclick="resetRecruiterDemo()" style="display:none">다시 체험하기</button>
+          <div class="recovery-banner" id="recoveryBanner">
+            <div class="recovery-banner-icon" id="recoveryBannerIcon">✓</div>
+            <div class="recovery-banner-copy">
+              <b id="recoveryBannerTitle">체험을 시작할 준비가 됐습니다.</b>
+              <span id="recoveryBannerText">샘플 주문으로 실제 복구 흐름을 확인할 수 있습니다.</span>
             </div>
           </div>
-          <div class="card">
-            <h3>고객 주문</h3>
-            <div id="guideOrder"></div>
+
+          <div class="guide-progress recruiter-progress" id="guideProgress">
+            <div class="guide-step" data-story-step="1"><span class="dot">1</span><span>주문 확정</span></div>
+            <div class="guide-step" data-story-step="2"><span class="dot">2</span><span>취소 발생</span></div>
+            <div class="guide-step" data-story-step="3"><span class="dot">3</span><span>잘못된 지급</span></div>
+            <div class="guide-step" data-story-step="4"><span class="dot">4</span><span>문제 감지</span></div>
+            <div class="guide-step" data-story-step="5"><span class="dot">5</span><span>복구 완료</span></div>
           </div>
-        </div>
 
-        <div class="section-head"><h2>복구 전 / 후</h2><p>돈과 포인트가 어떻게 달라지는지만 먼저 확인하면 됩니다.</p></div>
-        <div class="result-grid">
-          <div class="result-card before" id="guideBefore"></div>
-          <div class="result-arrow">→</div>
-          <div class="result-card after" id="guideAfter"></div>
-        </div>
+          <div class="recovery-workspace">
+            <div class="recovery-card">
+              <div class="micro">현재 처리</div>
+              <h3 id="guideTitle">복구 시나리오를 시작해보세요.</h3>
+              <p id="guideDescription">정상 주문부터 취소 지연, 잘못된 정산·포인트 지급, 문제 감지까지 자동으로 진행합니다.</p>
+              <div class="recovery-actions">
+                <button class="product-primary" id="guideStart" type="button" onclick="runRecruiterDemo()">복구 시나리오 시작</button>
+                <button class="product-primary" id="guideRepair" type="button" onclick="repairRecruiterDemo()" style="display:none">잘못된 처리 되돌리기</button>
+                <button class="product-secondary" id="guideAgain" type="button" onclick="resetRecruiterDemo()" style="display:none">다시 체험하기</button>
+              </div>
+            </div>
 
-        <div class="section-head"><h2>왜 잘못된 상태인지</h2><p>백엔드 코드를 몰라도 이해할 수 있는 문장으로 설명합니다.</p></div>
-        <div class="guide-problems" id="guideProblemList"></div>
+            <div class="recovery-card">
+              <div class="order-summary-head"><h3>현재 주문</h3><span class="order-live-badge">DEMO</span></div>
+              <div id="guideOrder"></div>
+            </div>
+          </div>
 
-        <div class="expert-callout">
-          <div><strong>여기부터는 백엔드 면접관용입니다.</strong><span>이벤트의 서버 수신 시각과 실제 발생 시각, anomaly code, repair proposal, append-only ledger, audit trail을 그대로 확인할 수 있습니다.</span></div>
-          <button class="btn" onclick="enterExpertMode('reconcile')">백엔드 구현 보기</button>
+          <div class="product-results">
+            <div class="product-results-head">
+              <h3>금액 변화</h3>
+              <span>복구 전과 복구 후를 비교합니다.</span>
+            </div>
+            <div class="result-grid">
+              <div class="result-card before" id="guideBefore"></div>
+              <div class="result-arrow">→</div>
+              <div class="result-card after" id="guideAfter"></div>
+            </div>
+          </div>
+
+          <div class="product-problem-section">
+            <h3>확인된 내용</h3>
+            <p>기술 코드를 몰라도 이해할 수 있는 문장으로 보여줍니다.</p>
+            <div class="guide-problems" id="guideProblemList"></div>
+          </div>
+
+          <div class="product-expert-link">
+            <div><b>백엔드 동작까지 확인하고 싶나요?</b><span>수신 시각과 실제 발생 시각, 복구 계획, ledger와 audit 기록을 개발자 화면에서 볼 수 있습니다.</span></div>
+            <button class="product-secondary" type="button" onclick="enterExpertMode('reconcile')">개발자 화면 열기</button>
+          </div>
         </div>
       </section>
 
@@ -330,21 +466,31 @@ let recruiterNarrativeStage=null;
 const $=id=>document.getElementById(id);
 
 const pageNames={
-  overview:"처음 보기",guided:"문제 복구 체험",orders:"주문 흐름",capacity:"매장 처리량",
+  overview:"홈",guided:"복구 체험",orders:"주문 흐름",capacity:"매장 처리량",
   faults:"장애 주입",reconcile:"정합성 복구",ledger:"정산 · 감사"
 };
 
-document.querySelectorAll(".nav button").forEach(button=>{
+function showPage(page){
+  document.querySelectorAll(".page").forEach(x=>x.classList.remove("active"));
+  const target=$("page-"+page);
+  if(target) target.classList.add("active");
+  document.querySelectorAll(".nav button[data-page]").forEach(x=>x.classList.toggle("active",x.dataset.page===page));
+  document.querySelectorAll("[data-product-page]").forEach(x=>x.classList.toggle("active",x.dataset.productPage===page));
+  if($("pageTitle")) $("pageTitle").textContent=pageNames[page]||page;
+}
+
+document.querySelectorAll(".nav button[data-page]").forEach(button=>{
   button.onclick=()=>{
     if(button.dataset.expert==="true") document.body.classList.add("expert-mode");
-    document.querySelectorAll(".nav button").forEach(x=>x.classList.remove("active"));
-    button.classList.add("active");
-    const page=button.dataset.page;
-    document.querySelectorAll(".page").forEach(x=>x.classList.remove("active"));
-    $("page-"+page).classList.add("active");
-    $("pageTitle").textContent=pageNames[page];
+    showPage(button.dataset.page);
   };
 });
+
+function goProductPage(page){
+  document.body.classList.remove("expert-mode");
+  showPage(page);
+  window.scrollTo({top:0,behavior:"smooth"});
+}
 
 function toast(message,error=false){
   const t=$("toast");t.textContent=message;t.className="toast show"+(error?" error":"");
@@ -422,7 +568,14 @@ function storyPause(ms=260){
 
 function enterExpertMode(page="orders"){
   document.body.classList.add("expert-mode");
-  goPage(page);
+  showPage(page);
+  window.scrollTo({top:0,behavior:"smooth"});
+}
+
+function leaveExpertMode(){
+  document.body.classList.remove("expert-mode");
+  showPage("overview");
+  window.scrollTo({top:0,behavior:"smooth"});
 }
 
 async function runRecruiterDemo(){
@@ -459,7 +612,7 @@ async function runRecruiterDemo(){
     result=await api("/api/demo/sessions/"+sessionId+"/reconcile","POST",{});
     state=result.state;
     recruiterNarrativeStage=4;renderAll();
-    toast("문제를 찾았습니다. 이제 ‘문제 복구하기’를 눌러 전후 결과를 비교해보세요.");
+    toast("문제를 찾았습니다. 이제 ‘잘못된 처리 되돌리기’를 눌러 전후 결과를 비교해보세요.");
   }catch(e){
     recruiterNarrativeStage=null;
     toast(e.message,true);
@@ -680,34 +833,43 @@ function renderGuide(){
   $("guideAgain").style.display=stage===5?"inline-flex":"none";
 
   const titles=[
-    "버튼 한 번으로 시작할 수 있습니다.",
-    "정상 주문이 준비됐습니다.",
+    "복구 시나리오를 시작해보세요.",
+    "주문이 정상적으로 확정됐습니다.",
     "고객이 주문을 취소했습니다.",
     "취소 정보가 늦게 도착했습니다.",
-    "문제를 발견했습니다.",
-    "복구가 끝났습니다."
+    "잘못된 처리를 찾았습니다.",
+    "주문 상태를 정상화했습니다."
   ];
   const descriptions=[
-    "정상 주문부터 취소 지연, 잘못된 정산·포인트 지급, 문제 탐지까지 자동으로 보여줍니다.",
-    "아메리카노 2잔, 9,000원 주문과 12:30 픽업이 정상적으로 확정됐습니다.",
-    "고객은 주문을 취소했습니다. 하지만 이 취소 정보는 서버에 52초 늦게 도착하도록 설정했습니다.",
+    "정상 주문부터 취소 지연, 잘못된 정산·포인트 지급, 문제 감지까지 자동으로 진행합니다.",
+    "아메리카노 2잔, 9,000원 주문과 12:30 픽업이 정상적으로 준비됐습니다.",
+    "고객은 주문을 취소했습니다. 취소 정보는 서버에 52초 늦게 도착하는 상황을 재현합니다.",
     "서버가 취소를 알기 전에 매장 정산 9,000원과 고객 포인트 90P가 잘못 반영됐습니다.",
-    "시스템이 실제 발생 순서를 다시 확인해 취소 뒤에 남은 정산과 포인트를 잘못된 처리로 판단했습니다. 이제 복구 버튼만 눌러보세요.",
-    "정산은 0원, 포인트는 0P로 돌아왔습니다. 기존 기록은 지우지 않고 되돌림 기록을 추가했습니다."
+    "취소 이후 남아 있는 정산과 포인트를 확인했습니다. ‘잘못된 처리 되돌리기’를 누르면 원래 상태로 복구합니다.",
+    "정산 0원, 포인트 0P로 돌아왔습니다. 기존 처리 내역과 복구 기록은 모두 남아 있습니다."
   ];
   $("guideTitle").textContent=titles[stage];
   $("guideDescription").textContent=descriptions[stage];
 
+  const banner=$("recoveryBanner");
+  const bannerIcon=$("recoveryBannerIcon");
+  const bannerTitle=$("recoveryBannerTitle");
+  const bannerText=$("recoveryBannerText");
+  banner.className="recovery-banner"+(stage===4?" problem":stage===5?" success":"");
+  bannerIcon.textContent=stage===4?"!":stage===5?"✓":"✓";
+  bannerTitle.textContent=stage===4?"주의가 필요한 주문을 찾았습니다.":stage===5?"복구가 완료됐습니다.":stage===0?"체험을 시작할 준비가 됐습니다.":"주문 상태를 확인하고 있습니다.";
+  bannerText.textContent=stage===4?"취소된 주문에 정산 9,000원과 포인트 90P가 남아 있습니다.":stage===5?"잘못된 정산과 포인트가 0으로 돌아왔고 변경 기록도 보존됐습니다.":stage===0?"샘플 주문으로 실제 복구 흐름을 확인할 수 있습니다.":"주문·취소·정산 정보를 순서대로 확인하는 중입니다.";
+
   if(!state.order){
-    $("guideOrder").innerHTML='<div class="empty">아직 주문이 없습니다.<br>‘자동 데모 시작’을 누르면 샘플 주문이 준비됩니다.</div>';
+    $("guideOrder").innerHTML='<div class="empty">아직 주문이 없습니다.<br>‘복구 시나리오 시작’을 누르면 체험 주문이 준비됩니다.</div>';
   }else{
     const o=state.order;
     $("guideOrder").innerHTML=
-      '<div class="order-title">'+o.items+'</div>'+
-      '<div class="muted" style="font-size:11px">'+o.store+'</div>'+
-      '<div class="kv"><div class="kv-row"><span>결제 금액</span><b>'+money(o.total)+'원</b></div>'+
-      '<div class="kv-row"><span>픽업 시간</span><b>'+o.pickup_at+'</b></div>'+
-      '<div class="kv-row"><span>현재 상태</span><b>'+humanStatus(o.status)+'</b></div></div>';
+      '<div class="product-order-title">'+o.items+'</div>'+
+      '<div class="product-order-store">'+o.store+' · '+o.order_id+'</div>'+
+      '<div class="product-order-kv"><div><span>결제 금액</span><b>'+money(o.total)+'원</b></div>'+
+      '<div><span>픽업 시간</span><b>'+o.pickup_at+'</b></div>'+
+      '<div><span>주문 상태</span><b>'+humanStatus(o.status)+'</b></div></div>';
   }
 
   if(stage<3){
@@ -721,7 +883,7 @@ function renderGuide(){
     $("guideAfter").className="result-card after"+(stage===5?" ready":"");
     $("guideAfter").innerHTML=stage===5
       ? '<div class="micro">복구 후</div><div class="value">정산 0원 · 포인트 0P</div><p>원본 기록은 삭제하지 않고 되돌림 기록을 추가해 변경 이력을 보존했습니다.</p>'
-      : '<div class="micro">복구 후</div><div class="value">복구 대기</div><p>‘문제 복구하기’를 누르면 잘못된 정산과 포인트가 원래 상태로 돌아갑니다.</p>';
+      : '<div class="micro">복구 후</div><div class="value">복구 대기</div><p>‘잘못된 처리 되돌리기’를 누르면 잘못된 정산과 포인트가 원래 상태로 돌아갑니다.</p>';
   }
 
   const problems=state.reconciliation?.anomalies||[];
@@ -788,12 +950,11 @@ function renderAll(){
 }
 
 function goPage(page){
-  const button=document.querySelector('.nav button[data-page="'+page+'"]');
-  if(button)button.click();
+  showPage(page);
 }
 
 fetch("/health").then(r=>r.json()).then(body=>{
-  $("health").textContent=body.engine?"● 데모 서비스 정상":"● 데모 서비스 정상";
+  $("health").textContent=body.engine?"● 보호 서비스 정상":"● 보호 서비스 정상";
 }).catch(()=>{$("health").textContent="○ 백엔드 연결 실패";$("health").style.background="#fef3f2";$("health").style.color="#b42318"});
 
 bootstrapSession().catch(e=>toast("데모 세션 준비 실패: "+e.message,true));
