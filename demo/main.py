@@ -6,6 +6,7 @@ from typing import Any
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
+from pydantic import BaseModel, Field
 
 from services.reconciler.app.engine import reconcile as core_reconcile
 from services.reconciler.app.models import EventEnvelope, ReconcileRequest
