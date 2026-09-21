@@ -1,7 +1,9 @@
 openapi: 3.1.0
 info:
   title: Pickup Pact API
-  version: 0.1.0
+  version: 0.2.0
+  description: API contracts for pickup commitments, financial postings, and deterministic reconciliation.
+
 paths:
   /api/v1/commitments/hold:
     post:
@@ -12,26 +14,138 @@ paths:
           application/json:
             schema:
               type: object
-              required: [storeId, pickupAt, units, paymentAuthorized]
+              required: [storeId, pickupAt, units]
               properties:
-                storeId: {type: string}
+                storeId: {type: string, minLength: 1}
                 pickupAt: {type: string, format: date-time}
                 units: {type: integer, minimum: 1}
-                paymentAuthorized: {type: boolean}
       responses:
         "200": {description: Held commitment}
+        "400": {description: Invalid request}
+        "409": {description: Capacity or state conflict}
+
+  /api/v1/commitments/{id}/authorize-payment:
+    post:
+      summary: Attach a payment-provider authorization result to a held commitment
+      parameters:
+        - $ref: "#/components/parameters/CommitmentId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [authorizationId]
+              properties:
+                authorizationId: {type: string, minLength: 1}
+      responses:
+        "200": {description: Payment authorization attached}
+        "404": {description: Commitment not found}
+        "409": {description: Invalid commitment state}
+
   /api/v1/commitments/{id}/confirm:
     post:
       summary: Confirm only after capacity and payment invariants hold
       parameters:
-        - in: path
-          name: id
-          required: true
-          schema: {type: string, format: uuid}
+        - $ref: "#/components/parameters/CommitmentId"
       responses:
         "200": {description: Confirmed commitment}
+        "404": {description: Commitment not found}
+        "409": {description: Missing payment authorization or invalid state}
+
+  /api/v1/commitments/{id}/cancel:
+    post:
+      summary: Cancel a commitment and release leased capacity
+      parameters:
+        - $ref: "#/components/parameters/CommitmentId"
+      responses:
+        "200": {description: Cancelled commitment}
+        "404": {description: Commitment not found}
+        "409": {description: Invalid commitment state}
+
+  /api/v1/ledger/postings:
+    post:
+      summary: Append one idempotent balanced financial posting
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LedgerPostingRequest"
+      responses:
+        "202":
+          description: New balanced posting appended
+        "200":
+          description: Exact redelivery recognized as a no-op
+        "409":
+          description: Same event ID reused with conflicting financial meaning
+
   /api/v1/reconcile:
     post:
       summary: Reconstruct canonical event-time state and propose deterministic repairs
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReconcileRequest"
       responses:
         "200": {description: Reconciliation result}
+        "422": {description: Invalid or multi-aggregate evidence packet}
+
+components:
+  parameters:
+    CommitmentId:
+      in: path
+      name: id
+      required: true
+      schema: {type: string, format: uuid}
+
+  schemas:
+    LedgerPostingRequest:
+      type: object
+      required: [eventId, aggregateId, type, amount]
+      properties:
+        eventId: {type: string, minLength: 1}
+        aggregateId: {type: string, minLength: 1}
+        type:
+          type: string
+          enum: [SETTLEMENT, REVERSE_SETTLEMENT, REWARD, REVERSE_REWARD]
+        amount:
+          type: number
+          exclusiveMinimum: 0
+
+    EventEnvelope:
+      type: object
+      required: [event_id, aggregate_id, event_type, occurred_at, received_at, payload]
+      properties:
+        event_id: {type: string, minLength: 1}
+        aggregate_id: {type: string, minLength: 1}
+        event_type:
+          type: string
+          enum:
+            - PickupSlotHeld
+            - PaymentAuthorized
+            - CommitmentConfirmed
+            - CommitmentCancelled
+            - SettlementPosted
+            - RewardGranted
+            - CapacityRevised
+            - SettlementReversed
+            - RewardReversed
+        occurred_at: {type: string, format: date-time}
+        received_at: {type: string, format: date-time}
+        correlation_id: {type: [string, "null"]}
+        causation_id: {type: [string, "null"]}
+        schema_version: {type: integer, minimum: 1, default: 1}
+        payload: {type: object, additionalProperties: true}
+
+    ReconcileRequest:
+      type: object
+      required: [events]
+      properties:
+        events:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/EventEnvelope"
