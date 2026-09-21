@@ -34,7 +34,7 @@ The current Redis adapter uses a Lua transaction per `(store, 5-minute slot)`:
 - return an opaque lease token containing the slot key and units;
 - cancellation uses another Lua script to decrement the leased units atomically.
 
-This is enough to demonstrate atomic oversubscription prevention. It does **not** claim the more elaborate token-level ZSET/fingerprint lease registry that would be needed for production-grade retry deduplication and independent token expiration.
+The slot TTL is set through the pickup time plus a small grace period, so a confirmed promise cannot silently lose its reserved units before pickup. If PostgreSQL persistence fails after Redis admission, the application compensates by releasing the lease. This portfolio does not implement a shorter abandoned-checkout timeout or per-token expiry registry; that is an explicit utilization trade-off rather than a claimed production design.
 
 ## Financial Ledger context
 
