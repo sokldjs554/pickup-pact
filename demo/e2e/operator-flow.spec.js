@@ -12,7 +12,7 @@ test('first-time visitor gets a product recovery center instead of an operator c
   await page.goto('/');
 
   await expect(page.getByRole('heading', { name: /취소된 주문의.*잘못된 정산을 되돌립니다/ })).toBeVisible();
-  await expect(page.getByText('주문 보호 기능이 켜져 있습니다.', { exact: true })).toBeVisible();
+  await expect(page.getByText('주문 보호 기능이 켜져 있습니다', { exact: true })).toBeVisible();
   await expect(page.getByRole('navigation', { name: '제품 메뉴' })).toBeVisible();
   await expect(page.locator('.protection-preview')).toContainText('아메리카노 2잔');
   await expect(page.locator('.sidebar')).not.toBeVisible();
