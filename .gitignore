@@ -1,0 +1,21 @@
+# JVM
+**/target/
+.gradle/
+build/
+*.class
+
+# Python
+__pycache__/
+.pytest_cache/
+.venv/
+*.py[cod]
+
+# Runtime / secrets
+.env
+*.log
+.DS_Store
+artifacts/runtime/
+
+# IDE
+.idea/
+.vscode/
