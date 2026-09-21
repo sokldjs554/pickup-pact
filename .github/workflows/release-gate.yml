@@ -1,0 +1,121 @@
+name: release-gate
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  repeat-verification:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install Python verification dependencies
+        run: |
+          python -m pip install -e './services/reconciler[dev]'
+          python -m pip install -r services/ops-console/requirements.txt
+          python -m pip install -r demo/requirements.txt
+          python -m pip install pyyaml
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Verification pass 1 — code, tests, contracts
+        run: |
+          set -euo pipefail
+          python scripts/verify_repo.py
+          python -m pytest -q services/reconciler/tests
+          python -m pytest -q services/ops-console/tests
+          python -m pytest -q demo/test_demo.py
+          mvn -B -DskipTests=false test
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          import yaml
+          for path in Path('.').rglob('*.json'):
+              if '.git' not in path.parts:
+                  json.loads(path.read_text())
+          targets = [
+              Path('contracts/openapi.yaml'),
+              Path('contracts/asyncapi.yaml'),
+              Path('docker-compose.yml'),
+              Path('render.yaml'),
+          ]
+          targets += list(Path('infra/k8s').glob('*.yaml'))
+          for path in targets:
+              list(yaml.safe_load_all(path.read_text()))
+          print('pass-1 contract/config parse passed')
+          PY
+
+      - name: Verification pass 1 — reproduce evidence
+        run: |
+          set -euo pipefail
+          python scripts/consistency_benchmark.py --orders 20000 --seed 42 --output /tmp/pass1-benchmark.json
+          python scripts/consistency_matrix.py --orders 20000 --seeds 11,22,33,44,55 --output /tmp/pass1-matrix.json
+          python scripts/verify_evidence.py             --benchmark-actual /tmp/pass1-benchmark.json             --matrix-actual /tmp/pass1-matrix.json
+
+      - name: Verification pass 2 — repeat tests from clean process
+        env:
+          PYTHONHASHSEED: "123"
+        run: |
+          set -euo pipefail
+          python scripts/verify_repo.py
+          python -m pytest -q services/reconciler/tests
+          python -m pytest -q services/ops-console/tests
+          python -m pytest -q demo/test_demo.py
+          mvn -B -DskipTests=false test
+          python scripts/consistency_benchmark.py --orders 20000 --seed 42 --output /tmp/pass2-benchmark.json
+          python scripts/consistency_matrix.py --orders 20000 --seeds 11,22,33,44,55 --output /tmp/pass2-matrix.json
+          python scripts/verify_evidence.py             --benchmark-actual /tmp/pass2-benchmark.json             --matrix-actual /tmp/pass2-matrix.json
+
+      - name: Verification pass 3 — regression repeat
+        env:
+          PYTHONHASHSEED: "777"
+        run: |
+          set -euo pipefail
+          python -m pytest -q services/reconciler/tests demo/test_demo.py services/ops-console/tests
+          mvn -B -DskipTests=false test
+          cmp <(python -c 'import json; d=json.load(open("/tmp/pass1-benchmark.json")); d["metrics"].pop("elapsed_ms",None); print(json.dumps(d,sort_keys=True))')               <(python -c 'import json; d=json.load(open("/tmp/pass2-benchmark.json")); d["metrics"].pop("elapsed_ms",None); print(json.dumps(d,sort_keys=True))')
+          cmp <(python -c 'import json; print(json.dumps(json.load(open("/tmp/pass1-matrix.json")),sort_keys=True))')               <(python -c 'import json; print(json.dumps(json.load(open("/tmp/pass2-matrix.json")),sort_keys=True))')
+
+      - name: Build and validate deployable artifacts
+        run: |
+          set -euo pipefail
+          docker compose config >/dev/null
+          docker compose build commitment ledger reconciler ops-console
+          docker build -f Dockerfile.demo -t pickup-pact-demo:release-gate .
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.13.3"
+
+      - name: Terraform validation
+        run: |
+          set -euo pipefail
+          terraform -chdir=infra/aws/terraform fmt -check
+          terraform -chdir=infra/aws/terraform init -backend=false
+          terraform -chdir=infra/aws/terraform validate
+
+      - name: Upload repeated evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-gate-evidence
+          path: |
+            /tmp/pass1-benchmark.json
+            /tmp/pass1-matrix.json
+            /tmp/pass2-benchmark.json
+            /tmp/pass2-matrix.json
+          retention-days: 14
