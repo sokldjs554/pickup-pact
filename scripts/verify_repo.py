@@ -32,6 +32,8 @@ required = [
     "artifacts/consistency-benchmark.json",
     "artifacts/consistency-matrix.json",
     "artifacts/reconciler-http-summary.json",
+    "scripts/integration_smoke.py",
+    ".github/workflows/release-gate.yml",
 ]
 missing = [path for path in required if not (ROOT / path).exists()]
 if missing:
@@ -90,6 +92,7 @@ assert "financial_event_receipt" not in domain_model
 assert "OutboxPublisher" not in architecture
 assert "services.reconciler.app.engine" in demo
 assert "COPY services /app/services" in demo_dockerfile
+assert (ROOT / "scripts/integration_smoke.py").read_text().count("full topology integration pass") == 1
 env_example = (ROOT / ".env.example").read_text()
 assert "MONGODB_URL=" in env_example
 assert "REDIS_URL=" in env_example

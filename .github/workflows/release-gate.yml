@@ -98,6 +98,21 @@ jobs:
           docker compose build commitment ledger reconciler ops-console
           docker build -f Dockerfile.demo -t pickup-pact-demo:release-gate .
 
+      - name: Full Docker topology runtime smoke — two passes
+        run: |
+          set -euo pipefail
+          docker compose up -d --build
+          python scripts/integration_smoke.py --passes 2
+          docker compose ps
+
+      - name: Dump Docker logs on runtime failure
+        if: failure()
+        run: docker compose logs --no-color --tail=300 || true
+
+      - name: Stop full Docker topology
+        if: always()
+        run: docker compose down -v --remove-orphans || true
+
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "1.13.3"
