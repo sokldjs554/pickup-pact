@@ -4,10 +4,53 @@ async function openPage(page, label) {
   await page.getByRole('button', { name: label, exact: true }).click();
 }
 
-test('reviewer can operate order, inject a late-cancel incident, reconcile, and inspect reversal ledger', async ({ page }) => {
+test('first-time visitor can understand and complete the guided recovery flow', async ({ page }) => {
   await page.goto('/');
 
-  await expect(page.getByRole('heading', { name: '주문이 들어오는 것보다,' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '주문은 취소됐는데' })).toBeVisible();
+  await expect(page.getByText('기술 용어를 몰라도 아래 안내 순서대로 직접 체험할 수 있습니다.')).toBeVisible();
+  await expect(page.locator('#mEvents')).toHaveText('0');
+  await expect(page.locator('#mAnomalies')).toHaveText('0');
+
+  await page.getByRole('button', { name: '3분 데모 시작', exact: true }).click();
+  await expect(page.locator('#guideTitle')).toHaveText('정상 주문부터 만들어보세요.');
+  await expect(page.locator('#guideOrder')).toContainText('아직 주문이 없습니다.');
+
+  await page.getByRole('button', { name: '1. 정상 주문 만들기', exact: true }).click();
+  await expect(page.locator('#guideTitle')).toHaveText('정상 주문이 준비됐습니다.');
+  await expect(page.locator('#guideOrder')).toContainText('아메리카노 2잔');
+  await expect(page.locator('#guideOrder')).toContainText('픽업 확정');
+  await expect(page.locator('#guideProblemList')).toContainText('아직 표시할 문제가 없습니다.');
+
+  await page.getByRole('button', { name: '2. 52초 지연 취소 만들기', exact: true }).click();
+  await expect(page.locator('#guideTitle')).toHaveText('문제가 발생했습니다.');
+  await expect(page.locator('#guideBefore')).toContainText('정산 +9,000원 · 포인트 +90P');
+  await expect(page.locator('#guideProblemList')).toContainText('취소 뒤에 점주 정산이 반영되었습니다.');
+  await expect(page.locator('#guideProblemList')).toContainText('취소 뒤에 포인트가 지급되었습니다.');
+
+  await page.getByRole('button', { name: '3. 문제 확인하기', exact: true }).click();
+  await expect(page.locator('#guideTitle')).toHaveText('복구 계획이 준비됐습니다.');
+
+  await page.getByRole('button', { name: '4. 안전하게 복구하기', exact: true }).click();
+  await expect(page.locator('#guideTitle')).toHaveText('복구가 끝났습니다.');
+  await expect(page.locator('#guideAfter')).toContainText('정산 0원 · 포인트 0P');
+  await expect(page.locator('#guideAfter')).toContainText('감사 이력을 보존했습니다.');
+  await expect(page.getByRole('button', { name: '다시 체험하기', exact: true })).toBeVisible();
+
+  await page.locator('#page-guided').getByRole('button', { name: '기술 상세 보기', exact: true }).click();
+  await expect(page.locator('#anomalyList')).toContainText('취소 뒤에 점주 정산이 반영되었습니다.');
+
+  await openPage(page, '정산 · 감사');
+  await expect(page.locator('#ledgerSettlement')).toHaveText('0');
+  await expect(page.locator('#ledgerReward')).toHaveText('0');
+  await expect(page.locator('#ledgerTable')).toContainText('REVERSE_SETTLEMENT');
+  await expect(page.locator('#ledgerTable')).toContainText('REVERSE_REWARD');
+});
+
+test('reviewer can still operate the full expert flow end to end', async ({ page }) => {
+  await page.goto('/');
+
+  await expect(page.getByRole('heading', { name: '주문은 취소됐는데' })).toBeVisible();
   for (const label of ['주문 흐름', '매장 처리량', '장애 주입', '정합성 복구', '정산 · 감사']) {
     await expect(page.getByRole('button', { name: label, exact: true })).toBeVisible();
   }
@@ -51,14 +94,29 @@ test('reviewer can operate order, inject a late-cancel incident, reconcile, and 
 test('capacity and conflict labs expose distinct operator outcomes', async ({ page }) => {
   await page.goto('/');
 
-  await page.locator('.preset').filter({ hasText: '매장 처리량 4 → 2' }).click();
+  await page.locator('.preset').filter({ hasText: '매장이 처리할 수 있는 주문 수 감소' }).click();
   await openPage(page, '정합성 복구');
   await expect(page.locator('#anomalyList')).toContainText('확정한 픽업 약속을 현재 매장 처리량으로 지킬 수 없습니다.');
   await expect(page.locator('#repairList')).toContainText('대체 픽업 시간 검토');
 
-  await openPage(page, '개요');
-  await page.locator('.preset').filter({ hasText: '같은 event_id, 다른 금액' }).click();
+  await openPage(page, '홈');
+  await page.locator('.preset').filter({ hasText: '같은 메시지 번호인데 금액 충돌' }).click();
   await openPage(page, '정합성 복구');
   await expect(page.locator('#anomalyList')).toContainText('같은 이벤트 ID인데 내용이 다릅니다.');
   await expect(page.locator('#repairList')).toContainText('자동 처리 중단');
+});
+
+test('guided quick start remains usable on a narrow mobile viewport', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+
+  await expect(page.getByRole('heading', { name: '주문은 취소됐는데' })).toBeVisible();
+  await page.getByRole('button', { name: '3분 데모 시작', exact: true }).click();
+  await expect(page.locator('#guideTitle')).toBeVisible();
+
+  await page.getByRole('button', { name: '1. 정상 주문 만들기', exact: true }).click();
+  await expect(page.locator('#guideOrder')).toContainText('픽업 확정');
+
+  await page.getByRole('button', { name: '2. 52초 지연 취소 만들기', exact: true }).click();
+  await expect(page.locator('#guideBefore')).toContainText('정산 +9,000원 · 포인트 +90P');
 });
