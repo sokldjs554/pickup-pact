@@ -9,7 +9,7 @@ Protect the customer's pickup-time promise and the merchant's financial state wh
 1. `commitment-service` creates a `HELD` commitment only after Redis atomically leases capacity for the requested pickup slot.
 2. The hold starts with `paymentAuthorized=false`; the caller cannot manufacture a paid state in the hold request.
 3. A separate `/{id}/authorize-payment` command records the result of an external payment authorization.
-4. Confirmation checks both aggregate state and payment authorization before changing the commitment to `CONFIRMED`.
+4. Confirmation checks both aggregate state and payment authorization before changing the commitment to `CONFIRMED`. The current state can be read with `GET /api/v1/commitments/{id}`.
 5. PostgreSQL stores commitment state and domain-outbox rows through the R2DBC repository.
 6. `OutboxRelay` publishes unpublished rows to `pickup.commitment.events.v1`; downstream consumers remain idempotent because duplicate publication is possible.
 7. If PostgreSQL persistence fails after Redis admission, the hold path compensates by releasing the lease. Cancellation also releases the lease after its event is committed. Redis TTL remains a final safety boundary if cleanup cannot complete.
@@ -27,7 +27,7 @@ The Financial Ledger is a separate bounded context.
 - supported posting types: settlement, settlement reversal, reward, reward reversal
 - shared application service and `LedgerPostingPolicy` are used by both ingress paths
 - `ledger_batches.event_id` + `semantic_fingerprint` distinguish an exact redelivery from a conflicting reused event ID
-- each accepted batch is balanced before repository append
+- each accepted batch is balanced before repository append\n- conflicting reused IDs are recorded in `ledger_conflicts` and can be inspected through `GET /api/v1/ledger/conflicts`\n- `GET /api/v1/ledger/orders/{aggregateId}` exposes append-only financial history without mutating the ledger
 
 The portfolio does not pretend to contain a real payment provider. The payment-authorization command represents the result boundary that a provider adapter would own.
 

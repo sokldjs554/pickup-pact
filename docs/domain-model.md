@@ -43,7 +43,7 @@ The financial model is append-only. Each settlement, reward, or reversal becomes
 `ledger_batches.event_id` is the idempotency identity and `semantic_fingerprint` is a SHA-256 digest of aggregate, posting type, normalized amount, and currency.
 
 - same event ID + same fingerprint → `DUPLICATE_NOOP`;
-- same event ID + different fingerprint → `CONFLICTING_EVENT_ID`;
+- same event ID + different fingerprint → `CONFLICTING_EVENT_ID`, with the existing/incoming fingerprints quarantined in `ledger_conflicts`;
 - a new event → append one balanced batch and its entries.
 
 REST (`POST /api/v1/ledger/postings`) and Kafka (`pickup.financial.events.v1`) both call the same application service and posting policy.
@@ -58,3 +58,13 @@ AI never decides ledger mutations. The deterministic policy maps proven anomalie
 - cancellation occurred before reward → `REVERSE_REWARD`;
 - capacity revision invalidates a future promise → `RESLOT_REVIEW`;
 - conflicting duplicate or invalid causal state → `MANUAL_REVIEW`.
+
+
+### Ledger history and conflict evidence
+
+The ledger service exposes read-only operational queries in addition to posting:
+
+- `GET /api/v1/ledger/orders/{aggregateId}` returns append-only batch history for one order.
+- `GET /api/v1/ledger/conflicts` returns quarantined reused-event-ID conflicts.
+
+The Kafka consumer acknowledges a conflicting event only after the conflict evidence is persisted. It does not append a second financial batch.

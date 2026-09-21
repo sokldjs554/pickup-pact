@@ -6,7 +6,7 @@ This document makes the job-description mapping auditable instead of listing tec
 |---|---|
 | AI-driven PRD → design → code → docs | `ai/prompts/`, `ai/evals/cases.json`, `docs/ai-first-workflow.md`, n8n/Make templates |
 | Kotlin | `commitment-service` aggregate/application/API/adapters |
-| Java | `ledger-service` balanced financial posting domain |
+| Java | `ledger-service` balanced financial posting, idempotency, conflict quarantine and history query domain |
 | Python | FastAPI reconciliation, Celery tasks, benchmark and verification scripts |
 | Spring | both JVM services |
 | WebFlux | reactive commitment command edge and R2DBC/Redis adapters |
@@ -21,8 +21,8 @@ This document makes the job-description mapping auditable instead of listing tec
 | DDD | Pickup Commitment + Financial Ledger bounded contexts and invariants |
 | EDA | versioned domain envelopes and AsyncAPI contract |
 | CQRS | command-owned invariants; rebuildable projections and replay repair |
-| Distributed consistency | outbox, at-least-once delivery, event-level idempotency, compensation |
-| REST/OpenAPI | explicit OpenAPI 3.1 contract for hold → payment authorization → confirm/cancel, ledger postings, reconciliation |
+| Distributed consistency | outbox, at-least-once delivery, event-level idempotency, conflict quarantine, compensation |
+| REST/OpenAPI | explicit OpenAPI 3.1 contract for hold → payment authorization → confirm/cancel + tracking, ledger posting/history/conflicts, reconciliation |
 | SQL tuning | committed timeline indexes + executable `EXPLAIN (ANALYZE, BUFFERS)` query template |
 | Performance troubleshooting | deterministic race benchmark + loopback HTTP baseline + runbook |
 | Docker | commitment, ledger, reconciler, ops-console, and interviewer-demo images |
