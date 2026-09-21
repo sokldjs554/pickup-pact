@@ -8,7 +8,7 @@ from pathlib import Path
 
 from flask import Flask, jsonify, render_template
 
-app = Flask(__name__)
+app = Flask(__name__, template_folder=str(Path(__file__).resolve().parent / "templates"))
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "local-demo-only")
 RECONCILER_URL = os.getenv("RECONCILER_URL", "http://localhost:8000")
 BENCHMARK_PATH = Path(os.getenv("BENCHMARK_PATH", "/app/artifacts/consistency-benchmark.json"))
