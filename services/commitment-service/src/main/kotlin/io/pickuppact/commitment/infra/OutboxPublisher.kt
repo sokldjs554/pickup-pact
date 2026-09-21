@@ -15,7 +15,7 @@ class OutboxPublisher(
 ) {
     data class OutboxRow(val id: String, val aggregateId: String, val payload: String)
 
-    @Scheduled(fixedDelayString = "${outbox.publish-delay-ms:500}")
+    @Scheduled(fixedDelayString = "\${outbox.publish-delay-ms:500}")
     fun publishBatch() {
         db.sql(
             """
