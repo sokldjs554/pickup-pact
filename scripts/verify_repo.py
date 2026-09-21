@@ -116,19 +116,20 @@ demo_doc = (ROOT / "docs/demo.md").read_text()
 demo_index = (ROOT / "demo/index.html").read_text()
 demo_verification = (ROOT / "demo/VERIFICATION.md").read_text()
 assert "session-isolated smart-order recovery sandbox" in demo_doc
-assert "First-time recruiter story" in demo_doc
+assert "Product recovery experience" in demo_doc
 assert "Technical detail layer" in demo_doc
 assert "REVERSE_SETTLEMENT" in demo_doc and "REVERSE_REWARD" in demo_doc
 for marker in [
-    "주문 취소가 늦게 전달되면",
-    "직접 확인해보기",
-    "버튼 한 번으로 시작",
-    "자동 데모 시작",
-    "문제 복구하기",
-    "백엔드 구현 보기",
+    "주문 보호 기능이 켜져 있습니다",
+    "취소된 주문의",
+    "복구 시나리오 체험하기",
+    "ORDER RECOVERY CENTER",
+    "잘못된 처리 되돌리기",
+    "개발자 구현 보기",
+    "개발자 화면 열기",
     "정산 0원 · 포인트 0P",
 ]:
-    assert marker in demo_index, f"recruiter demo marker missing: {marker}"
+    assert marker in demo_index, f"product demo marker missing: {marker}"
 for marker in [
     "ui-e2e",
     "live-demo-smoke",
