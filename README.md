@@ -1,5 +1,9 @@
 # Pickup Pact
 
+**Live Demo:** <https://pickup-pact-demo.onrender.com>  
+면접관용 30초 흐름: **늦게 도착한 취소 → 시간 순서 재생 → 정산·적립 이상 탐지 → 보상 트랜잭션 제안**
+
+
 **A temporal-consistency backend for scheduled pickup commitments.**
 
 Pickup Pact is a portfolio system for a difficult part of smart-order platforms that ordinary food-order clones usually skip: **keeping a promised pickup time, payment, reward, and settlement consistent when events are duplicated, delayed, reordered, or a store's preparation capacity changes after the promise was made.**
