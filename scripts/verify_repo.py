@@ -116,7 +116,7 @@ demo_doc = (ROOT / "docs/demo.md").read_text()
 demo_index = (ROOT / "demo/index.html").read_text()
 demo_verification = (ROOT / "demo/VERIFICATION.md").read_text()
 assert "session-isolated smart-order recovery sandbox" in demo_doc
-assert "First-time recruiter story" in demo_doc
+assert "Product recovery experience" in demo_doc
 assert "Technical detail layer" in demo_doc
 assert "REVERSE_SETTLEMENT" in demo_doc and "REVERSE_REWARD" in demo_doc
 for marker in [
