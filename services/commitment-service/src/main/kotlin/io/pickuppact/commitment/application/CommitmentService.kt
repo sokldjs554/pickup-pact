@@ -20,7 +20,7 @@ class CommitmentService(
         require(command.pickupAt.isAfter(now)) { "pickup time must be in the future" }
         require(command.units > 0) { "units must be positive" }
 
-        val ttl = Duration.between(now, command.pickupAt).seconds.coerceIn(30, 900)
+        val ttl = (Duration.between(now, command.pickupAt) + Duration.ofMinutes(5)).seconds.coerceAtLeast(30)
         return capacity.acquire(command.storeId, command.pickupAt, command.units, ttl)
             .flatMap { token ->
                 val held = PickupCommitment(
@@ -40,7 +40,11 @@ class CommitmentService(
                         "pickup_at" to held.pickupAt.toString(),
                         "capacity_units" to held.units
                     )
-                )
+                ).onErrorResume { error ->
+                    capacity.release(token)
+                        .onErrorResume { Mono.empty() }
+                        .then(Mono.error(error))
+                }
             }
     }
 
