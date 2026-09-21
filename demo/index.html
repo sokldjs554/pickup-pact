@@ -14,6 +14,7 @@
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font-family:Pretendard,Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
 button,input{font:inherit}
+button:focus-visible,input:focus-visible{outline:3px solid rgba(37,99,235,.28);outline-offset:2px}
 .app{display:grid;grid-template-columns:235px 1fr;min-height:100vh}
 .sidebar{background:var(--nav);color:#fff;padding:24px 16px;position:sticky;top:0;height:100vh}
 .logo{font-size:21px;font-weight:950;padding:0 10px 24px;letter-spacing:-.04em}.logo b{color:var(--brand)}
@@ -30,6 +31,13 @@ button,input{font:inherit}
 .hero{background:linear-gradient(135deg,#fff,#fff7f3);border:1px solid #fed7cc;border-radius:22px;padding:30px;box-shadow:var(--shadow);margin-bottom:18px}
 .badge{display:inline-block;background:var(--brand2);color:#c4320a;padding:6px 9px;border-radius:999px;font-size:10px;font-weight:900;margin-bottom:11px}
 .hero h2{font-size:34px;line-height:1.15;letter-spacing:-.045em;margin:0 0 11px}.hero p{margin:0;color:#475467;line-height:1.65;font-size:15px;max-width:900px}
+.hero-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px}.btn.large{padding:12px 16px;font-size:13px;border-radius:11px}
+.promise-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:18px}.promise-chip{font-size:11px;font-weight:850;padding:7px 10px;border-radius:999px;background:#fff;border:1px solid #fed7cc;color:#7a271a}
+.story-flow{display:grid;grid-template-columns:1fr 28px 1fr 28px 1fr 28px 1fr 28px 1fr;align-items:stretch;gap:8px;margin:14px 0 2px}.story-step{background:#fff;border:1px solid var(--line);border-radius:15px;padding:15px;min-height:122px}.story-step .n{display:inline-grid;place-items:center;width:25px;height:25px;border-radius:50%;background:#f2f4f7;color:#475467;font-size:11px;font-weight:950;margin-bottom:10px}.story-step strong{display:block;font-size:13px;line-height:1.4;margin-bottom:5px}.story-step span{display:block;font-size:10px;color:var(--muted);line-height:1.5}.story-step.problem{border-color:#fecdca;background:#fffafa}.story-step.problem .n{background:var(--red-bg);color:var(--red)}.story-step.success{border-color:#abefc6;background:#f8fff9}.story-step.success .n{background:var(--green-bg);color:var(--green)}.story-arrow{display:grid;place-items:center;color:#98a2b3;font-weight:950}
+.guide-progress{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:12px 0 16px}.guide-step{background:#fff;border:1px solid var(--line);border-radius:13px;padding:12px;display:flex;gap:9px;align-items:center;font-size:11px;font-weight:850;color:#667085}.guide-step .dot{width:25px;height:25px;display:grid;place-items:center;border-radius:50%;background:#f2f4f7;flex:0 0 auto}.guide-step.active{border-color:#f97066;box-shadow:0 0 0 3px #fff1ed;color:#9c2a10}.guide-step.active .dot{background:var(--brand);color:#fff}.guide-step.done{border-color:#abefc6;color:var(--green)}.guide-step.done .dot{background:var(--green-bg);color:var(--green)}
+.guide-main{display:grid;grid-template-columns:1.25fr .75fr;gap:14px}.guide-status h3{font-size:22px;letter-spacing:-.025em;margin:7px 0}.guide-status p{font-size:13px;line-height:1.65;color:#475467;margin:0 0 16px}.guide-actions{display:flex;gap:8px;flex-wrap:wrap}.guide-actions .btn.current{background:var(--brand);border-color:var(--brand);color:#fff}.guide-actions .btn:disabled{opacity:.38;background:#f8fafc;color:#98a2b3}.guide-actions .btn.done{opacity:1;background:var(--green-bg);border-color:#abefc6;color:var(--green)}
+.result-grid{display:grid;grid-template-columns:1fr 42px 1fr;gap:10px;align-items:stretch}.result-card{border-radius:15px;padding:18px;border:1px solid var(--line);background:#fff}.result-card.before.ready{background:var(--red-bg);border-color:#fecdca}.result-card.after.ready{background:var(--green-bg);border-color:#abefc6}.result-card .value{font-size:19px;font-weight:950;letter-spacing:-.025em;margin:7px 0}.result-card p{margin:0;color:#667085;font-size:11px;line-height:1.55}.result-arrow{display:grid;place-items:center;font-size:22px;color:#98a2b3}.guide-problems{display:grid;gap:8px}.plain-problem{padding:11px 12px;border-radius:11px;background:#fff7ed;border:1px solid #fed7aa;font-size:11px;line-height:1.55;color:#9a3412}.plain-problem b{display:block;color:#7c2d12;margin-bottom:2px}
+.expert-callout{display:flex;justify-content:space-between;align-items:center;gap:18px;background:#101828;color:#fff;border-radius:16px;padding:18px;margin-top:16px}.expert-callout strong{display:block;font-size:13px;margin-bottom:4px}.expert-callout span{font-size:11px;color:#98a2b3;line-height:1.5}
 .grid{display:grid;gap:14px}.g4{grid-template-columns:repeat(4,1fr)}.g3{grid-template-columns:repeat(3,1fr)}.g2{grid-template-columns:repeat(2,1fr)}
 .card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:0 3px 12px rgba(16,24,40,.025)}
 .card h3{font-size:14px;margin:0 0 13px}.muted{color:var(--muted)}.micro{font-size:10px;color:#98a2b3;font-weight:900;letter-spacing:.07em}
@@ -51,16 +59,21 @@ button,input{font:inherit}
 .code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10px;color:#475467}
 .toast{position:fixed;right:24px;bottom:24px;background:#101828;color:#fff;border-radius:11px;padding:12px 15px;font-size:11px;box-shadow:var(--shadow);display:none;z-index:20;max-width:360px}.toast.show{display:block}.toast.error{background:#7a271a}
 @media(max-width:1100px){.app{grid-template-columns:185px 1fr}.g4{grid-template-columns:repeat(2,1fr)}.g3{grid-template-columns:1fr 1fr}.form{grid-template-columns:1fr 1fr 1fr}}
-@media(max-width:760px){.app{display:block}.sidebar{position:relative;height:auto}.sidebar-foot{display:none}.nav{grid-template-columns:repeat(3,1fr)}.content{padding:18px 14px 48px}.topbar{position:relative;padding:0 14px}.g4,.g3,.g2,.timeline-grid,.form{grid-template-columns:1fr}.hero h2{font-size:29px}.audit-item{grid-template-columns:1fr}}
+@media(max-width:1100px){.story-flow{grid-template-columns:1fr 20px 1fr 20px 1fr}.story-flow .story-step:nth-of-type(n+4),.story-flow .story-arrow:nth-of-type(n+4){display:none}.guide-main{grid-template-columns:1fr}}
+@media(max-width:760px){.app{display:block}.sidebar{position:relative;height:auto}.sidebar-foot{display:none}.nav{grid-template-columns:repeat(2,1fr)}.content{padding:18px 14px 48px}.topbar{position:relative;padding:0 14px}.g4,.g3,.g2,.timeline-grid,.form,.guide-progress{grid-template-columns:1fr}.hero h2{font-size:29px}.audit-item{grid-template-columns:1fr}.story-flow{grid-template-columns:1fr}.story-arrow{transform:rotate(90deg);min-height:18px}.story-flow .story-step:nth-of-type(n+4),.story-flow .story-arrow:nth-of-type(n+4){display:block}.result-grid{grid-template-columns:1fr}.result-arrow{transform:rotate(90deg)}.expert-callout{align-items:flex-start;flex-direction:column}.top-actions .small-btn{display:none}}
 </style>
 </head>
 <body>
 <div class="app">
   <aside class="sidebar">
     <div class="logo"><b>Pickup</b> Pact</div>
-    <div class="side-caption">OPERATIONS SANDBOX</div>
+    <div class="side-caption">QUICK START</div>
     <div class="nav">
-      <button class="active" data-page="overview">개요</button>
+      <button class="active" data-page="overview">홈</button>
+      <button data-page="guided">3분 체험</button>
+    </div>
+    <div class="side-caption" style="margin-top:14px">TECHNICAL DETAILS</div>
+    <div class="nav">
       <button data-page="orders">주문 흐름</button>
       <button data-page="capacity">매장 처리량</button>
       <button data-page="faults">장애 주입</button>
@@ -75,7 +88,7 @@ button,input{font:inherit}
 
   <main class="main">
     <header class="topbar">
-      <h1 id="pageTitle">개요</h1>
+      <h1 id="pageTitle">홈</h1>
       <div class="top-actions">
         <span class="health" id="health">● 백엔드 확인 중</span>
         <button class="small-btn" onclick="newSession()">새 세션</button>
@@ -85,35 +98,108 @@ button,input{font:inherit}
     <div class="content">
       <section class="page active" id="page-overview">
         <div class="hero">
-          <div class="badge">백엔드 포트폴리오 · 스마트오더 운영 시뮬레이터</div>
-          <h2>주문이 들어오는 것보다,<br>주문 상태가 틀어졌을 때 복구하는 과정을 보여줍니다.</h2>
+          <div class="badge">스마트오더 정합성 복구 샌드박스</div>
+          <h2>주문은 취소됐는데<br>정산과 포인트가 지급됐다면?</h2>
           <p>
-            다른 완성형 주문 시스템의 <strong>주문 흐름·관리자 대시보드·상태 추적</strong> 구조를 참고하되,
-            Pickup Pact는 늦은 취소, Kafka 중복, 금액 충돌, 매장 처리량 감소처럼
-            <strong>실제 백엔드 정합성 장애를 직접 만들고 탐지·복구하는 기능</strong>에 초점을 둡니다.
+            Pickup Pact는 늦게 도착한 주문·취소 메시지의 <strong>실제 발생 순서</strong>를 다시 확인해
+            잘못 반영된 정산과 포인트를 찾아내고, 원래 기록을 지우지 않은 채 안전하게 되돌리는 과정을 보여줍니다.
+            기술 용어를 몰라도 아래 안내 순서대로 직접 체험할 수 있습니다.
           </p>
+          <div class="hero-actions">
+            <button class="btn primary large" onclick="goPage('guided')">3분 데모 시작</button>
+            <button class="btn large" onclick="goPage('reconcile')">기술 상세 보기</button>
+          </div>
+          <div class="promise-row">
+            <span class="promise-chip">정상 주문</span>
+            <span class="promise-chip">문제 발생</span>
+            <span class="promise-chip">자동 탐지</span>
+            <span class="promise-chip">안전한 복구</span>
+            <span class="promise-chip">감사 기록 보존</span>
+          </div>
         </div>
 
+        <div class="section-head"><h2>한눈에 보는 대표 상황</h2><p>복잡한 인프라 설명보다 실제 사용자 영향부터 보여줍니다.</p></div>
+        <div class="story-flow" aria-label="대표 복구 흐름">
+          <div class="story-step"><span class="n">1</span><strong>정상 주문</strong><span>아메리카노 2잔 · 9,000원 · 12:30 픽업</span></div>
+          <div class="story-arrow">→</div>
+          <div class="story-step problem"><span class="n">2</span><strong>취소 메시지 52초 지연</strong><span>고객은 먼저 취소했지만 서버는 나중에 받습니다.</span></div>
+          <div class="story-arrow">→</div>
+          <div class="story-step problem"><span class="n">3</span><strong>잘못된 정산·포인트 발견</strong><span>점주 9,000원 정산과 고객 90P가 남았습니다.</span></div>
+          <div class="story-arrow">→</div>
+          <div class="story-step"><span class="n">4</span><strong>안전한 보상 처리</strong><span>기존 기록은 남기고 반대 기록을 추가합니다.</span></div>
+          <div class="story-arrow">→</div>
+          <div class="story-step success"><span class="n">5</span><strong>정상 상태로 복구</strong><span>정산 0원 · 포인트 0P · 변경 이력 보존</span></div>
+        </div>
+
+        <div class="section-head"><h2>현재 샌드박스 상태</h2><p>첫 방문은 빈 상태에서 시작합니다.</p></div>
         <div class="grid g4">
-          <div class="card metric"><span>현재 주문</span><b id="mOrder">-</b><span id="mOrderSub">세션 준비 중</span></div>
-          <div class="card metric"><span>수집 이벤트</span><b id="mEvents">0</b><span>occurred / received evidence</span></div>
-          <div class="card metric"><span>현재 이상</span><b id="mAnomalies">0</b><span>deterministic detection</span></div>
-          <div class="card metric"><span>Ledger batches</span><b id="mLedger">0</b><span>append-only demo ledger</span></div>
+          <div class="card metric"><span>현재 주문</span><b id="mOrder">-</b><span id="mOrderSub">주문 없음</span></div>
+          <div class="card metric"><span>기록된 변화</span><b id="mEvents">0</b><span>주문·결제·취소 등</span></div>
+          <div class="card metric"><span>감지한 문제</span><b id="mAnomalies">0</b><span>자동 정합성 검사</span></div>
+          <div class="card metric"><span>금전 기록</span><b id="mLedger">0</b><span>정산·포인트·복구 이력</span></div>
         </div>
 
-        <div class="section-head"><h2>빠른 장애 시나리오</h2><p>클릭하면 별도 세션 상태에 실제 이벤트를 적재합니다.</p></div>
+        <div class="section-head"><h2>다른 상황도 바로 체험</h2><p>한 번 클릭하면 샘플 상태를 불러옵니다.</p></div>
         <div class="grid g4">
-          <div class="card preset" onclick="loadPreset('late-cancel')"><strong>취소 메시지 52초 지연</strong><span>취소는 먼저 발생했지만 정산·포인트 뒤에 서버가 받는 상황</span></div>
-          <div class="card preset" onclick="loadPreset('duplicate')"><strong>동일 정산 2회 전달</strong><span>at-least-once 환경에서 같은 금전 이벤트가 재전달되는 상황</span></div>
-          <div class="card preset" onclick="loadPreset('capacity-drop')"><strong>매장 처리량 4 → 2</strong><span>이미 확정한 픽업 약속을 현재 제조량으로 지킬 수 없는 상황</span></div>
-          <div class="card preset" onclick="loadPreset('conflict')"><strong>같은 event_id, 다른 금액</strong><span>중복으로 버리면 안 되는 의미 충돌 상황</span></div>
+          <div class="card preset" onclick="loadPreset('late-cancel')"><strong>취소 메시지가 52초 늦게 도착</strong><span>취소보다 정산과 포인트가 먼저 처리된 상황</span></div>
+          <div class="card preset" onclick="loadPreset('duplicate')"><strong>같은 정산 메시지가 두 번 도착</strong><span>같은 돈이 두 번 반영되지 않도록 막아야 하는 상황</span></div>
+          <div class="card preset" onclick="loadPreset('capacity-drop')"><strong>매장이 처리할 수 있는 주문 수 감소</strong><span>이미 약속한 픽업 수량을 만들 수 없게 된 상황</span></div>
+          <div class="card preset" onclick="loadPreset('conflict')"><strong>같은 메시지 번호인데 금액 충돌</strong><span>단순 중복이 아니라 사람 확인이 필요한 상황</span></div>
         </div>
 
-        <div class="section-head"><h2>현재 운영 상태</h2><p>고객 주문 / 매장 영향 / 장애를 한 화면에서 확인합니다.</p></div>
+        <div class="section-head"><h2>현재 운영 상태</h2><p>샘플을 불러오거나 체험을 시작하면 여기에 결과가 나타납니다.</p></div>
         <div class="grid g3">
           <div class="card" id="overviewOrder"></div>
           <div class="card" id="overviewImpact"></div>
           <div class="card" id="overviewIncident"></div>
+        </div>
+      </section>
+
+      <section class="page" id="page-guided">
+        <div class="section-head">
+          <div><h2>3분 체험</h2><p>왼쪽부터 한 단계씩 누르면 정상 주문부터 복구 완료까지 이어집니다.</p></div>
+          <button class="small-btn" onclick="resetGuidedDemo()">처음부터 다시</button>
+        </div>
+
+        <div class="guide-progress" id="guideProgress">
+          <div class="guide-step" data-guide-step="1"><span class="dot">1</span><span>정상 주문 만들기</span></div>
+          <div class="guide-step" data-guide-step="2"><span class="dot">2</span><span>문제 발생시키기</span></div>
+          <div class="guide-step" data-guide-step="3"><span class="dot">3</span><span>문제 확인하기</span></div>
+          <div class="guide-step" data-guide-step="4"><span class="dot">4</span><span>안전하게 복구</span></div>
+        </div>
+
+        <div class="guide-main">
+          <div class="card guide-status">
+            <div class="micro">지금 할 일</div>
+            <h3 id="guideTitle">정상 주문부터 만들어보세요.</h3>
+            <p id="guideDescription">버튼 하나로 주문 생성, 결제 승인, 픽업 확정까지 준비합니다. 이 단계에서는 문제가 없는 정상 상태입니다.</p>
+            <div class="guide-actions">
+              <button class="btn" id="guideStart" onclick="startGuidedDemo()">1. 정상 주문 만들기</button>
+              <button class="btn" id="guideIncident" onclick="guidedIncident()">2. 52초 지연 취소 만들기</button>
+              <button class="btn" id="guideAnalyze" onclick="guidedAnalyze()">3. 문제 확인하기</button>
+              <button class="btn" id="guideRepair" onclick="guidedRepair()">4. 안전하게 복구하기</button>
+              <button class="btn" id="guideAgain" onclick="resetGuidedDemo()" style="display:none">다시 체험하기</button>
+            </div>
+          </div>
+          <div class="card">
+            <h3>현재 주문</h3>
+            <div id="guideOrder"></div>
+          </div>
+        </div>
+
+        <div class="section-head"><h2>복구 전 / 후</h2><p>기술 코드 대신 돈과 포인트가 어떻게 달라지는지 보여줍니다.</p></div>
+        <div class="result-grid">
+          <div class="result-card before" id="guideBefore"></div>
+          <div class="result-arrow">→</div>
+          <div class="result-card after" id="guideAfter"></div>
+        </div>
+
+        <div class="section-head"><h2>시스템이 찾은 문제</h2><p>일반 사용자가 이해할 수 있는 문장으로 설명합니다.</p></div>
+        <div class="guide-problems" id="guideProblemList"></div>
+
+        <div class="expert-callout">
+          <div><strong>백엔드 면접관이라면 더 깊게 볼 수 있습니다.</strong><span>실제 발생 시각과 서버 수신 시각, anomaly code, repair proposal, append-only ledger, audit trail을 그대로 확인할 수 있습니다.</span></div>
+          <button class="btn" onclick="goPage('reconcile')">기술 상세 보기</button>
         </div>
       </section>
 
@@ -242,7 +328,7 @@ let state=null;
 const $=id=>document.getElementById(id);
 
 const pageNames={
-  overview:"개요",orders:"주문 흐름",capacity:"매장 처리량",
+  overview:"홈",guided:"3분 체험",orders:"주문 흐름",capacity:"매장 처리량",
   faults:"장애 주입",reconcile:"정합성 복구",ledger:"정산 · 감사"
 };
 
@@ -278,7 +364,70 @@ async function ensureSession(){
   }
   const created=await api("/api/demo/sessions","POST",{});
   sessionId=created.session_id;localStorage.setItem("pickupPactSession",sessionId);
-  state=await api("/api/demo/sessions/"+sessionId+"/presets/late-cancel","POST",{});
+  state=created;
+}
+
+
+function auditHas(action){
+  return Boolean(state && (state.audit||[]).some(item=>item.action===action));
+}
+
+function currentGuideStage(){
+  if(!state || !state.order) return 0;
+  const applied=new Set(state.applied_repairs||[]);
+  if(applied.has("REVERSE_SETTLEMENT") && applied.has("REVERSE_REWARD")) return 4;
+  if(state.order.status==="CANCELLED" && auditHas("RECONCILED")) return 3;
+  if(state.order.status==="CANCELLED" && state.order.settled && state.order.rewarded) return 2;
+  return 1;
+}
+
+async function startGuidedDemo(){
+  try{
+    state=await api("/api/demo/sessions/"+sessionId+"/reset","POST",{});
+    let result=await api("/api/demo/sessions/"+sessionId+"/orders","POST",{
+      store:"패스카페 강남역점",items:"아메리카노 2잔",total:9000,pickup_at:"12:30",units:2
+    });
+    state=result.state;
+    result=await api("/api/demo/sessions/"+sessionId+"/payment","POST",{authorization_id:"guided-demo"});
+    state=result.state;
+    result=await api("/api/demo/sessions/"+sessionId+"/confirm","POST",{});
+    state=result.state;
+    renderAll();goPage("guided");toast("정상 주문이 준비됐습니다. 다음 단계로 진행해보세요.");
+  }catch(e){toast(e.message,true)}
+}
+
+async function guidedIncident(){
+  try{
+    let result=await api("/api/demo/sessions/"+sessionId+"/cancel","POST",{delay_seconds:52});
+    state=result.state;
+    result=await api("/api/demo/sessions/"+sessionId+"/settlement","POST",{amount:9000});
+    state=result.state;
+    result=await api("/api/demo/sessions/"+sessionId+"/reward","POST",{amount:90});
+    state=result.state;
+    renderAll();toast("취소 메시지가 늦게 도착해 잘못된 정산과 포인트가 남았습니다.");
+  }catch(e){toast(e.message,true)}
+}
+
+async function guidedAnalyze(){
+  try{
+    const result=await api("/api/demo/sessions/"+sessionId+"/reconcile","POST",{});
+    state=result.state;renderAll();toast("실제 발생 순서를 기준으로 문제와 복구 계획을 확인했습니다.");
+  }catch(e){toast(e.message,true)}
+}
+
+async function guidedRepair(){
+  try{
+    const result=await api("/api/demo/sessions/"+sessionId+"/repairs/apply","POST",{});
+    state=result.state;renderAll();
+    toast(result.applied.length?"복구가 끝났습니다. 정산과 포인트 결과를 확인해보세요.":"새로 적용할 복구가 없습니다.");
+  }catch(e){toast(e.message,true)}
+}
+
+async function resetGuidedDemo(){
+  try{
+    state=await api("/api/demo/sessions/"+sessionId+"/reset","POST",{});
+    renderAll();goPage("guided");toast("체험을 처음 상태로 되돌렸습니다.");
+  }catch(e){toast(e.message,true)}
 }
 
 async function newSession(){
@@ -434,8 +583,88 @@ function renderOrderCard(target){
     '<div class="pills">'+pill(o.status)+(o.payment_authorized?'<span class="pill blue">PAYMENT AUTH</span>':'<span class="pill gray">UNPAID</span>')+(o.settled?'<span class="pill amber">SETTLED</span>':'')+(o.rewarded?'<span class="pill amber">REWARDED</span>':'')+'</div>';
 }
 
+
+function humanStatus(status){
+  return ({HELD:"주문 접수",CONFIRMED:"픽업 확정",CANCELLED:"주문 취소",AT_RISK:"확인 필요"})[status]||status;
+}
+
+function renderGuide(){
+  if(!state)return;
+  const stage=currentGuideStage();
+  document.querySelectorAll("[data-guide-step]").forEach((el,index)=>{
+    const step=index+1;
+    el.classList.toggle("done",step<=stage);
+    el.classList.toggle("active",step===stage+1 && stage<4);
+    el.querySelector(".dot").textContent=step<=stage?"✓":String(step);
+  });
+
+  const buttons=[
+    ["guideStart",0],["guideIncident",1],["guideAnalyze",2],["guideRepair",3]
+  ];
+  buttons.forEach(([id,needed])=>{
+    const button=$(id);
+    button.disabled=stage!==needed;
+    button.classList.toggle("current",stage===needed);
+    button.classList.toggle("done",stage>needed);
+  });
+  $("guideAgain").style.display=stage===4?"inline-flex":"none";
+
+  const titles=[
+    "정상 주문부터 만들어보세요.",
+    "정상 주문이 준비됐습니다.",
+    "문제가 발생했습니다.",
+    "복구 계획이 준비됐습니다.",
+    "복구가 끝났습니다."
+  ];
+  const descriptions=[
+    "버튼 하나로 주문 생성, 결제 승인, 픽업 확정까지 준비합니다. 이 단계에서는 문제가 없는 정상 상태입니다.",
+    "9,000원 주문의 결제와 12:30 픽업 약속이 정상적으로 확정됐습니다. 이제 실제 서비스에서 생길 수 있는 지연 상황을 만들어봅니다.",
+    "고객 취소는 먼저 발생했지만 서버가 52초 늦게 받았습니다. 그 사이 점주 정산 9,000원과 고객 포인트 90P가 잘못 반영됐습니다.",
+    "시스템이 실제 발생 순서를 다시 계산해 잘못된 정산과 포인트를 찾았습니다. 원본 기록을 지우지 않고 반대 기록을 추가하는 복구 계획을 준비했습니다.",
+    "정산과 포인트가 모두 원래 상태로 돌아왔고, 무엇을 왜 되돌렸는지 변경 이력도 남아 있습니다."
+  ];
+  $("guideTitle").textContent=titles[stage];
+  $("guideDescription").textContent=descriptions[stage];
+
+  if(!state.order){
+    $("guideOrder").innerHTML='<div class="empty">아직 주문이 없습니다.<br>1단계 버튼을 눌러 시작하세요.</div>';
+  }else{
+    const o=state.order;
+    $("guideOrder").innerHTML=
+      '<div class="order-title">'+o.items+'</div>'+
+      '<div class="muted" style="font-size:11px">'+o.store+' · '+o.order_id+'</div>'+
+      '<div class="kv"><div class="kv-row"><span>결제 금액</span><b>'+money(o.total)+'원</b></div>'+
+      '<div class="kv-row"><span>픽업 시간</span><b>'+o.pickup_at+'</b></div>'+
+      '<div class="kv-row"><span>현재 상태</span><b>'+humanStatus(o.status)+'</b></div></div>';
+  }
+
+  if(stage<2){
+    $("guideBefore").className="result-card before";
+    $("guideBefore").innerHTML='<div class="micro">문제 발생 전</div><div class="value">정상 상태</div><p>문제를 발생시키면 잘못된 금전 상태가 여기에 표시됩니다.</p>';
+    $("guideAfter").className="result-card after";
+    $("guideAfter").innerHTML='<div class="micro">복구 후</div><div class="value">아직 비교 전</div><p>복구가 끝나면 최종 정산과 포인트가 표시됩니다.</p>';
+  }else{
+    $("guideBefore").className="result-card before ready";
+    $("guideBefore").innerHTML='<div class="micro">복구 전</div><div class="value">정산 +9,000원 · 포인트 +90P</div><p>취소된 주문인데도 점주 정산과 고객 포인트가 남아 있는 잘못된 상태입니다.</p>';
+    $("guideAfter").className="result-card after"+(stage===4?" ready":"");
+    $("guideAfter").innerHTML=stage===4
+      ? '<div class="micro">복구 후</div><div class="value">정산 0원 · 포인트 0P</div><p>원본 기록은 삭제하지 않고, 반대 분개와 포인트 회수 기록을 추가해 감사 이력을 보존했습니다.</p>'
+      : '<div class="micro">복구 후</div><div class="value">복구 대기</div><p>문제를 확인한 뒤 안전한 복구 버튼을 누르면 결과를 비교할 수 있습니다.</p>';
+  }
+
+  const problems=state.reconciliation?.anomalies||[];
+  if(stage<2 || !problems.length){
+    $("guideProblemList").innerHTML='<div class="empty">아직 표시할 문제가 없습니다.</div>';
+  }else{
+    $("guideProblemList").innerHTML=problems.map(item=>
+      '<div class="plain-problem"><b>'+item.title+'</b>'+item.detail+'</div>'
+    ).join("");
+  }
+}
+
 function renderAll(){
   if(!state)return;
+  renderGuide();
   $("mOrder").textContent=state.order?state.order.status:"-";
   $("mOrderSub").textContent=state.order?state.order.order_id:"주문 없음";
   $("mEvents").textContent=state.metrics.event_count;
