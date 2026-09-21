@@ -63,7 +63,7 @@ class CommitmentServiceTest {
         }
 
         override fun find(id: UUID): Mono<PickupCommitment> =
-            rows[id]?.let(Mono::just)
+            rows[id]?.let { Mono.just(it) }
                 ?: Mono.error(NoSuchElementException("commitment not found"))
     }
 
