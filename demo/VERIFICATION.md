@@ -6,7 +6,7 @@ For a release candidate, all of the following automated paths must pass on the s
 
 - `demo-ci`: FastAPI demo unit/API tests and Docker image build.
 - `ui-e2e`: local Chromium verification of the first-time guided flow, the full expert operator flow, capacity/conflict labs, and a narrow mobile viewport.
-- `live-demo-smoke`: waits for the matching public Render release, verifies fixed scenarios and the complete API operator flow twice, then runs the same Chromium suite against the deployed public URL.
+- `live-demo-smoke`: waits until the public `/health` reports the exact `RENDER_GIT_COMMIT` equal to the GitHub Actions SHA, verifies fixed scenarios and the complete API operator flow twice, then runs the same Chromium suite against that deployed public URL.
 - `ci`: repository guardrails, Python/JVM tests, contracts, evidence reproduction, Docker builds, and Terraform validation.
 - `release-gate`: three repeated test passes, deterministic evidence reproduction, full Docker topology integration twice, and Terraform validation.
 
