@@ -3,25 +3,36 @@ package io.pickuppact.commitment.api
 import io.pickuppact.commitment.application.CommitmentService
 import io.pickuppact.commitment.application.HoldCommand
 import io.pickuppact.commitment.domain.PickupCommitment
+import jakarta.validation.Valid
+import jakarta.validation.constraints.Future
+import jakarta.validation.constraints.Min
+import jakarta.validation.constraints.NotBlank
 import org.springframework.web.bind.annotation.*
 import reactor.core.publisher.Mono
 import java.time.Instant
 import java.util.UUID
 
-data class HoldRequest(val storeId: String, val pickupAt: Instant, val units: Int)
-data class PaymentAuthorizationRequest(val authorizationId: String)
+data class HoldRequest(
+    @field:NotBlank val storeId: String,
+    @field:Future val pickupAt: Instant,
+    @field:Min(1) val units: Int
+)
+
+data class PaymentAuthorizationRequest(
+    @field:NotBlank val authorizationId: String
+)
 
 @RestController
 @RequestMapping("/api/v1/commitments")
 class CommitmentController(private val service: CommitmentService) {
     @PostMapping("/hold")
-    fun hold(@RequestBody request: HoldRequest): Mono<PickupCommitment> =
+    fun hold(@Valid @RequestBody request: HoldRequest): Mono<PickupCommitment> =
         service.hold(HoldCommand(request.storeId, request.pickupAt, request.units))
 
     @PostMapping("/{id}/authorize-payment")
     fun authorizePayment(
         @PathVariable id: UUID,
-        @RequestBody request: PaymentAuthorizationRequest
+        @Valid @RequestBody request: PaymentAuthorizationRequest
     ): Mono<PickupCommitment> =
         service.authorizePayment(id, request.authorizationId)
 

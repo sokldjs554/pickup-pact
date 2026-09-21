@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: replay-worker
+  namespace: pickup-pact
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: replay-worker}}
+  template:
+    metadata:
+      labels: {app: replay-worker, tags.datadoghq.com/service: pickup-pact-replay-worker, tags.datadoghq.com/env: staging}
+    spec:
+      containers:
+        - name: replay-worker
+          image: ghcr.io/sokldjs554/pickup-pact-reconciler:latest
+          command: ["celery"]
+          args: ["-A", "app.tasks.celery_app", "worker", "--loglevel=INFO", "--queues=reconciliation"]
+          envFrom:
+            - {configMapRef: {name: pickup-pact-config}}
+            - {secretRef: {name: pickup-pact-secrets}}
+          env:
+            - {name: DD_SERVICE, value: pickup-pact-replay-worker}
+          resources:
+            requests: {cpu: "100m", memory: "128Mi"}
+            limits: {cpu: "500m", memory: "512Mi"}

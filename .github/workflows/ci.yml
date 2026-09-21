@@ -57,10 +57,21 @@ jobs:
       - name: Spring/Kotlin/Java tests
         run: mvn -B -DskipTests=false test
 
-      - name: Deterministic consistency evidence
+      - name: Reproduce committed consistency evidence
         run: |
-          python scripts/consistency_benchmark.py --orders 20000 --seed 42 --output artifacts/consistency-benchmark.json
-          python scripts/consistency_matrix.py --orders 20000 --seeds 11,22,33,44,55 --output artifacts/consistency-matrix.json
+          python scripts/consistency_benchmark.py --orders 20000 --seed 42 --output /tmp/consistency-benchmark.json
+          python scripts/consistency_matrix.py --orders 20000 --seeds 11,22,33,44,55 --output /tmp/consistency-matrix.json
+          python scripts/verify_evidence.py \
+            --benchmark-actual /tmp/consistency-benchmark.json \
+            --matrix-actual /tmp/consistency-matrix.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: reproduced-consistency-evidence
+          path: |
+            /tmp/consistency-benchmark.json
+            /tmp/consistency-matrix.json
+          retention-days: 14
 
       - name: Docker configuration and images
         run: |

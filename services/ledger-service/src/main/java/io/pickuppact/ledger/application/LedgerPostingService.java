@@ -25,13 +25,14 @@ public class LedgerPostingService {
 
     @Transactional
     public Result post(LedgerBatch batch) {
-        var current = repository.fingerprint(batch.eventId());
-        if (current.isPresent()) {
-            return current.get().equals(batch.semanticFingerprint())
-                    ? Result.DUPLICATE_NOOP
-                    : Result.CONFLICTING_EVENT_ID;
+        if (repository.appendIfAbsent(batch)) {
+            return Result.POSTED;
         }
-        repository.append(batch);
-        return Result.POSTED;
+
+        var current = repository.fingerprint(batch.eventId())
+                .orElseThrow(() -> new IllegalStateException("event ID exists without ledger batch fingerprint"));
+        return current.equals(batch.semanticFingerprint())
+                ? Result.DUPLICATE_NOOP
+                : Result.CONFLICTING_EVENT_ID;
     }
 }

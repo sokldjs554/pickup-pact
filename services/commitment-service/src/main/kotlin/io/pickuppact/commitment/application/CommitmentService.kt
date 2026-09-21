@@ -16,18 +16,29 @@ class CommitmentService(
     private val repository: CommitmentRepository
 ) {
     fun hold(command: HoldCommand): Mono<PickupCommitment> {
-        val ttl = Duration.between(Instant.now(), command.pickupAt).seconds.coerceIn(30, 900)
+        val now = Instant.now()
+        require(command.pickupAt.isAfter(now)) { "pickup time must be in the future" }
+        require(command.units > 0) { "units must be positive" }
+
+        val ttl = Duration.between(now, command.pickupAt).seconds.coerceIn(30, 900)
         return capacity.acquire(command.storeId, command.pickupAt, command.units, ttl)
             .flatMap { token ->
-                repository.save(
-                    PickupCommitment(
-                        id = UUID.randomUUID(),
-                        storeId = command.storeId,
-                        pickupAt = command.pickupAt,
-                        units = command.units,
-                        leaseToken = token,
-                        paymentAuthorized = false,
-                        state = CommitmentState.HELD
+                val held = PickupCommitment(
+                    id = UUID.randomUUID(),
+                    storeId = command.storeId,
+                    pickupAt = command.pickupAt,
+                    units = command.units,
+                    leaseToken = token,
+                    paymentAuthorized = false,
+                    state = CommitmentState.HELD
+                )
+                repository.saveWithEvent(
+                    held,
+                    "PickupSlotHeld",
+                    mapOf(
+                        "store_id" to held.storeId,
+                        "pickup_at" to held.pickupAt.toString(),
+                        "capacity_units" to held.units
                     )
                 )
             }
