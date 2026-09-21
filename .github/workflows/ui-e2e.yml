@@ -49,13 +49,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
-          cache: npm
-          cache-dependency-path: demo/package-lock.json
 
       - name: Install Playwright
         working-directory: demo
         run: |
-          npm ci
+          npm install --no-audit --no-fund
           npx playwright install --with-deps chromium
 
       - name: Run browser user-flow tests

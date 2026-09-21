@@ -1,5 +1,7 @@
 package io.pickuppact.commitment.api
 
+import com.fasterxml.jackson.annotation.JsonCreator
+import com.fasterxml.jackson.annotation.JsonProperty
 import io.pickuppact.commitment.application.CommitmentService
 import io.pickuppact.commitment.application.HoldCommand
 import io.pickuppact.commitment.domain.PickupCommitment
@@ -18,8 +20,8 @@ data class HoldRequest(
     @field:Min(1) val units: Int
 )
 
-data class PaymentAuthorizationRequest(
-    @field:NotBlank val authorizationId: String
+data class PaymentAuthorizationRequest @JsonCreator(mode = JsonCreator.Mode.PROPERTIES) constructor(
+    @field:NotBlank @JsonProperty("authorizationId") val authorizationId: String
 )
 
 @RestController
