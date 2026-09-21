@@ -3,324 +3,481 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Pickup Pact — 스마트오더 정합성 복구 데모</title>
+<title>Pickup Pact — Smart Order Consistency Console</title>
 <style>
 :root{
-  --bg:#f6f7fb;--card:#ffffff;--text:#111827;--muted:#64748b;--line:#e5e7eb;
-  --brand:#ff5a36;--brand-soft:#fff2ed;--navy:#0f172a;--blue:#2563eb;
-  --green:#047857;--green-bg:#ecfdf5;--red:#b91c1c;--red-bg:#fef2f2;
-  --amber:#92400e;--amber-bg:#fffbeb;--shadow:0 18px 48px rgba(15,23,42,.08)
+  --bg:#f4f6fa;--surface:#fff;--surface2:#f8fafc;--text:#101828;--muted:#667085;
+  --line:#e4e7ec;--brand:#ff5a36;--brand2:#fff2ed;--nav:#0f172a;--blue:#2563eb;
+  --green:#067647;--green-bg:#ecfdf3;--red:#b42318;--red-bg:#fef3f2;--amber:#b54708;
+  --amber-bg:#fffaeb;--purple:#6941c6;--shadow:0 16px 42px rgba(16,24,40,.07)
 }
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font-family:Pretendard,Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
-button{font:inherit}
-.wrap{max-width:1220px;margin:auto;padding:24px 22px 72px}
-.topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
-.brand{font-size:20px;font-weight:950;letter-spacing:-.03em}.brand b{color:var(--brand)}
-.health{font-size:12px;font-weight:800;border:1px solid #a7f3d0;background:var(--green-bg);color:var(--green);padding:8px 11px;border-radius:999px}
-
-.hero{background:linear-gradient(135deg,#fff 0%,#fff7f2 100%);border:1px solid #fed7cc;border-radius:26px;padding:36px 40px;box-shadow:var(--shadow)}
-.badge{display:inline-block;background:var(--brand-soft);color:#c2410c;font-size:12px;font-weight:900;padding:7px 10px;border-radius:999px;margin-bottom:14px}
-.hero h1{font-size:clamp(34px,5vw,56px);letter-spacing:-.05em;line-height:1.08;margin:0 0 15px;max-width:1000px}
-.hero p{margin:0;color:#475569;line-height:1.7;font-size:18px;max-width:950px}.hero strong{color:var(--navy)}
-.hero-flow{display:flex;gap:8px;flex-wrap:wrap;margin-top:22px}
-.hero-flow span{background:#fff;border:1px solid var(--line);border-radius:11px;padding:9px 12px;font-size:13px;color:#334155;font-weight:700}
-.hero-flow i{font-style:normal;color:#cbd5e1;align-self:center}
-
-.section{margin-top:30px}
-.section-head{display:flex;justify-content:space-between;gap:20px;align-items:end;margin-bottom:13px}
-.section-head h2{margin:0;font-size:24px;letter-spacing:-.025em}.section-head p{margin:0;color:var(--muted);font-size:13px}
-
-.scenario-tabs{display:grid;grid-template-columns:repeat(4,1fr);background:#fff;border:1px solid var(--line);border-radius:16px;overflow:hidden;margin-bottom:14px}
-.scenario-tab{border:0;border-right:1px solid var(--line);background:#fff;text-align:left;padding:15px 16px;cursor:pointer;color:#475569}
-.scenario-tab:last-child{border-right:0}.scenario-tab.active{background:#fff5f1;box-shadow:inset 0 -3px 0 var(--brand);color:#9a3412}
-.scenario-tab strong{display:block;font-size:14px;margin-bottom:4px}.scenario-tab span{font-size:11px;color:#94a3b8}
-
-.workspace{display:grid;grid-template-columns:1fr 1fr 1.05fr;gap:14px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:19px;padding:20px;box-shadow:0 5px 18px rgba(15,23,42,.035)}
-.card-title{display:flex;justify-content:space-between;align-items:center;margin-bottom:15px}
-.card-title h3{margin:0;font-size:16px}.micro{font-size:11px;color:#94a3b8;font-weight:800}
-
-.order-id{font-size:12px;color:#94a3b8;font-weight:800}.order-main{font-size:23px;font-weight:950;margin:5px 0 2px}.store{font-size:13px;color:var(--muted);margin-bottom:17px}
-.kv{display:grid;gap:10px}.kv-row{display:flex;justify-content:space-between;gap:14px;border-bottom:1px dashed var(--line);padding-bottom:9px;font-size:13px}.kv-row:last-child{border-bottom:0}.kv-row span{color:var(--muted)}
-.status-row{display:flex;gap:7px;flex-wrap:wrap;margin-top:16px}
-.pill{font-size:11px;font-weight:900;border-radius:999px;padding:6px 9px}.pill.gray{background:#f1f5f9;color:#475569}.pill.red{background:var(--red-bg);color:var(--red)}.pill.green{background:var(--green-bg);color:var(--green)}.pill.amber{background:var(--amber-bg);color:var(--amber)}
-
-.impact{display:grid;gap:11px}.impact-item{border-radius:12px;padding:12px 13px;background:#f8fafc;border:1px solid #eef2f7}
-.impact-item b{display:block;font-size:12px;margin-bottom:4px}.impact-item span{font-size:12px;line-height:1.45;color:#64748b}
-
-.issue{background:linear-gradient(180deg,#fff,#fff9f8);border-color:#fecaca}
-.issue-title{font-size:21px;font-weight:950;line-height:1.4;color:#991b1b;margin-bottom:10px}.issue p{font-size:13px;line-height:1.6;color:#7f1d1d;margin:0}
-.clock{margin-top:16px;display:grid;gap:8px}
-.clock-row{display:grid;grid-template-columns:72px 1fr;gap:10px;align-items:start;font-size:12px}.clock-row time{font-weight:900;color:#475569}.clock-row span{color:#64748b;line-height:1.4}
-
-.action-card{grid-column:1/-1;background:var(--navy);color:#fff;border:0;border-radius:19px;padding:18px 20px;display:flex;justify-content:space-between;gap:18px;align-items:center}
-.action-copy b{display:block;font-size:17px;margin-bottom:4px}.action-copy span{font-size:12px;color:#94a3b8;line-height:1.5}
-.run{border:0;background:var(--brand);color:#fff;font-weight:950;border-radius:12px;padding:13px 18px;cursor:pointer;white-space:nowrap}.run:hover{background:#e94d2a}.run:disabled{opacity:.55;cursor:wait}
-
-.result-wrap{display:none;grid-column:1/-1;grid-template-columns:1fr 1fr;gap:14px}
-.result-wrap.show{display:grid}
-.result-card{background:#fff;border:1px solid var(--line);border-radius:19px;padding:20px}
-.result-card.bad{border-color:#fecaca}.result-card.good{border-color:#a7f3d0}
-.result-card h3{font-size:16px;margin:0 0 13px}.result-list{display:grid;gap:9px}
-.result-item{border-radius:11px;padding:11px 12px;font-size:12px;line-height:1.5}.bad .result-item{background:var(--red-bg);color:#991b1b}.good .result-item{background:var(--green-bg);color:#065f46}
-.result-item b{display:block;margin-bottom:2px}
-
-.state-change{grid-column:1/-1;background:#fff;border:1px solid var(--line);border-radius:19px;padding:18px}
-.state-title{font-size:13px;font-weight:900;margin-bottom:10px}
-.state-row{display:grid;grid-template-columns:1fr 40px 1fr;align-items:center;gap:10px}.state-box{border:1px solid var(--line);border-radius:13px;padding:14px;text-align:center;font-size:13px;font-weight:900}.state-box.after{background:var(--green-bg);border-color:#86efac;color:var(--green)}.arrow{text-align:center;color:#94a3b8}
-
-.timeline-shell{background:#fff;border:1px solid var(--line);border-radius:19px;overflow:hidden}
-.timeline-head{padding:16px 18px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}.timeline-head h3{margin:0;font-size:15px}.timeline-head span{font-size:11px;color:#94a3b8}
-.timeline-grid{display:grid;grid-template-columns:1fr 1fr}
-.timeline-col{padding:16px 18px}.timeline-col:first-child{border-right:1px solid var(--line)}.timeline-col h4{margin:0 0 12px;font-size:13px}.timeline-event{display:grid;grid-template-columns:68px 1fr;gap:10px;padding:9px 0;border-bottom:1px solid #f1f5f9}.timeline-event:last-child{border-bottom:0}
-.timeline-event time{font-size:11px;font-weight:900;color:#64748b}.timeline-event b{display:block;font-size:12px;margin-bottom:2px}.timeline-event small{font-size:11px;color:#94a3b8;line-height:1.35}
-
-details{margin-top:14px;background:#fff;border:1px solid var(--line);border-radius:15px}summary{cursor:pointer;padding:14px 16px;font-size:13px;font-weight:900;color:#475569}
-.tech{padding:0 16px 16px;display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.tech div{background:#f8fafc;border-radius:11px;padding:12px;font-size:11px;line-height:1.55;color:#64748b}.tech b{color:#0f172a}.tech code{color:#0f172a;font-weight:800}
-
-.metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:13px}.metric{background:#fff;border:1px solid var(--line);border-radius:16px;padding:18px}.metric b{display:block;font-size:25px}.metric em{font-style:normal;color:var(--green)}.metric span{font-size:11px;color:var(--muted)}
-.footer{margin-top:28px;text-align:center;color:#94a3b8;font-size:11px;line-height:1.6}
-
-@media(max-width:980px){.workspace{grid-template-columns:1fr 1fr}.issue{grid-column:1/-1}.tech{grid-template-columns:1fr 1fr}}
-@media(max-width:760px){.scenario-tabs,.workspace,.result-wrap.show,.metrics{grid-template-columns:1fr}.scenario-tab{border-right:0;border-bottom:1px solid var(--line)}.issue{grid-column:auto}.timeline-grid{grid-template-columns:1fr}.timeline-col:first-child{border-right:0;border-bottom:1px solid var(--line)}.action-card{flex-direction:column;align-items:stretch}.run{width:100%}.tech{grid-template-columns:1fr}.hero{padding:28px 23px}.hero p{font-size:16px}}
+button,input{font:inherit}
+.app{display:grid;grid-template-columns:235px 1fr;min-height:100vh}
+.sidebar{background:var(--nav);color:#fff;padding:24px 16px;position:sticky;top:0;height:100vh}
+.logo{font-size:21px;font-weight:950;padding:0 10px 24px;letter-spacing:-.04em}.logo b{color:var(--brand)}
+.side-caption{font-size:10px;color:#64748b;font-weight:900;letter-spacing:.09em;padding:12px 10px 8px}
+.nav{display:grid;gap:5px}.nav button{border:0;background:transparent;color:#94a3b8;text-align:left;padding:11px 12px;border-radius:10px;cursor:pointer;font-weight:750;font-size:13px}
+.nav button:hover,.nav button.active{background:#1e293b;color:#fff}
+.sidebar-foot{position:absolute;left:16px;right:16px;bottom:20px;color:#64748b;font-size:10px;line-height:1.5}
+.main{min-width:0}.topbar{height:68px;background:#fff;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;padding:0 28px;position:sticky;top:0;z-index:5}
+.topbar h1{font-size:18px;margin:0}.top-actions{display:flex;gap:9px;align-items:center}
+.health{font-size:11px;font-weight:850;border:1px solid #abefc6;background:var(--green-bg);color:var(--green);padding:7px 10px;border-radius:999px}
+.small-btn{border:1px solid var(--line);background:#fff;border-radius:9px;padding:8px 10px;font-size:11px;font-weight:800;cursor:pointer}
+.content{padding:26px 28px 64px;max-width:1450px;margin:auto}
+.page{display:none}.page.active{display:block}
+.hero{background:linear-gradient(135deg,#fff,#fff7f3);border:1px solid #fed7cc;border-radius:22px;padding:30px;box-shadow:var(--shadow);margin-bottom:18px}
+.badge{display:inline-block;background:var(--brand2);color:#c4320a;padding:6px 9px;border-radius:999px;font-size:10px;font-weight:900;margin-bottom:11px}
+.hero h2{font-size:34px;line-height:1.15;letter-spacing:-.045em;margin:0 0 11px}.hero p{margin:0;color:#475467;line-height:1.65;font-size:15px;max-width:900px}
+.grid{display:grid;gap:14px}.g4{grid-template-columns:repeat(4,1fr)}.g3{grid-template-columns:repeat(3,1fr)}.g2{grid-template-columns:repeat(2,1fr)}
+.card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:0 3px 12px rgba(16,24,40,.025)}
+.card h3{font-size:14px;margin:0 0 13px}.muted{color:var(--muted)}.micro{font-size:10px;color:#98a2b3;font-weight:900;letter-spacing:.07em}
+.metric b{display:block;font-size:26px;letter-spacing:-.035em;margin-top:5px}.metric span{font-size:11px;color:var(--muted)}
+.section-head{display:flex;align-items:end;justify-content:space-between;gap:18px;margin:24px 0 11px}.section-head h2{font-size:20px;margin:0}.section-head p{font-size:11px;margin:0;color:var(--muted)}
+.order-title{font-size:23px;font-weight:950;margin:5px 0}.kv{display:grid;gap:9px;margin-top:13px}.kv-row{display:flex;justify-content:space-between;gap:10px;border-bottom:1px dashed var(--line);padding-bottom:8px;font-size:12px}.kv-row:last-child{border-bottom:0}.kv-row span{color:var(--muted)}
+.pills{display:flex;gap:6px;flex-wrap:wrap;margin-top:13px}.pill{font-size:10px;font-weight:900;padding:5px 8px;border-radius:999px}.pill.gray{background:#f2f4f7;color:#475467}.pill.green{background:var(--green-bg);color:var(--green)}.pill.red{background:var(--red-bg);color:var(--red)}.pill.amber{background:var(--amber-bg);color:var(--amber)}.pill.blue{background:#eff8ff;color:#175cd3}
+.alert{padding:12px;border-radius:11px;font-size:12px;line-height:1.5;margin-bottom:8px}.alert.red{background:var(--red-bg);color:var(--red);border:1px solid #fecdca}.alert.green{background:var(--green-bg);color:var(--green);border:1px solid #abefc6}.alert.amber{background:var(--amber-bg);color:var(--amber);border:1px solid #fedf89}
+.actions{display:flex;gap:8px;flex-wrap:wrap}.btn{border:1px solid var(--line);background:#fff;border-radius:9px;padding:9px 11px;font-size:11px;font-weight:850;cursor:pointer}.btn:hover{background:#f8fafc}.btn.primary{background:var(--brand);color:#fff;border-color:var(--brand)}.btn.primary:hover{background:#e94d2a}.btn.dark{background:var(--nav);color:#fff;border-color:var(--nav)}.btn.danger{background:#fff5f5;color:#b42318;border-color:#fecdca}.btn:disabled{opacity:.45;cursor:not-allowed}
+.preset{cursor:pointer;transition:.15s}.preset:hover{transform:translateY(-2px);box-shadow:var(--shadow)}.preset strong{display:block;font-size:14px;margin-bottom:5px}.preset span{font-size:11px;color:var(--muted);line-height:1.45}
+.form{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}.field label{display:block;font-size:10px;color:var(--muted);font-weight:850;margin-bottom:5px}.field input{width:100%;border:1px solid var(--line);border-radius:9px;padding:10px;font-size:12px;outline:none}.field input:focus{border-color:#f97066;box-shadow:0 0 0 3px #fff1ed}
+.event-list{display:grid;gap:8px;max-height:430px;overflow:auto}.event{display:grid;grid-template-columns:70px 1fr;gap:10px;padding:9px;border:1px solid #edf0f4;border-radius:10px}.event time{font-size:10px;font-weight:900;color:#667085}.event b{font-size:11px;display:block;margin-bottom:2px}.event small{font-size:10px;color:#98a2b3;line-height:1.4}
+.timeline-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.timeline-col{background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px}.timeline-col h3{margin:0 0 10px;font-size:13px}
+.progress{height:10px;background:#f2f4f7;border-radius:999px;overflow:hidden;margin:10px 0 5px}.progress div{height:100%;background:linear-gradient(90deg,#12b76a,#f79009,#f04438);border-radius:999px;transition:.2s}
+.big-num{font-size:30px;font-weight:950;letter-spacing:-.04em}.stat-note{font-size:10px;color:var(--muted)}
+.table-wrap{overflow:auto;border:1px solid var(--line);border-radius:13px}.table{width:100%;border-collapse:collapse;background:#fff;min-width:760px}.table th,.table td{text-align:left;padding:10px 11px;border-bottom:1px solid #eef1f5;font-size:10px}.table th{background:#f8fafc;color:#667085;font-weight:900}.table td{color:#344054}.table tr:last-child td{border-bottom:0}
+.audit{display:grid;gap:7px}.audit-item{display:grid;grid-template-columns:95px 145px 1fr;gap:10px;padding:10px;border-bottom:1px solid #f0f2f5;font-size:10px}.audit-item time{color:#98a2b3}.audit-item b{font-size:10px}.audit-item span{color:#667085}
+.empty{padding:32px;text-align:center;color:#98a2b3;font-size:11px;border:1px dashed var(--line);border-radius:13px;background:#fafbfc}
+.code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10px;color:#475467}
+.toast{position:fixed;right:24px;bottom:24px;background:#101828;color:#fff;border-radius:11px;padding:12px 15px;font-size:11px;box-shadow:var(--shadow);display:none;z-index:20;max-width:360px}.toast.show{display:block}.toast.error{background:#7a271a}
+@media(max-width:1100px){.app{grid-template-columns:185px 1fr}.g4{grid-template-columns:repeat(2,1fr)}.g3{grid-template-columns:1fr 1fr}.form{grid-template-columns:1fr 1fr 1fr}}
+@media(max-width:760px){.app{display:block}.sidebar{position:relative;height:auto}.sidebar-foot{display:none}.nav{grid-template-columns:repeat(3,1fr)}.content{padding:18px 14px 48px}.topbar{position:relative;padding:0 14px}.g4,.g3,.g2,.timeline-grid,.form{grid-template-columns:1fr}.hero h2{font-size:29px}.audit-item{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
-<div class="wrap">
-  <header class="topbar">
-    <div class="brand"><b>Pickup</b> Pact</div>
-    <div class="health" id="health">● 백엔드 확인 중</div>
-  </header>
-
-  <section class="hero">
-    <div class="badge">패스오더 직무를 겨냥한 스마트오더 백엔드 장애 복구 데모</div>
-    <h1>고객은 주문을 취소했는데,<br>점주 정산과 포인트가 남았다면?</h1>
-    <p>
-      Pickup Pact는 카페 주문 화면을 다시 만드는 프로젝트가 아닙니다.
-      <strong>주문·결제·정산·적립 서비스가 분리된 환경에서 메시지가 늦거나 중복될 때 서로 다른 상태를 다시 맞추는 백엔드</strong>입니다.
-    </p>
-    <div class="hero-flow">
-      <span>고객 취소</span><i>→</i><span>메시지 지연/중복</span><i>→</i><span>정산·적립 오류</span><i>→</i><span>원인 판정</span><i>→</i><span>보상/상태 복구</span>
+<div class="app">
+  <aside class="sidebar">
+    <div class="logo"><b>Pickup</b> Pact</div>
+    <div class="side-caption">OPERATIONS SANDBOX</div>
+    <div class="nav">
+      <button class="active" data-page="overview">개요</button>
+      <button data-page="orders">주문 흐름</button>
+      <button data-page="capacity">매장 처리량</button>
+      <button data-page="faults">장애 주입</button>
+      <button data-page="reconcile">정합성 복구</button>
+      <button data-page="ledger">정산 · 감사</button>
     </div>
-  </section>
-
-  <section class="section">
-    <div class="section-head">
-      <h2>장애 상황 선택</h2>
-      <p>대표 시나리오는 “취소 메시지 지연”입니다.</p>
+    <div class="sidebar-foot">
+      합성 데이터 전용 포트폴리오 샌드박스<br>
+      실제 결제·실제 점주 계정과 연결되지 않습니다.
     </div>
-    <div class="scenario-tabs" id="tabs"></div>
+  </aside>
 
-    <div class="workspace">
-      <article class="card">
-        <div class="card-title"><h3>고객 주문</h3><span class="micro">ORDER</span></div>
-        <div class="order-id" id="orderId">-</div>
-        <div class="order-main" id="orderItems">-</div>
-        <div class="store" id="orderStore">-</div>
-        <div class="kv">
-          <div class="kv-row"><span>결제 금액</span><b id="orderTotal">-</b></div>
-          <div class="kv-row"><span>픽업 시간</span><b id="orderPickup">-</b></div>
-          <div class="kv-row"><span>고객 행동</span><b id="orderAction">-</b></div>
-        </div>
-        <div class="status-row" id="orderStatus"></div>
-      </article>
-
-      <article class="card">
-        <div class="card-title"><h3>누가 영향을 받나</h3><span class="micro">BUSINESS IMPACT</span></div>
-        <div class="impact">
-          <div class="impact-item"><b>고객</b><span id="impactCustomer">-</span></div>
-          <div class="impact-item"><b>점주</b><span id="impactMerchant">-</span></div>
-          <div class="impact-item"><b>서비스</b><span id="impactService">-</span></div>
-        </div>
-      </article>
-
-      <article class="card issue">
-        <div class="card-title"><h3>지금 무슨 문제가 생겼나</h3><span class="micro">INCIDENT</span></div>
-        <div class="issue-title" id="issueTitle">-</div>
-        <p id="issueText">-</p>
-        <div class="clock" id="receivedPreview"></div>
-      </article>
-
-      <div class="action-card">
-        <div class="action-copy">
-          <b>이 상태를 백엔드가 어떻게 판정하는지 실행합니다.</b>
-          <span>실제 프로젝트의 <code>services/reconciler/app/engine.py</code>를 호출해 이상과 복구 계획을 계산합니다.</span>
-        </div>
-        <button class="run" id="run">장애 감지 및 복구 계획 계산</button>
+  <main class="main">
+    <header class="topbar">
+      <h1 id="pageTitle">개요</h1>
+      <div class="top-actions">
+        <span class="health" id="health">● 백엔드 확인 중</span>
+        <button class="small-btn" onclick="newSession()">새 세션</button>
       </div>
+    </header>
 
-      <div class="result-wrap" id="results">
-        <article class="result-card bad">
-          <h3>① 감지된 이상</h3>
-          <div class="result-list" id="anomalies"></div>
-        </article>
-        <article class="result-card good">
-          <h3>② 생성된 복구 계획</h3>
-          <div class="result-list" id="repairs"></div>
-        </article>
-        <article class="state-change">
-          <div class="state-title">③ 복구 계획 적용 목표 상태</div>
-          <div class="state-row">
-            <div class="state-box" id="before">-</div>
-            <div class="arrow">→</div>
-            <div class="state-box after" id="after">-</div>
+    <div class="content">
+      <section class="page active" id="page-overview">
+        <div class="hero">
+          <div class="badge">백엔드 포트폴리오 · 스마트오더 운영 시뮬레이터</div>
+          <h2>주문이 들어오는 것보다,<br>주문 상태가 틀어졌을 때 복구하는 과정을 보여줍니다.</h2>
+          <p>
+            다른 완성형 주문 시스템의 <strong>주문 흐름·관리자 대시보드·상태 추적</strong> 구조를 참고하되,
+            Pickup Pact는 늦은 취소, Kafka 중복, 금액 충돌, 매장 처리량 감소처럼
+            <strong>실제 백엔드 정합성 장애를 직접 만들고 탐지·복구하는 기능</strong>에 초점을 둡니다.
+          </p>
+        </div>
+
+        <div class="grid g4">
+          <div class="card metric"><span>현재 주문</span><b id="mOrder">-</b><span id="mOrderSub">세션 준비 중</span></div>
+          <div class="card metric"><span>수집 이벤트</span><b id="mEvents">0</b><span>occurred / received evidence</span></div>
+          <div class="card metric"><span>현재 이상</span><b id="mAnomalies">0</b><span>deterministic detection</span></div>
+          <div class="card metric"><span>Ledger batches</span><b id="mLedger">0</b><span>append-only demo ledger</span></div>
+        </div>
+
+        <div class="section-head"><h2>빠른 장애 시나리오</h2><p>클릭하면 별도 세션 상태에 실제 이벤트를 적재합니다.</p></div>
+        <div class="grid g4">
+          <div class="card preset" onclick="loadPreset('late-cancel')"><strong>취소 메시지 52초 지연</strong><span>취소는 먼저 발생했지만 정산·포인트 뒤에 서버가 받는 상황</span></div>
+          <div class="card preset" onclick="loadPreset('duplicate')"><strong>동일 정산 2회 전달</strong><span>at-least-once 환경에서 같은 금전 이벤트가 재전달되는 상황</span></div>
+          <div class="card preset" onclick="loadPreset('capacity-drop')"><strong>매장 처리량 4 → 2</strong><span>이미 확정한 픽업 약속을 현재 제조량으로 지킬 수 없는 상황</span></div>
+          <div class="card preset" onclick="loadPreset('conflict')"><strong>같은 event_id, 다른 금액</strong><span>중복으로 버리면 안 되는 의미 충돌 상황</span></div>
+        </div>
+
+        <div class="section-head"><h2>현재 운영 상태</h2><p>고객 주문 / 매장 영향 / 장애를 한 화면에서 확인합니다.</p></div>
+        <div class="grid g3">
+          <div class="card" id="overviewOrder"></div>
+          <div class="card" id="overviewImpact"></div>
+          <div class="card" id="overviewIncident"></div>
+        </div>
+      </section>
+
+      <section class="page" id="page-orders">
+        <div class="section-head"><h2>주문 라이프사이클</h2><p>HELD → 결제 승인 → CONFIRMED → 취소까지 직접 실행합니다.</p></div>
+        <div class="card">
+          <div class="micro">CREATE ORDER</div>
+          <div class="form" style="margin-top:10px">
+            <div class="field"><label>매장</label><input id="fStore" value="패스카페 강남역점"></div>
+            <div class="field"><label>상품</label><input id="fItems" value="아메리카노 2잔"></div>
+            <div class="field"><label>금액</label><input id="fTotal" type="number" value="9000"></div>
+            <div class="field"><label>픽업 시간</label><input id="fPickup" value="12:30"></div>
+            <div class="field"><label>Capacity units</label><input id="fUnits" type="number" value="2"></div>
           </div>
-        </article>
-      </div>
-    </div>
-
-    <div class="timeline-shell" style="margin-top:14px">
-      <div class="timeline-head">
-        <h3>왜 이런 일이 생겼는지 시간 순서로 보기</h3>
-        <span>왼쪽은 서버 수신 순서 · 오른쪽은 실제 업무 발생 순서</span>
-      </div>
-      <div class="timeline-grid">
-        <div class="timeline-col">
-          <h4>서버가 받은 순서</h4>
-          <div id="receivedTimeline"></div>
+          <div class="actions" style="margin-top:12px">
+            <button class="btn danger" onclick="resetBlank()">빈 세션으로 초기화</button>
+            <button class="btn primary" onclick="createOrder()">주문 HOLD 생성</button>
+            <button class="btn" onclick="authorizePayment()">결제 승인</button>
+            <button class="btn" onclick="confirmOrder()">픽업 확정</button>
+            <button class="btn" onclick="cancelOrder(0)">즉시 취소</button>
+          </div>
         </div>
-        <div class="timeline-col">
-          <h4>실제로 발생한 순서</h4>
-          <div id="businessTimeline"></div>
+        <div class="grid g2" style="margin-top:14px">
+          <div class="card" id="orderDetail"></div>
+          <div class="card">
+            <h3>이벤트 흐름</h3>
+            <div class="event-list" id="orderEvents"></div>
+          </div>
         </div>
-      </div>
-    </div>
+      </section>
 
-    <details>
-      <summary>개발자용 상세 — 어떤 기술로 해결했는지 보기</summary>
-      <div class="tech">
-        <div><b>시간 정합성</b><br><code>received_at</code>과 <code>occurred_at</code>을 분리하고 canonical event timeline을 다시 계산합니다.</div>
-        <div><b>금전 안전성</b><br>이미 남긴 정산 기록을 삭제하지 않고 reversal event/entry로 보상합니다. 동일 ID 중복과 충돌 중복도 구분합니다.</div>
-        <div><b>실제 프로젝트 경로</b><br><code id="engine">-</code><br>evidence: <code id="evidence">-</code></div>
-      </div>
-    </details>
-  </section>
+      <section class="page" id="page-capacity">
+        <div class="section-head"><h2>매장 픽업 처리량</h2><p>확정 뒤 제조 가능량이 바뀌는 상황을 직접 만듭니다.</p></div>
+        <div class="grid g2">
+          <div class="card">
+            <div class="micro">CURRENT SLOT</div>
+            <div class="big-num" id="capacitySlot">-</div>
+            <div class="progress"><div id="capacityBar" style="width:0%"></div></div>
+            <div class="stat-note" id="capacityText">-</div>
+          </div>
+          <div class="card">
+            <h3>처리 가능량 변경</h3>
+            <div class="field"><label>available units</label><input id="capacityInput" type="number" min="0" max="100" value="2"></div>
+            <div class="actions" style="margin-top:12px">
+              <button class="btn primary" onclick="reviseCapacity()">처리량 변경 이벤트 발행</button>
+              <button class="btn" onclick="loadPreset('capacity-drop')">완성된 장애 예시 불러오기</button>
+            </div>
+          </div>
+        </div>
+        <div class="section-head"><h2>Capacity 관련 판단</h2><p>확정 수량과 변경된 available units를 비교합니다.</p></div>
+        <div class="card" id="capacityIncident"></div>
+      </section>
 
-  <section class="section">
-    <div class="section-head">
-      <h2>합성 정합성 실험</h2>
-      <p>운영 TPS 주장이 아니라 실패 모드 방지 로직 검증입니다.</p>
-    </div>
-    <div class="metrics">
-      <div class="metric"><b>1,207 → <em>0</em></b><span>중복 금전 처리</span></div>
-      <div class="metric"><b>381 → <em>0</em></b><span>늦은 취소 뒤 남은 잘못된 정산 상태</span></div>
-      <div class="metric"><b>194 → <em>0</em></b><span>픽업 슬롯 처리량 초과</span></div>
-    </div>
-  </section>
+      <section class="page" id="page-faults">
+        <div class="section-head"><h2>장애 주입 Lab</h2><p>고정된 설명이 아니라 현재 세션에 실제 장애 이벤트를 추가합니다.</p></div>
+        <div class="grid g2">
+          <div class="card">
+            <h3>늦은 취소 + 후속 금전 처리</h3>
+            <p class="muted" style="font-size:11px;line-height:1.55">취소는 지금 발생시키되 서버 도착은 52초 뒤로 기록합니다. 그 사이 정산과 포인트를 반영해 temporal disorder를 만듭니다.</p>
+            <div class="actions">
+              <button class="btn danger" onclick="injectLateCancel()">52초 지연 취소 + 정산 + 적립</button>
+            </div>
+          </div>
+          <div class="card">
+            <h3>Kafka exact redelivery</h3>
+            <p class="muted" style="font-size:11px;line-height:1.55">가장 최근 정산/적립 이벤트를 같은 event_id와 같은 payload로 다시 전달합니다.</p>
+            <div class="actions">
+              <button class="btn" onclick="redeliver(false)">동일 이벤트 재전달</button>
+            </div>
+          </div>
+          <div class="card">
+            <h3>같은 ID + 다른 금액</h3>
+            <p class="muted" style="font-size:11px;line-height:1.55">동일 event_id를 재사용하면서 금액만 바꿔 단순 중복과 의미 충돌의 차이를 확인합니다.</p>
+            <div class="field"><label>conflicting amount</label><input id="conflictAmount" type="number" value="13500"></div>
+            <div class="actions" style="margin-top:10px"><button class="btn danger" onclick="redeliver(true)">금액 충돌 주입</button></div>
+          </div>
+          <div class="card">
+            <h3>매장 capacity 급감</h3>
+            <p class="muted" style="font-size:11px;line-height:1.55">확정된 주문보다 작은 available units로 변경해 픽업 약속을 AT_RISK로 만듭니다.</p>
+            <div class="actions"><button class="btn" onclick="quickCapacityDrop()">현재 주문보다 작은 처리량 주입</button></div>
+          </div>
+        </div>
+        <div class="section-head"><h2>현재 수신 이벤트</h2><p>장애 주입 결과는 그대로 증거 타임라인에 남습니다.</p></div>
+        <div class="card"><div class="event-list" id="faultEvents"></div></div>
+      </section>
 
-  <div class="footer">
-    모든 주문·매장·결제 데이터는 합성 데이터입니다. 실제 결제사나 실제 점주 계정과 연결하지 않습니다.
-    공개 데모는 프로젝트의 실제 reconciliation engine을 사용해 시나리오를 판정합니다.
-  </div>
+      <section class="page" id="page-reconcile">
+        <div class="section-head"><h2>정합성 탐지 · 복구</h2><p>실제 services/reconciler/app/engine.py 결과를 사용합니다.</p></div>
+        <div class="actions" style="margin-bottom:12px">
+          <button class="btn dark" onclick="runReconcile()">정합성 다시 계산</button>
+          <button class="btn primary" onclick="applyRepairs()">안전한 복구 계획을 샌드박스에 적용</button>
+        </div>
+        <div class="grid g2">
+          <div class="card"><h3>감지된 이상</h3><div id="anomalyList"></div></div>
+          <div class="card"><h3>복구 계획</h3><div id="repairList"></div></div>
+        </div>
+        <div class="section-head"><h2>수신 순서 vs 실제 발생 순서</h2><p>같은 evidence packet을 두 시간축으로 비교합니다.</p></div>
+        <div class="timeline-grid">
+          <div class="timeline-col"><h3>서버가 받은 순서</h3><div id="receivedTimeline"></div></div>
+          <div class="timeline-col"><h3>실제로 발생한 순서</h3><div id="businessTimeline"></div></div>
+        </div>
+      </section>
+
+      <section class="page" id="page-ledger">
+        <div class="section-head"><h2>정산 Ledger</h2><p>삭제가 아니라 settlement/reward와 reversal을 별도 batch로 남깁니다.</p></div>
+        <div class="grid g3">
+          <div class="card metric"><span>Net settlement</span><b id="ledgerSettlement">0</b><span>KRW</span></div>
+          <div class="card metric"><span>Reward balance</span><b id="ledgerReward">0</b><span>points</span></div>
+          <div class="card metric"><span>Projection rebuilds</span><b id="projectionCount">0</b><span>demo read-model actions</span></div>
+        </div>
+        <div class="section-head"><h2>Ledger batches</h2><p>금전 이벤트와 보상 이벤트를 같은 표에서 확인합니다.</p></div>
+        <div id="ledgerTable"></div>
+        <div class="section-head"><h2>Audit trail</h2><p>데모에서 수행한 모든 조작을 시간순으로 기록합니다.</p></div>
+        <div class="card"><div class="audit" id="auditList"></div></div>
+      </section>
+    </div>
+  </main>
 </div>
+<div class="toast" id="toast"></div>
 
 <script>
-const defs=[
-  {id:"late-cancel",title:"취소 메시지 지연",sub:"취소는 먼저, 서버 도착은 나중"},
-  {id:"duplicate",title:"같은 정산 2번",sub:"Kafka 중복 전달"},
-  {id:"capacity-drop",title:"매장 처리량 감소",sub:"픽업 약속 위험"},
-  {id:"conflict",title:"같은 ID, 다른 금액",sub:"안전한 중복이 아닌 충돌"}
-];
-
-let current="late-cancel";
-let data=null;
+let sessionId=localStorage.getItem("pickupPactSession");
+let state=null;
 const $=id=>document.getElementById(id);
 
-function renderTabs(){
-  $("tabs").innerHTML=defs.map(x=>`
-    <button class="scenario-tab ${x.id===current?"active":""}" data-id="${x.id}">
-      <strong>${x.title}</strong><span>${x.sub}</span>
-    </button>`).join("");
-  document.querySelectorAll(".scenario-tab").forEach(btn=>{
-    btn.onclick=()=>{current=btn.dataset.id;renderTabs();loadScenario(false);}
-  });
+const pageNames={
+  overview:"개요",orders:"주문 흐름",capacity:"매장 처리량",
+  faults:"장애 주입",reconcile:"정합성 복구",ledger:"정산 · 감사"
+};
+
+document.querySelectorAll(".nav button").forEach(button=>{
+  button.onclick=()=>{
+    document.querySelectorAll(".nav button").forEach(x=>x.classList.remove("active"));
+    button.classList.add("active");
+    const page=button.dataset.page;
+    document.querySelectorAll(".page").forEach(x=>x.classList.remove("active"));
+    $("page-"+page).classList.add("active");
+    $("pageTitle").textContent=pageNames[page];
+  };
+});
+
+function toast(message,error=false){
+  const t=$("toast");t.textContent=message;t.className="toast show"+(error?" error":"");
+  setTimeout(()=>t.className="toast",2600);
 }
 
-function eventHtml(e, clockKey){
-  return `
-    <div class="timeline-event">
-      <time>${e[clockKey]}</time>
-      <div><b>${e.label}</b><small>${e.detail}</small></div>
-    </div>`;
+async function api(path,method="GET",body=null){
+  const options={method,headers:{"Content-Type":"application/json"}};
+  if(body!==null) options.body=JSON.stringify(body);
+  const response=await fetch(path,options);
+  const payload=await response.json().catch(()=>({}));
+  if(!response.ok) throw new Error(payload.detail||("HTTP "+response.status));
+  return payload;
 }
 
-function renderBase(){
-  $("orderId").textContent="주문 "+data.order.order_id;
-  $("orderItems").textContent=data.order.items;
-  $("orderStore").textContent=data.order.store;
-  $("orderTotal").textContent=data.order.total;
-  $("orderPickup").textContent=data.order.pickup_at;
-  $("orderAction").textContent=data.order.customer_action;
-  $("impactCustomer").textContent=data.business_impact.customer;
-  $("impactMerchant").textContent=data.business_impact.merchant;
-  $("impactService").textContent=data.business_impact.service;
-  $("issueTitle").textContent=data.title;
-  $("issueText").textContent=data.problem;
-
-  const statusClass=current==="late-cancel"||current==="conflict"?"red":current==="capacity-drop"?"amber":"gray";
-  $("orderStatus").innerHTML=`<span class="pill ${statusClass}">${data.before}</span>`;
-
-  const preview=data.received_order.slice(-3);
-  $("receivedPreview").innerHTML=preview.map(e=>`
-    <div class="clock-row"><time>${e.received_at}</time><span>${e.label} · ${e.detail}</span></div>`).join("");
-
-  $("receivedTimeline").innerHTML=data.received_order.map(e=>eventHtml(e,"received_at")).join("");
-  $("businessTimeline").innerHTML=data.business_order.map(e=>eventHtml(e,"occurred_at")).join("");
-
-  $("engine").textContent=data.engine;
-  $("evidence").textContent=(data.evidence_event_ids||[]).join(", ")||"복구 실행 전";
-  $("results").classList.remove("show");
-  $("run").textContent="장애 감지 및 복구 계획 계산";
-}
-
-function renderResults(){
-  $("anomalies").innerHTML=(data.anomalies.length?data.anomalies:[{title:"추가 이상 없음",detail:"현재 시나리오에서 별도 이상이 발견되지 않았습니다."}])
-    .map(x=>`<div class="result-item"><b>${x.title}</b>${x.detail}</div>`).join("");
-  $("repairs").innerHTML=(data.repairs.length?data.repairs:[{title:"복구 작업 없음",detail:"추가 보상 작업이 필요하지 않습니다."}])
-    .map(x=>`<div class="result-item"><b>${x.title}</b>${x.detail}</div>`).join("");
-  $("before").textContent=data.before;
-  $("after").textContent=data.after;
-  $("evidence").textContent=data.evidence_event_ids.join(", ")||"없음";
-  $("results").classList.add("show");
-}
-
-async function loadScenario(showResults){
-  const btn=$("run");
-  btn.disabled=true;
-  if(showResults) btn.textContent="실제 reconciliation engine 계산 중…";
-  try{
-    const response=await fetch("/api/scenarios/"+current,{cache:"no-store"});
-    if(!response.ok) throw new Error("HTTP "+response.status);
-    data=await response.json();
-    renderBase();
-    if(showResults){
-      renderResults();
-      btn.textContent="같은 시나리오 다시 계산";
-    }
-  }catch(error){
-    $("issueTitle").textContent="데모 백엔드 연결 실패";
-    $("issueText").textContent="공개 데모가 아직 준비되지 않았습니다.";
-    btn.textContent="다시 시도";
-  }finally{
-    btn.disabled=false;
+async function ensureSession(){
+  if(sessionId){
+    try{state=await api("/api/demo/sessions/"+sessionId);return;}
+    catch(_){localStorage.removeItem("pickupPactSession");sessionId=null;}
   }
+  const created=await api("/api/demo/sessions","POST",{});
+  sessionId=created.session_id;localStorage.setItem("pickupPactSession",sessionId);
+  state=await api("/api/demo/sessions/"+sessionId+"/presets/late-cancel","POST",{});
 }
 
-$("run").onclick=()=>loadScenario(true);
+async function newSession(){
+  localStorage.removeItem("pickupPactSession");sessionId=null;state=null;
+  await ensureSession();renderAll();toast("새 독립 데모 세션을 만들었습니다.");
+}
 
-fetch("/health")
-  .then(r=>r.json())
-  .then(body=>{
-    $("health").textContent=body.engine?"● 실제 reconciliation engine 연결":"● 데모 백엔드 정상";
-  })
-  .catch(()=>{
-    $("health").textContent="○ 백엔드 연결 실패";
-    $("health").style.color="#b91c1c";
-  });
+async function refresh(){
+  state=await api("/api/demo/sessions/"+sessionId);renderAll();
+}
 
-renderTabs();
-loadScenario(false);
+async function loadPreset(name){
+  state=await api("/api/demo/sessions/"+sessionId+"/presets/"+name,"POST",{});
+  renderAll();toast("시나리오를 불러왔습니다: "+name);
+}
+
+async function resetBlank(){
+  state=await api("/api/demo/sessions/"+sessionId+"/reset","POST",{});
+  renderAll();toast("빈 세션으로 초기화했습니다.");
+}
+
+async function createOrder(){
+  try{
+    const payload={
+      store:$("fStore").value,items:$("fItems").value,total:Number($("fTotal").value),
+      pickup_at:$("fPickup").value,units:Number($("fUnits").value)
+    };
+    const result=await api("/api/demo/sessions/"+sessionId+"/orders","POST",payload);
+    state=result.state;renderAll();toast("HELD 주문을 생성했습니다.");
+  }catch(e){toast(e.message,true)}
+}
+
+async function authorizePayment(){
+  try{
+    const result=await api("/api/demo/sessions/"+sessionId+"/payment","POST",{authorization_id:null});
+    state=result.state;renderAll();toast("결제 승인 이벤트를 기록했습니다.");
+  }catch(e){toast(e.message,true)}
+}
+
+async function confirmOrder(){
+  try{
+    const result=await api("/api/demo/sessions/"+sessionId+"/confirm","POST",{});
+    state=result.state;renderAll();toast("픽업 약속을 확정했습니다.");
+  }catch(e){toast(e.message,true)}
+}
+
+async function cancelOrder(delay){
+  try{
+    const result=await api("/api/demo/sessions/"+sessionId+"/cancel","POST",{delay_seconds:delay});
+    state=result.state;renderAll();toast(delay?"지연 취소 이벤트를 만들었습니다.":"주문을 취소했습니다.");
+  }catch(e){toast(e.message,true)}
+}
+
+async function postSettlement(){
+  const result=await api("/api/demo/sessions/"+sessionId+"/settlement","POST",{amount:null});
+  state=result.state;
+}
+async function postReward(){
+  const result=await api("/api/demo/sessions/"+sessionId+"/reward","POST",{amount:null});
+  state=result.state;
+}
+
+async function injectLateCancel(){
+  try{
+    if(!state.order){throw new Error("먼저 주문을 만들거나 preset을 불러오세요.");}
+    if(state.order.status==="HELD" && !state.order.payment_authorized) await authorizePayment();
+    state=await api("/api/demo/sessions/"+sessionId);
+    if(state.order.status==="HELD") await confirmOrder();
+    state=await api("/api/demo/sessions/"+sessionId);
+    if(state.order.status!=="CANCELLED") await cancelOrder(52);
+    await postSettlement();await postReward();await refresh();
+    toast("52초 지연 취소 + 정산 + 포인트 장애를 만들었습니다.");
+  }catch(e){toast(e.message,true)}
+}
+
+async function reviseCapacity(){
+  try{
+    const result=await api("/api/demo/sessions/"+sessionId+"/capacity","POST",{available_units:Number($("capacityInput").value)});
+    state=result.state;renderAll();toast("매장 처리량 변경 이벤트를 기록했습니다.");
+  }catch(e){toast(e.message,true)}
+}
+
+async function quickCapacityDrop(){
+  try{
+    if(!state.order) throw new Error("주문이 필요합니다.");
+    const units=Math.max(0,state.order.units-1);
+    const result=await api("/api/demo/sessions/"+sessionId+"/capacity","POST",{available_units:units});
+    state=result.state;renderAll();toast("픽업 약속보다 작은 처리량을 주입했습니다.");
+  }catch(e){toast(e.message,true)}
+}
+
+async function redeliver(conflict){
+  try{
+    const body={conflicting_amount:conflict?Number($("conflictAmount").value):null};
+    const result=await api("/api/demo/sessions/"+sessionId+"/redelivery","POST",body);
+    state=result.state;renderAll();toast(conflict?"금액 충돌 이벤트를 주입했습니다.":"동일 이벤트를 재전달했습니다.");
+  }catch(e){toast(e.message,true)}
+}
+
+async function runReconcile(){
+  try{
+    const result=await api("/api/demo/sessions/"+sessionId+"/reconcile","POST",{});
+    state=result.state;renderAll();toast("정합성 계산을 다시 실행했습니다.");
+  }catch(e){toast(e.message,true)}
+}
+
+async function applyRepairs(){
+  try{
+    const result=await api("/api/demo/sessions/"+sessionId+"/repairs/apply","POST",{});
+    state=result.state;renderAll();
+    toast(result.applied.length?"샌드박스 복구 계획을 적용했습니다: "+result.applied.join(", "):"새로 적용할 복구가 없습니다.");
+  }catch(e){toast(e.message,true)}
+}
+
+function money(v){return Number(v||0).toLocaleString("ko-KR")}
+function pill(status){
+  const cls=status==="CONFIRMED"?"green":status==="CANCELLED"?"red":status==="AT_RISK"?"amber":"gray";
+  return '<span class="pill '+cls+'">'+status+'</span>';
+}
+function eventRows(events,timeKey){
+  if(!events||!events.length)return '<div class="empty">이벤트가 없습니다.</div>';
+  return events.map(e=>'<div class="event"><time>'+e[timeKey].slice(11,19)+'</time><div><b>'+e.event_type+'</b><small>'+(e.detail||"")+'<br><span class="code">'+e.event_id+'</span></small></div></div>').join("");
+}
+function anomalyHtml(){
+  const items=state.reconciliation.anomalies||[];
+  if(!items.length)return '<div class="alert green"><b>현재 탐지된 정합성 이상이 없습니다.</b></div>';
+  return items.map(x=>'<div class="alert red"><b>'+x.title+'</b><br>'+x.detail+'<br><span class="code">'+x.code+'</span></div>').join("");
+}
+function repairHtml(){
+  const items=state.reconciliation.repairs||[];
+  if(!items.length)return '<div class="alert green"><b>현재 필요한 복구 계획이 없습니다.</b></div>';
+  return items.map(x=>'<div class="alert '+(x.applied?"green":"amber")+'"><b>'+x.title+(x.applied?" · 적용됨":"")+'</b><br>'+x.detail+'<br><span class="code">'+x.code+'</span></div>').join("");
+}
+
+function renderOrderCard(target){
+  const el=$(target);
+  if(!state.order){el.innerHTML='<h3>현재 주문</h3><div class="empty">주문이 없습니다. 주문 흐름에서 새 주문을 만들어보세요.</div>';return;}
+  const o=state.order;
+  el.innerHTML='<div class="micro">CURRENT ORDER</div><div class="order-title">'+o.items+'</div><div class="muted" style="font-size:11px">'+o.order_id+' · '+o.store+'</div>'+
+    '<div class="kv"><div class="kv-row"><span>결제 금액</span><b>'+money(o.total)+'원</b></div><div class="kv-row"><span>픽업</span><b>'+o.pickup_at+'</b></div><div class="kv-row"><span>capacity</span><b>'+o.units+' units</b></div></div>'+
+    '<div class="pills">'+pill(o.status)+(o.payment_authorized?'<span class="pill blue">PAYMENT AUTH</span>':'<span class="pill gray">UNPAID</span>')+(o.settled?'<span class="pill amber">SETTLED</span>':'')+(o.rewarded?'<span class="pill amber">REWARDED</span>':'')+'</div>';
+}
+
+function renderAll(){
+  if(!state)return;
+  $("mOrder").textContent=state.order?state.order.status:"-";
+  $("mOrderSub").textContent=state.order?state.order.order_id:"주문 없음";
+  $("mEvents").textContent=state.metrics.event_count;
+  $("mAnomalies").textContent=state.metrics.anomaly_count;
+  $("mLedger").textContent=state.metrics.ledger_batch_count;
+
+  renderOrderCard("overviewOrder");renderOrderCard("orderDetail");
+
+  $("overviewImpact").innerHTML='<h3>현재 영향</h3>'+(
+    state.reconciliation.anomalies.length?
+    '<div class="alert red"><b>'+state.reconciliation.anomalies.length+'개의 이상 감지</b><br>정합성 복구 탭에서 근거와 복구 계획을 확인하세요.</div>':
+    '<div class="alert green"><b>현재 치명적인 정합성 이상 없음</b><br>장애 주입 탭에서 failure mode를 직접 만들 수 있습니다.</div>'
+  )+'<div class="kv"><div class="kv-row"><span>Net settlement</span><b>'+money(state.metrics.net_settlement)+'원</b></div><div class="kv-row"><span>Reward balance</span><b>'+money(state.metrics.reward_balance)+'P</b></div></div>';
+
+  $("overviewIncident").innerHTML='<h3>복구 엔진</h3>'+anomalyHtml()+'<div class="actions"><button class="btn dark" onclick="goPage(\'reconcile\')">정합성 분석 열기</button></div>';
+
+  $("orderEvents").innerHTML=eventRows(state.received_order,"received_at");
+  $("faultEvents").innerHTML=eventRows(state.received_order,"received_at");
+
+  const c=state.capacity;
+  $("capacitySlot").textContent=c.slot+" 슬롯";
+  const denom=Math.max(1,c.available_units);
+  const pct=Math.min(100,Math.round(c.reserved_units/denom*100));
+  $("capacityBar").style.width=pct+"%";
+  $("capacityText").textContent="reserved "+c.reserved_units+" / available "+c.available_units+" units · revision "+c.revision;
+  $("capacityIncident").innerHTML=anomalyHtml();
+
+  $("anomalyList").innerHTML=anomalyHtml();
+  $("repairList").innerHTML=repairHtml();
+  $("receivedTimeline").innerHTML=eventRows(state.received_order,"received_at");
+  $("businessTimeline").innerHTML=eventRows(state.business_order,"occurred_at");
+
+  $("ledgerSettlement").textContent=money(state.metrics.net_settlement);
+  $("ledgerReward").textContent=money(state.metrics.reward_balance);
+  $("projectionCount").textContent=state.projection_rebuilds;
+
+  if(!state.ledger_batches.length){
+    $("ledgerTable").innerHTML='<div class="empty">Ledger batch가 없습니다.</div>';
+  }else{
+    $("ledgerTable").innerHTML='<div class="table-wrap"><table class="table"><thead><tr><th>TYPE</th><th>AMOUNT</th><th>DEBIT</th><th>CREDIT</th><th>SOURCE EVENT</th><th>TIME</th></tr></thead><tbody>'+
+      state.ledger_batches.map(x=>'<tr><td><b>'+x.posting_type+'</b></td><td>'+money(x.amount)+' '+x.currency+'</td><td>'+x.debit_account+'</td><td>'+x.credit_account+'</td><td class="code">'+x.source_event_id+'</td><td>'+x.created_at.slice(11,19)+'</td></tr>').join("")+
+      '</tbody></table></div>';
+  }
+  $("auditList").innerHTML=state.audit.length?state.audit.map(x=>'<div class="audit-item"><time>'+x.at.slice(11,19)+'</time><b>'+x.action+'</b><span>'+x.detail+'</span></div>').join(""):'<div class="empty">Audit 기록이 없습니다.</div>';
+}
+
+function goPage(page){
+  const button=document.querySelector('.nav button[data-page="'+page+'"]');
+  if(button)button.click();
+}
+
+fetch("/health").then(r=>r.json()).then(body=>{
+  $("health").textContent=body.engine?"● 실제 reconciliation engine 연결":"● 백엔드 정상";
+}).catch(()=>{$("health").textContent="○ 백엔드 연결 실패";$("health").style.background="#fef3f2";$("health").style.color="#b42318"});
+
+ensureSession().then(()=>renderAll()).catch(e=>toast(e.message,true));
 </script>
 </body>
 </html>
