@@ -115,21 +115,20 @@ assert "CELERY_BROKER_URL=" not in env_example
 demo_doc = (ROOT / "docs/demo.md").read_text()
 demo_index = (ROOT / "demo/index.html").read_text()
 demo_verification = (ROOT / "demo/VERIFICATION.md").read_text()
-assert "session-isolated smart-order recovery sandbox" in demo_doc
-assert "Product recovery experience" in demo_doc
+assert "session-isolated smart-order customer demo" in demo_doc
+assert "Customer smart-order experience" in demo_doc
 assert "Technical detail layer" in demo_doc
 assert "REVERSE_SETTLEMENT" in demo_doc and "REVERSE_REWARD" in demo_doc
 for marker in [
-    "주문 보호 기능이 켜져 있습니다",
-    "취소된 주문의",
-    "복구 시나리오 체험하기",
-    "ORDER RECOVERY CENTER",
-    "잘못된 처리 되돌리기",
-    "개발자 구현 보기",
-    "개발자 화면 열기",
-    "정산 0원 · 포인트 0P",
+    "커피, 미리 주문해요.",
+    "근처 매장",
+    "장바구니 보기",
+    "내 주문",
+    "체험 손님",
+    "주문 취소",
+    "제품 화면으로 돌아가기",
 ]:
-    assert marker in demo_index, f"product demo marker missing: {marker}"
+    assert marker in demo_index, f"customer demo marker missing: {marker}"
 for marker in [
     "ui-e2e",
     "live-demo-smoke",
