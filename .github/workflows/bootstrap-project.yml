@@ -1,0 +1,45 @@
+name: bootstrap-project
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'bootstrap/READY'
+
+permissions:
+  contents: write
+
+jobs:
+  unpack:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Reconstruct project archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat bootstrap/pickup.part.* | base64 --decode > /tmp/pickup-pact.zip
+          python - <<'PY'
+          from pathlib import Path
+          import zipfile
+          archive = Path('/tmp/pickup-pact.zip')
+          with zipfile.ZipFile(archive) as zf:
+              zf.extractall('.')
+          PY
+          rm -rf bootstrap
+          rm -f .github/workflows/bootstrap-project.yml
+
+      - name: Commit complete project
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet && exit 0
+          git commit -m "feat: publish complete Pickup Pact backend and demo"
+          git push origin HEAD:main
