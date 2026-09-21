@@ -9,6 +9,7 @@ from fastapi.responses import HTMLResponse
 
 from services.reconciler.app.engine import reconcile as core_reconcile
 from services.reconciler.app.models import EventEnvelope, ReconcileRequest
+from demo.sandbox import demo_store
 
 app = FastAPI(
     title="Pickup Pact Demo",
@@ -456,6 +457,161 @@ def run_scenario(scenario_id: str) -> dict[str, Any]:
         "engine": "services/reconciler/app/engine.py",
         "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
     }
+
+
+class DemoOrderCreate(BaseModel):
+    store: str = Field(min_length=1, max_length=80)
+    items: str = Field(min_length=1, max_length=160)
+    total: int = Field(gt=0, le=1_000_000)
+    pickup_at: str = Field(pattern=r"^\\d{2}:\\d{2}$")
+    units: int = Field(ge=1, le=50)
+
+
+class PaymentRequest(BaseModel):
+    authorization_id: str | None = Field(default=None, max_length=80)
+
+
+class CancelRequest(BaseModel):
+    delay_seconds: int = Field(default=0, ge=0, le=600)
+
+
+class AmountRequest(BaseModel):
+    amount: int | None = Field(default=None, gt=0, le=1_000_000)
+
+
+class CapacityRequest(BaseModel):
+    available_units: int = Field(ge=0, le=100)
+
+
+class RedeliveryRequest(BaseModel):
+    conflicting_amount: int | None = Field(default=None, gt=0, le=1_000_000)
+
+
+def _demo_error(exc: Exception) -> HTTPException:
+    if isinstance(exc, KeyError):
+        return HTTPException(status_code=404, detail="demo session not found")
+    return HTTPException(status_code=409, detail=str(exc))
+
+
+@app.post("/api/demo/sessions")
+def create_demo_session() -> dict[str, Any]:
+    return demo_store.create_session()
+
+
+@app.get("/api/demo/sessions/{session_id}")
+def get_demo_session(session_id: str) -> dict[str, Any]:
+    try:
+        return demo_store.snapshot(session_id)
+    except (KeyError, ValueError) as exc:
+        raise _demo_error(exc) from exc
+
+
+@app.post("/api/demo/sessions/{session_id}/reset")
+def reset_demo_session(session_id: str) -> dict[str, Any]:
+    try:
+        return demo_store.reset(session_id)
+    except (KeyError, ValueError) as exc:
+        raise _demo_error(exc) from exc
+
+
+@app.post("/api/demo/sessions/{session_id}/presets/{scenario_id}")
+def load_demo_preset(session_id: str, scenario_id: str) -> dict[str, Any]:
+    if scenario_id not in SCENARIOS:
+        raise HTTPException(status_code=404, detail="unknown preset")
+    try:
+        return demo_store.seed_from_scenario(session_id, scenario_id, SCENARIOS[scenario_id])
+    except (KeyError, ValueError) as exc:
+        raise _demo_error(exc) from exc
+
+
+@app.post("/api/demo/sessions/{session_id}/orders")
+def create_demo_order(session_id: str, request: DemoOrderCreate) -> dict[str, Any]:
+    try:
+        return demo_store.create_order(
+            session_id,
+            store=request.store,
+            items=request.items,
+            total=request.total,
+            pickup_at=request.pickup_at,
+            units=request.units,
+        )
+    except (KeyError, ValueError) as exc:
+        raise _demo_error(exc) from exc
+
+
+@app.post("/api/demo/sessions/{session_id}/payment")
+def authorize_demo_payment(session_id: str, request: PaymentRequest) -> dict[str, Any]:
+    try:
+        return demo_store.authorize_payment(session_id, request.authorization_id)
+    except (KeyError, ValueError) as exc:
+        raise _demo_error(exc) from exc
+
+
+@app.post("/api/demo/sessions/{session_id}/confirm")
+def confirm_demo_order(session_id: str) -> dict[str, Any]:
+    try:
+        return demo_store.confirm(session_id)
+    except (KeyError, ValueError) as exc:
+        raise _demo_error(exc) from exc
+
+
+@app.post("/api/demo/sessions/{session_id}/cancel")
+def cancel_demo_order(session_id: str, request: CancelRequest) -> dict[str, Any]:
+    try:
+        return demo_store.cancel(session_id, request.delay_seconds)
+    except (KeyError, ValueError) as exc:
+        raise _demo_error(exc) from exc
+
+
+@app.post("/api/demo/sessions/{session_id}/settlement")
+def settle_demo_order(session_id: str, request: AmountRequest) -> dict[str, Any]:
+    try:
+        return demo_store.settle(session_id, request.amount)
+    except (KeyError, ValueError) as exc:
+        raise _demo_error(exc) from exc
+
+
+@app.post("/api/demo/sessions/{session_id}/reward")
+def reward_demo_order(session_id: str, request: AmountRequest) -> dict[str, Any]:
+    try:
+        return demo_store.reward(session_id, request.amount)
+    except (KeyError, ValueError) as exc:
+        raise _demo_error(exc) from exc
+
+
+@app.post("/api/demo/sessions/{session_id}/capacity")
+def revise_demo_capacity(session_id: str, request: CapacityRequest) -> dict[str, Any]:
+    try:
+        return demo_store.revise_capacity(session_id, request.available_units)
+    except (KeyError, ValueError) as exc:
+        raise _demo_error(exc) from exc
+
+
+@app.post("/api/demo/sessions/{session_id}/redelivery")
+def redeliver_demo_event(session_id: str, request: RedeliveryRequest) -> dict[str, Any]:
+    try:
+        return demo_store.redeliver_last_financial(
+            session_id,
+            conflicting_amount=request.conflicting_amount,
+        )
+    except (KeyError, ValueError) as exc:
+        raise _demo_error(exc) from exc
+
+
+@app.post("/api/demo/sessions/{session_id}/reconcile")
+def reconcile_demo_session(session_id: str) -> dict[str, Any]:
+    try:
+        return demo_store.reconcile(session_id)
+    except (KeyError, ValueError) as exc:
+        raise _demo_error(exc) from exc
+
+
+@app.post("/api/demo/sessions/{session_id}/repairs/apply")
+def apply_demo_repairs(session_id: str) -> dict[str, Any]:
+    try:
+        return demo_store.apply_repairs(session_id)
+    except (KeyError, ValueError) as exc:
+        raise _demo_error(exc) from exc
 
 
 @app.get("/", response_class=HTMLResponse)
