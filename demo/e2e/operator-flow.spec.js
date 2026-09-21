@@ -108,6 +108,27 @@ test('capacity and conflict labs expose distinct operator outcomes', async ({ pa
   await expect(page.locator('#repairList')).toContainText('자동 처리 중단');
 });
 
+
+
+test('first action waits for a slow session bootstrap instead of racing a null session', async ({ page }) => {
+  let delayed = false;
+  await page.route('**/api/demo/sessions', async route => {
+    if (!delayed && route.request().method() === 'POST') {
+      delayed = true;
+      await new Promise(resolve => setTimeout(resolve, 1500));
+    }
+    await route.continue();
+  });
+
+  await page.goto('/');
+  await page.getByRole('button', { name: '3분 데모 시작', exact: true }).click();
+  await page.getByRole('button', { name: '1. 정상 주문 만들기', exact: true }).click();
+
+  await expect(page.locator('#guideOrder')).toContainText('아메리카노 2잔');
+  await expect(page.locator('#guideOrder')).toContainText('픽업 확정');
+  await expect(page.locator('body')).toHaveAttribute('aria-busy', 'false');
+});
+
 test('guided quick start remains usable on a narrow mobile viewport', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
