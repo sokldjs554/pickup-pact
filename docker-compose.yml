@@ -13,12 +13,15 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
+
   redis:
     image: redis:7-alpine
     ports: ["6379:6379"]
+
   mongo:
     image: mongo:7
     ports: ["27017:27017"]
+
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.17.0
     environment:
@@ -26,6 +29,7 @@ services:
       xpack.security.enabled: "false"
       ES_JAVA_OPTS: "-Xms512m -Xmx512m"
     ports: ["9200:9200"]
+
   kafka:
     image: bitnami/kafka:3.8
     environment:
@@ -37,6 +41,7 @@ services:
       KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
       KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE: "true"
     ports: ["9092:9092"]
+
   commitment:
     build: ./services/commitment-service
     environment:
@@ -47,7 +52,11 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-pickuppact}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pickuppact}
     ports: ["8080:8080"]
-    depends_on: [postgres, redis, kafka]
+    depends_on:
+      - postgres
+      - redis
+      - kafka
+
   ledger:
     build: ./services/ledger-service
     environment:
@@ -56,20 +65,47 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-pickuppact}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pickuppact}
     ports: ["8081:8081"]
-    depends_on: [postgres, kafka]
+    depends_on:
+      - postgres
+      - kafka
+
   reconciler:
     build: ./services/reconciler
     environment:
+      PERSIST_RECONCILIATION: "true"
       POSTGRES_DSN: postgresql://pickuppact:pickuppact@postgres:5432/pickuppact
-      MONGO_URL: mongodb://mongo:27017
+      MONGODB_URL: mongodb://mongo:27017/pickup_pact
       ELASTICSEARCH_URL: http://elasticsearch:9200
-      CELERY_BROKER_URL: redis://redis:6379/0
+      REDIS_URL: redis://redis:6379/0
     ports: ["8000:8000"]
-    depends_on: [postgres, mongo, elasticsearch, redis]
+    depends_on:
+      - postgres
+      - mongo
+      - elasticsearch
+      - redis
+
   replay-worker:
     build: ./services/reconciler
     command: celery -A app.tasks.celery_app worker --loglevel=INFO
     environment:
-      CELERY_BROKER_URL: redis://redis:6379/0
-      CELERY_RESULT_BACKEND: redis://redis:6379/1
-    depends_on: [redis]
+      REDIS_URL: redis://redis:6379/0
+      PERSIST_RECONCILIATION: "true"
+      POSTGRES_DSN: postgresql://pickuppact:pickuppact@postgres:5432/pickuppact
+      MONGODB_URL: mongodb://mongo:27017/pickup_pact
+      ELASTICSEARCH_URL: http://elasticsearch:9200
+    depends_on:
+      - postgres
+      - mongo
+      - elasticsearch
+      - redis
+
+  ops-console:
+    build: ./services/ops-console
+    environment:
+      RECONCILER_URL: http://reconciler:8000
+      BENCHMARK_PATH: /artifacts/consistency-benchmark.json
+    volumes:
+      - ./artifacts:/artifacts:ro
+    ports: ["5000:5000"]
+    depends_on:
+      - reconciler
