@@ -48,6 +48,8 @@ class CommitmentService(
             }
     }
 
+    fun get(id: UUID): Mono<PickupCommitment> = repository.find(id)
+
     fun authorizePayment(id: UUID, authorizationId: String): Mono<PickupCommitment> =
         repository.find(id)
             .map { it.authorizePayment() }

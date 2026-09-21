@@ -29,6 +29,9 @@ class CommitmentController(private val service: CommitmentService) {
     fun hold(@Valid @RequestBody request: HoldRequest): Mono<PickupCommitment> =
         service.hold(HoldCommand(request.storeId, request.pickupAt, request.units))
 
+    @GetMapping("/{id}")
+    fun get(@PathVariable id: UUID): Mono<PickupCommitment> = service.get(id)
+
     @PostMapping("/{id}/authorize-payment")
     fun authorizePayment(
         @PathVariable id: UUID,

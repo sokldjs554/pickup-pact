@@ -24,6 +24,15 @@ paths:
         "400": {description: Invalid request}
         "409": {description: Capacity or state conflict}
 
+  /api/v1/commitments/{id}:
+    get:
+      summary: Read the current pickup commitment state
+      parameters:
+        - $ref: "#/components/parameters/CommitmentId"
+      responses:
+        "200": {description: Current commitment}
+        "404": {description: Commitment not found}
+
   /api/v1/commitments/{id}/authorize-payment:
     post:
       summary: Attach a payment-provider authorization result to a held commitment
@@ -79,6 +88,30 @@ paths:
           description: Exact redelivery recognized as a no-op
         "409":
           description: Same event ID reused with conflicting financial meaning
+
+  /api/v1/ledger/orders/{aggregateId}:
+    get:
+      summary: Read append-only financial posting history for one order
+      parameters:
+        - in: path
+          name: aggregateId
+          required: true
+          schema: {type: string, minLength: 1}
+        - in: query
+          name: limit
+          schema: {type: integer, minimum: 1, maximum: 100, default: 50}
+      responses:
+        "200": {description: Ledger batch history}
+
+  /api/v1/ledger/conflicts:
+    get:
+      summary: Read quarantined reused-event-ID conflicts
+      parameters:
+        - in: query
+          name: limit
+          schema: {type: integer, minimum: 1, maximum: 100, default: 50}
+      responses:
+        "200": {description: Quarantined conflict evidence}
 
   /api/v1/reconcile:
     post:

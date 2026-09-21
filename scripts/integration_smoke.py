@@ -80,6 +80,16 @@ def commitment_flow(pass_no: int) -> None:
     )
     assert confirmed["state"] == "CONFIRMED", confirmed
 
+    tracked = expect(
+        httpx.get(
+            f"{COMMITMENT}/api/v1/commitments/{commitment_id}",
+            timeout=15,
+        ),
+        200,
+    )
+    assert tracked["id"] == commitment_id, tracked
+    assert tracked["state"] == "CONFIRMED", tracked
+
     cancelled = expect(
         httpx.post(
             f"{COMMITMENT}/api/v1/commitments/{commitment_id}/cancel",
@@ -120,6 +130,26 @@ def ledger_flow(pass_no: int) -> None:
         409,
     )
     assert conflicting["result"] == "CONFLICTING_EVENT_ID", conflicting
+
+    history = expect(
+        httpx.get(
+            f"{LEDGER}/api/v1/ledger/orders/{payload['aggregateId']}?limit=10",
+            timeout=15,
+        ),
+        200,
+    )
+    assert len(history) == 1, history
+    assert history[0]["eventId"] == event_id, history
+
+    conflicts = expect(
+        httpx.get(f"{LEDGER}/api/v1/ledger/conflicts?limit=20", timeout=15),
+        200,
+    )
+    assert any(
+        item["eventId"] == event_id
+        and item["incomingFingerprint"] != item["existingFingerprint"]
+        for item in conflicts
+    ), conflicts
 
 
 def late_cancel_packet(pass_no: int) -> tuple[str, dict]:
