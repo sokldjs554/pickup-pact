@@ -13,48 +13,37 @@ Pickup Pact는 서버가 받은 순서만 믿지 않고 `occurred_at`과 `receiv
 
 이 주제를 선택한 이유는 주문/결제/정산/적립 같은 비즈니스 로직, Kafka 기반 비동기 처리, CQRS, Redis, 분산 트랜잭션과 데이터 정합성, 장애 추적이라는 페이타랩 백엔드 공고의 핵심 문제와 직접 연결되면서도 흔한 주문 CRUD/음식배달 MSA 클론과 다른 문제를 보여주기 위해서입니다.
 
-## 면접관용 데모
+## 공개 데모: 쉬운 체험과 기술 상세를 분리
 
-공개 데모는 더 이상 네 개의 고정 시나리오만 보여주는 화면이 아닙니다. **한 세션 안에서 주문을 만들고, 결제를 승인하고, 픽업을 확정하고, 장애를 직접 주입하고, 정합성 엔진으로 원인을 분석한 뒤, 보상 계획을 샌드박스에 적용하는 운영 콘솔**입니다.
+공개 데모는 첫 방문자가 백엔드 용어를 몰라도 **무슨 문제를 해결하는 서비스인지 먼저 이해하고 직접 체험**할 수 있도록 두 층으로 구성했습니다.
 
-### 실제로 조작할 수 있는 기능
+### 3분 체험
 
-1. **개요 Dashboard**
-   - 현재 주문 상태, 이벤트 수, 탐지된 이상 수, ledger batch 수
-   - 늦은 취소 / Kafka 중복 / capacity 감소 / event-id 금액 충돌 preset
-2. **주문 흐름**
-   - 새 HOLD 주문 생성
-   - 별도 payment authorization
-   - pickup confirmation
-   - 정상 cancellation
-3. **매장 처리량**
-   - 현재 slot의 reserved / available units 확인
-   - capacity revision 이벤트 발행
-   - 확정 주문을 `AT_RISK`로 만드는 상황 재현
-4. **장애 주입 Lab**
-   - 52초 늦게 도착하는 취소
-   - exact Kafka redelivery
-   - 같은 `event_id` + 다른 금액
-   - 픽업 약속보다 작은 매장 처리량
-5. **정합성 복구**
-   - 실제 `services/reconciler/app/engine.py` 호출
-   - 서버 수신 순서와 실제 업무 발생 순서 비교
-   - anomaly / evidence / deterministic repair proposal 확인
-   - 안전한 repair plan을 **데모 샌드박스에만** 적용
-6. **정산 · 감사**
-   - settlement / reward / reversal ledger batch
-   - net settlement / reward balance
-   - projection rebuild 횟수
-   - operator audit trail
+첫 화면은 빈 세션에서 시작합니다. `3분 데모 시작`을 누르면 다음 네 단계만 따라가면 됩니다.
 
-각 브라우저는 독립적인 demo session을 사용해 다른 방문자의 상태와 섞이지 않습니다.
+1. **정상 주문 만들기** — 9,000원 주문의 결제와 12:30 픽업 약속을 정상 확정합니다.
+2. **문제 발생시키기** — 고객 취소 메시지를 52초 늦게 도착시키고, 그 사이 점주 정산 9,000원과 고객 포인트 90P가 반영되는 상황을 만듭니다.
+3. **문제 확인하기** — 실제 발생 순서를 기준으로 잘못된 정산과 포인트를 탐지합니다.
+4. **안전하게 복구하기** — 원본 기록을 삭제하지 않고 반대 분개와 포인트 회수 기록을 추가합니다.
 
-대표 흐름은 다음과 같습니다.
+사용자는 최종적으로 **복구 전 `정산 +9,000원 · 포인트 +90P` → 복구 후 `정산 0원 · 포인트 0P`**를 바로 비교할 수 있습니다. 기술 코드와 인프라 설명은 기본 흐름에서 앞세우지 않습니다.
+
+### 기술 상세
+
+백엔드 면접관이나 개발자는 같은 세션에서 아래 운영 도구로 더 깊게 들어갈 수 있습니다.
+
+- **주문 흐름**: HOLD 주문, 결제 승인, 픽업 확정, 취소, 정상 정산/적립
+- **매장 처리량**: reserved/available units, capacity revision, `AT_RISK`
+- **장애 주입**: 52초 지연 취소, exact Kafka redelivery, 동일 `event_id` 금액 충돌, 처리량 감소
+- **정합성 복구**: 실제 `services/reconciler/app/engine.py`, receive-time vs business-time, anomaly/evidence/repair proposal
+- **정산 · 감사**: settlement/reward/reversal ledger, net balance, projection rebuild, audit trail
+
+각 브라우저는 독립적인 demo session을 사용해 다른 방문자의 상태와 섞이지 않습니다. 공개 Render 인스턴스는 리뷰 편의를 위해 FastAPI + session-isolated in-memory sandbox로 동작합니다. Kafka/PostgreSQL/Redis/MongoDB/Elasticsearch 전체 topology가 공개 인스턴스에서 함께 실행된다고 주장하지 않습니다.
+
+대표 기술 흐름은 다음과 같습니다.
 
 ```text
-HOLD 주문 생성
-  → 결제 승인
-  → 픽업 확정
+정상 주문 확정
   → 취소 메시지 52초 지연
   → 그 사이 점주 정산 + 포인트 적립
   → reconciliation
@@ -62,8 +51,6 @@ HOLD 주문 생성
   → 샌드박스에 보상 계획 적용
   → net settlement 0 / reward balance 0
 ```
-
-공개 Render 인스턴스는 리뷰 편의를 위해 FastAPI + session-isolated in-memory sandbox로 동작합니다. Kafka/PostgreSQL/Redis/MongoDB/Elasticsearch 전체 topology가 공개 인스턴스에서 함께 실행된다고 주장하지 않습니다. 실제 분산 서비스 구현과 계약, Compose/Kubernetes/Terraform은 저장소의 별도 서비스 경로에 있습니다.
 
 로컬 실행:
 
