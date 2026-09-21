@@ -51,6 +51,8 @@ def test_landing_page_exposes_full_operations_modules():
         "정합성 복구",
         "정산 · 감사",
         "정합성 다시 계산",
+        "정상 정산 반영",
+        "포인트 적립",
     ]:
         assert label in body
 
@@ -231,3 +233,34 @@ def test_reset_removes_order_and_business_state():
 def test_unknown_demo_session_returns_404():
     response = client.get("/api/demo/sessions/does-not-exist")
     assert response.status_code == 404
+
+
+def test_normal_confirmed_order_can_post_settlement_and_reward():
+    session_id = create_session()
+    create_order(session_id, total=12000)
+    assert client.post(
+        f"/api/demo/sessions/{session_id}/payment",
+        json={"authorization_id": "auth-normal"},
+    ).status_code == 200
+    assert client.post(f"/api/demo/sessions/{session_id}/confirm").status_code == 200
+
+    settlement = client.post(
+        f"/api/demo/sessions/{session_id}/settlement",
+        json={"amount": 12000},
+    )
+    reward = client.post(
+        f"/api/demo/sessions/{session_id}/reward",
+        json={"amount": 120},
+    )
+
+    assert settlement.status_code == 200
+    assert reward.status_code == 200
+    state = reward.json()["state"]
+    assert state["order"]["settled"] is True
+    assert state["order"]["rewarded"] is True
+    assert state["metrics"]["net_settlement"] == 12000
+    assert state["metrics"]["reward_balance"] == 120
+    assert [row["posting_type"] for row in state["ledger_batches"]] == [
+        "SETTLEMENT",
+        "REWARD",
+    ]
