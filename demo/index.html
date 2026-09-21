@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Pickup Pact — Smart Order Consistency Console</title>
+<title>Pickup Pact — 주문 정합성 복구 데모</title>
 <style>
 :root{
   --bg:#f4f6fa;--surface:#fff;--surface2:#f8fafc;--text:#101828;--muted:#667085;
@@ -59,20 +59,20 @@ button:focus-visible,input:focus-visible{outline:3px solid rgba(37,99,235,.28);o
 .code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10px;color:#475467}
 .toast{position:fixed;right:24px;bottom:24px;background:#101828;color:#fff;border-radius:11px;padding:12px 15px;font-size:11px;box-shadow:var(--shadow);display:none;z-index:20;max-width:360px}.toast.show{display:block}.toast.error{background:#7a271a}
 @media(max-width:1100px){.app{grid-template-columns:185px 1fr}.g4{grid-template-columns:repeat(2,1fr)}.g3{grid-template-columns:1fr 1fr}.form{grid-template-columns:1fr 1fr 1fr}}
-@media(max-width:1100px){.story-flow{grid-template-columns:1fr 20px 1fr 20px 1fr}.story-flow .story-step:nth-of-type(n+4),.story-flow .story-arrow:nth-of-type(n+4){display:none}.guide-main{grid-template-columns:1fr}}
-@media(max-width:760px){.app{display:block}.sidebar{position:relative;height:auto}.sidebar-foot{display:none}.nav{grid-template-columns:repeat(2,1fr)}.content{padding:18px 14px 48px}.topbar{position:relative;padding:0 14px}.g4,.g3,.g2,.timeline-grid,.form,.guide-progress{grid-template-columns:1fr}.hero h2{font-size:29px}.audit-item{grid-template-columns:1fr}.story-flow{grid-template-columns:1fr}.story-arrow{transform:rotate(90deg);min-height:18px}.story-flow .story-step:nth-of-type(n+4),.story-flow .story-arrow:nth-of-type(n+4){display:block}.result-grid{grid-template-columns:1fr}.result-arrow{transform:rotate(90deg)}.expert-callout{align-items:flex-start;flex-direction:column}.top-actions .small-btn{display:none}}
+@media(max-width:1100px){.story-flow{grid-template-columns:1fr}.story-arrow{transform:rotate(90deg);min-height:18px}.guide-main{grid-template-columns:1fr}}
+@media(max-width:760px){.app{display:block}.sidebar{position:relative;height:auto}.sidebar-foot{display:none}.nav{grid-template-columns:repeat(2,1fr)}.content{padding:18px 14px 48px}.topbar{position:relative;padding:0 14px}.g4,.g3,.g2,.timeline-grid,.form,.guide-progress{grid-template-columns:1fr}.hero h2{font-size:29px}.audit-item{grid-template-columns:1fr}.story-flow{grid-template-columns:1fr}.story-arrow{transform:rotate(90deg);min-height:18px}.result-grid{grid-template-columns:1fr}.result-arrow{transform:rotate(90deg)}.expert-callout{align-items:flex-start;flex-direction:column}.top-actions .small-btn{display:none}}
 </style>
 </head>
 <body>
 <div class="app">
   <aside class="sidebar">
     <div class="logo"><b>Pickup</b> Pact</div>
-    <div class="side-caption">QUICK START</div>
+    <div class="side-caption">빠른 시작</div>
     <div class="nav">
       <button class="active" data-page="overview">홈</button>
       <button data-page="guided">3분 체험</button>
     </div>
-    <div class="side-caption" style="margin-top:14px">TECHNICAL DETAILS</div>
+    <div class="side-caption" style="margin-top:14px">기술 상세</div>
     <div class="nav">
       <button data-page="orders">주문 흐름</button>
       <button data-page="capacity">매장 처리량</button>
@@ -323,7 +323,7 @@ button:focus-visible,input:focus-visible{outline:3px solid rgba(37,99,235,.28);o
 <div class="toast" id="toast"></div>
 
 <script>
-let sessionId=localStorage.getItem("pickupPactSession");
+let sessionId=localStorage.getItem("pickupPactProductSessionV3");
 let state=null;
 const $=id=>document.getElementById(id);
 
@@ -360,10 +360,10 @@ async function api(path,method="GET",body=null){
 async function ensureSession(){
   if(sessionId){
     try{state=await api("/api/demo/sessions/"+sessionId);return;}
-    catch(_){localStorage.removeItem("pickupPactSession");sessionId=null;}
+    catch(_){localStorage.removeItem("pickupPactProductSessionV3");sessionId=null;}
   }
   const created=await api("/api/demo/sessions","POST",{});
-  sessionId=created.session_id;localStorage.setItem("pickupPactSession",sessionId);
+  sessionId=created.session_id;localStorage.setItem("pickupPactProductSessionV3",sessionId);
   state=created;
 }
 
@@ -431,7 +431,7 @@ async function resetGuidedDemo(){
 }
 
 async function newSession(){
-  localStorage.removeItem("pickupPactSession");sessionId=null;state=null;
+  localStorage.removeItem("pickupPactProductSessionV3");sessionId=null;state=null;
   await ensureSession();renderAll();toast("새 독립 데모 세션을 만들었습니다.");
 }
 
@@ -665,7 +665,7 @@ function renderGuide(){
 function renderAll(){
   if(!state)return;
   renderGuide();
-  $("mOrder").textContent=state.order?state.order.status:"-";
+  $("mOrder").textContent=state.order?humanStatus(state.order.status):"-";
   $("mOrderSub").textContent=state.order?state.order.order_id:"주문 없음";
   $("mEvents").textContent=state.metrics.event_count;
   $("mAnomalies").textContent=state.metrics.anomaly_count;
@@ -676,10 +676,10 @@ function renderAll(){
   $("overviewImpact").innerHTML='<h3>현재 영향</h3>'+(
     state.reconciliation.anomalies.length?
     '<div class="alert red"><b>'+state.reconciliation.anomalies.length+'개의 이상 감지</b><br>정합성 복구 탭에서 근거와 복구 계획을 확인하세요.</div>':
-    '<div class="alert green"><b>현재 치명적인 정합성 이상 없음</b><br>장애 주입 탭에서 failure mode를 직접 만들 수 있습니다.</div>'
-  )+'<div class="kv"><div class="kv-row"><span>Net settlement</span><b>'+money(state.metrics.net_settlement)+'원</b></div><div class="kv-row"><span>Reward balance</span><b>'+money(state.metrics.reward_balance)+'P</b></div></div>';
+    '<div class="alert green"><b>현재 발견된 문제 없음</b><br>3분 체험이나 샘플 시나리오에서 문제 상황을 직접 확인할 수 있습니다.</div>'
+  )+'<div class="kv"><div class="kv-row"><span>정산 순액</span><b>'+money(state.metrics.net_settlement)+'원</b></div><div class="kv-row"><span>포인트 잔액</span><b>'+money(state.metrics.reward_balance)+'P</b></div></div>';
 
-  $("overviewIncident").innerHTML='<h3>복구 엔진</h3>'+anomalyHtml()+'<div class="actions"><button class="btn dark" onclick="goPage(\'reconcile\')">정합성 분석 열기</button></div>';
+  $("overviewIncident").innerHTML='<h3>문제 확인 결과</h3>'+anomalyHtml()+'<div class="actions"><button class="btn dark" onclick="goPage(\'reconcile\')">기술 분석 열기</button></div>';
 
   $("orderEvents").innerHTML=eventRows(state.received_order,"received_at");
   $("faultEvents").innerHTML=eventRows(state.received_order,"received_at");
@@ -717,7 +717,7 @@ function goPage(page){
 }
 
 fetch("/health").then(r=>r.json()).then(body=>{
-  $("health").textContent=body.engine?"● 실제 reconciliation engine 연결":"● 백엔드 정상";
+  $("health").textContent=body.engine?"● 복구 엔진 연결됨":"● 백엔드 정상";
 }).catch(()=>{$("health").textContent="○ 백엔드 연결 실패";$("health").style.background="#fef3f2";$("health").style.color="#b42318"});
 
 ensureSession().then(()=>renderAll()).catch(e=>toast(e.message,true));
