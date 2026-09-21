@@ -1,8 +1,37 @@
+from __future__ import annotations
+
 from fastapi.testclient import TestClient
 
 from demo.main import app, run_scenario
 
 client = TestClient(app)
+
+
+def create_session() -> str:
+    response = client.post("/api/demo/sessions")
+    assert response.status_code == 200
+    return response.json()["session_id"]
+
+
+def get_state(session_id: str) -> dict:
+    response = client.get(f"/api/demo/sessions/{session_id}")
+    assert response.status_code == 200
+    return response.json()
+
+
+def create_order(session_id: str, *, units: int = 2, total: int = 9000) -> dict:
+    response = client.post(
+        f"/api/demo/sessions/{session_id}/orders",
+        json={
+            "store": "패스카페 테스트점",
+            "items": "아메리카노 2잔",
+            "total": total,
+            "pickup_at": "12:30",
+            "units": units,
+        },
+    )
+    assert response.status_code == 200, response.text
+    return response.json()["state"]
 
 
 def test_health_points_to_real_reconciliation_engine():
@@ -11,17 +40,22 @@ def test_health_points_to_real_reconciliation_engine():
     assert payload["engine"] == "services/reconciler/app/engine.py"
 
 
-def test_landing_page_explains_business_problem_before_tech():
+def test_landing_page_exposes_full_operations_modules():
     response = client.get("/")
     assert response.status_code == 200
     body = response.text
-    assert "고객은 주문을 취소했는데" in body
-    assert "점주 정산과 포인트가 남았다면?" in body
-    assert "장애 감지 및 복구 계획 계산" in body
-    assert "실제 프로젝트의" in body
+    for label in [
+        "주문 흐름",
+        "매장 처리량",
+        "장애 주입",
+        "정합성 복구",
+        "정산 · 감사",
+        "장애 감지 및 복구 계획 계산",
+    ]:
+        assert label in body
 
 
-def test_late_cancel_uses_core_engine_and_proposes_compensation():
+def test_fixed_late_cancel_scenario_still_uses_core_engine():
     result = run_scenario("late-cancel")
     codes = {x["code"] for x in result["repairs"]}
     anomaly_codes = {x["code"] for x in result["anomalies"]}
@@ -29,41 +63,171 @@ def test_late_cancel_uses_core_engine_and_proposes_compensation():
     assert "REVERSE_REWARD" in codes
     assert "settlement_posted_after_prior_cancellation" in anomaly_codes
     assert result["engine"] == "services/reconciler/app/engine.py"
-    assert result["before"] == "주문 취소 / 정산 유지 / 90P 유지"
-    assert result["after"] == "주문 취소 / 정산 취소 / 90P 회수"
 
 
-def test_safe_duplicate_is_noop():
-    result = run_scenario("duplicate")
-    codes = {x["code"] for x in result["repairs"]}
-    assert "NO_OP_DUPLICATE" in codes
-    assert "MANUAL_REVIEW" not in codes
+def test_demo_sessions_are_isolated():
+    first = create_session()
+    second = create_session()
+
+    create_order(first)
+    first_state = get_state(first)
+    second_state = get_state(second)
+
+    assert first_state["order"] is not None
+    assert second_state["order"] is None
+    assert first_state["session_id"] != second_state["session_id"]
 
 
-def test_conflicting_duplicate_requires_manual_review():
-    result = run_scenario("conflict")
-    codes = {x["code"] for x in result["repairs"]}
-    assert "MANUAL_REVIEW" in codes
+def test_order_lifecycle_requires_payment_before_confirmation():
+    session_id = create_session()
+    state = create_order(session_id)
+    assert state["order"]["status"] == "HELD"
+    assert state["order"]["payment_authorized"] is False
+
+    response = client.post(f"/api/demo/sessions/{session_id}/confirm")
+    assert response.status_code == 409
+
+    paid = client.post(
+        f"/api/demo/sessions/{session_id}/payment",
+        json={"authorization_id": "auth-test"},
+    )
+    assert paid.status_code == 200
+    assert paid.json()["state"]["order"]["payment_authorized"] is True
+
+    confirmed = client.post(f"/api/demo/sessions/{session_id}/confirm")
+    assert confirmed.status_code == 200
+    assert confirmed.json()["state"]["order"]["status"] == "CONFIRMED"
 
 
-def test_capacity_drop_marks_promise_at_risk():
-    result = run_scenario("capacity-drop")
-    codes = {x["code"] for x in result["repairs"]}
-    assert "RESLOT_REVIEW" in codes
-    assert "AT_RISK" in result["after"]
+def test_late_cancel_can_be_injected_reconciled_and_compensated():
+    session_id = create_session()
+    create_order(session_id)
+    assert client.post(
+        f"/api/demo/sessions/{session_id}/payment",
+        json={"authorization_id": "auth-late"},
+    ).status_code == 200
+    assert client.post(f"/api/demo/sessions/{session_id}/confirm").status_code == 200
+
+    cancelled = client.post(
+        f"/api/demo/sessions/{session_id}/cancel",
+        json={"delay_seconds": 52},
+    )
+    assert cancelled.status_code == 200
+    assert cancelled.json()["event"]["received_at"] > cancelled.json()["event"]["occurred_at"]
+
+    assert client.post(
+        f"/api/demo/sessions/{session_id}/settlement",
+        json={"amount": 9000},
+    ).status_code == 200
+    assert client.post(
+        f"/api/demo/sessions/{session_id}/reward",
+        json={"amount": 90},
+    ).status_code == 200
+
+    reconcile_response = client.post(f"/api/demo/sessions/{session_id}/reconcile")
+    assert reconcile_response.status_code == 200
+    reconciliation = reconcile_response.json()["reconciliation"]
+    repair_codes = {item["code"] for item in reconciliation["repairs"]}
+    anomaly_codes = {item["code"] for item in reconciliation["anomalies"]}
+    assert {"REVERSE_SETTLEMENT", "REVERSE_REWARD"} <= repair_codes
+    assert "settlement_posted_after_prior_cancellation" in anomaly_codes
+    assert "reward_granted_after_prior_cancellation" in anomaly_codes
+
+    applied_response = client.post(f"/api/demo/sessions/{session_id}/repairs/apply")
+    assert applied_response.status_code == 200
+    applied = set(applied_response.json()["applied"])
+    assert {"REVERSE_SETTLEMENT", "REVERSE_REWARD"} <= applied
+
+    state = applied_response.json()["state"]
+    assert state["metrics"]["net_settlement"] == 0
+    assert state["metrics"]["reward_balance"] == 0
+    assert any(batch["posting_type"] == "REVERSE_SETTLEMENT" for batch in state["ledger_batches"])
+    assert any(batch["posting_type"] == "REVERSE_REWARD" for batch in state["ledger_batches"])
 
 
-def test_received_order_and_business_order_diverge_for_late_cancel():
-    result = run_scenario("late-cancel")
-    received = [x["event_type"] for x in result["received_order"]]
-    business = [x["event_type"] for x in result["business_order"]]
-    assert received.index("SettlementPosted") < received.index("CommitmentCancelled")
-    assert business.index("CommitmentCancelled") < business.index("SettlementPosted")
+def test_exact_redelivery_is_detected_without_manual_review():
+    session_id = create_session()
+    create_order(session_id)
+    client.post(f"/api/demo/sessions/{session_id}/payment", json={"authorization_id": "auth-dup"})
+    client.post(f"/api/demo/sessions/{session_id}/confirm")
+    client.post(f"/api/demo/sessions/{session_id}/settlement", json={"amount": 9000})
 
-
-def test_public_scenario_endpoint():
-    response = client.get("/api/scenarios/late-cancel")
+    response = client.post(
+        f"/api/demo/sessions/{session_id}/redelivery",
+        json={"conflicting_amount": None},
+    )
     assert response.status_code == 200
-    payload = response.json()
-    assert payload["order"]["order_id"] == "PP-1208"
-    assert payload["engine"] == "services/reconciler/app/engine.py"
+    state = response.json()["state"]
+    repair_codes = {item["code"] for item in state["reconciliation"]["repairs"]}
+    assert "NO_OP_DUPLICATE" in repair_codes
+    assert "MANUAL_REVIEW" not in repair_codes
+
+
+def test_conflicting_redelivery_goes_to_manual_review():
+    session_id = create_session()
+    create_order(session_id)
+    client.post(f"/api/demo/sessions/{session_id}/payment", json={"authorization_id": "auth-conflict"})
+    client.post(f"/api/demo/sessions/{session_id}/confirm")
+    client.post(f"/api/demo/sessions/{session_id}/settlement", json={"amount": 9000})
+
+    response = client.post(
+        f"/api/demo/sessions/{session_id}/redelivery",
+        json={"conflicting_amount": 13500},
+    )
+    assert response.status_code == 200
+    state = response.json()["state"]
+    anomaly_codes = {item["code"] for item in state["reconciliation"]["anomalies"]}
+    repair_codes = {item["code"] for item in state["reconciliation"]["repairs"]}
+    assert "conflicting_duplicate_payload" in anomaly_codes
+    assert "MANUAL_REVIEW" in repair_codes
+
+
+def test_capacity_drop_marks_confirmed_promise_at_risk():
+    session_id = create_session()
+    create_order(session_id, units=4, total=22000)
+    client.post(f"/api/demo/sessions/{session_id}/payment", json={"authorization_id": "auth-cap"})
+    client.post(f"/api/demo/sessions/{session_id}/confirm")
+
+    response = client.post(
+        f"/api/demo/sessions/{session_id}/capacity",
+        json={"available_units": 2},
+    )
+    assert response.status_code == 200
+    state = response.json()["state"]
+    anomaly_codes = {item["code"] for item in state["reconciliation"]["anomalies"]}
+    repair_codes = {item["code"] for item in state["reconciliation"]["repairs"]}
+    assert "confirmed_promise_exceeds_revised_capacity" in anomaly_codes
+    assert "RESLOT_REVIEW" in repair_codes
+
+    applied = client.post(f"/api/demo/sessions/{session_id}/repairs/apply").json()
+    assert "RESLOT_REVIEW" in applied["applied"]
+    assert applied["state"]["order"]["status"] == "AT_RISK"
+
+
+def test_preset_load_populates_order_ledger_and_evidence():
+    session_id = create_session()
+    response = client.post(f"/api/demo/sessions/{session_id}/presets/late-cancel")
+    assert response.status_code == 200
+    state = response.json()
+    assert state["order"]["order_id"] == "PP-1208"
+    assert state["metrics"]["event_count"] >= 6
+    assert state["metrics"]["ledger_batch_count"] == 2
+    assert state["reconciliation"]["anomalies"]
+    assert state["reconciliation"]["repairs"]
+
+
+def test_reset_removes_order_and_business_state():
+    session_id = create_session()
+    create_order(session_id)
+    response = client.post(f"/api/demo/sessions/{session_id}/reset")
+    assert response.status_code == 200
+    state = response.json()
+    assert state["order"] is None
+    assert state["events"] == []
+    assert state["ledger_batches"] == []
+    assert state["metrics"]["event_count"] == 0
+
+
+def test_unknown_demo_session_returns_404():
+    response = client.get("/api/demo/sessions/does-not-exist")
+    assert response.status_code == 404
