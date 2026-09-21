@@ -10,6 +10,16 @@ For a release candidate, all of the following automated paths must pass on the s
 - `ci`: repository guardrails, Python/JVM tests, contracts, evidence reproduction, Docker builds, and Terraform validation.
 - `release-gate`: three repeated test passes, deterministic evidence reproduction, full Docker topology integration twice, and Terraform validation.
 
-Before calling a demo release complete, re-check implementation, tests, deployed execution, UI/API behavior, regression coverage, README/docs, and the final diff against the release commit.
+Before calling a demo release complete, re-check the current release commit in this exact order:
+
+1. implementation — read the current UI/backend code instead of trusting an earlier result;
+2. tests — execute all five automated paths on the same commit;
+3. deployed execution — confirm the public Render service reports that exact commit;
+4. UI/API behavior — exercise both the first-time guided journey and the expert operator flow;
+5. regression — repeat core tests and full topology checks, including the two-pass integration smoke;
+6. README/docs — verify that public claims match the implementation and measured evidence;
+7. final diff — compare the release commit with its pre-change base and review every changed file.
+
+A release is not complete if any current-commit check is skipped, still running, failing, or only inferred from a previous commit.
 
 The public Render demo is intentionally a session-isolated FastAPI sandbox for reviewer convenience. The full PostgreSQL/Redis/Kafka/MongoDB/Elasticsearch topology is verified separately by the release gate and is not claimed to run inside the public demo service.
