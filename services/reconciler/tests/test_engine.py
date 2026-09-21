@@ -1,47 +1,72 @@
-from datetime import datetime, timedelta, timezone
-from services.reconciler.app.engine import reconcile
-from services.reconciler.app.models import DomainEvent
+from datetime import UTC, datetime, timedelta
 
-UTC=timezone.utc
-BASE=datetime(2026,9,21,12,0,tzinfo=UTC)
+from app.engine import reconcile
+from app.models import EventEnvelope, ReconcileRequest
 
-def event(event_id, kind, occurred, received, amount=None, payload=None):
-    return DomainEvent(
-        event_id=event_id, aggregate_id="o-1", type=kind,
-        occurred_at=BASE+timedelta(seconds=occurred),
-        received_at=BASE+timedelta(seconds=received),
-        amount=amount, payload=payload or {},
+BASE = datetime(2026, 9, 18, 3, 0, tzinfo=UTC)
+
+
+def ev(event_id: str, event_type: str, occurred_s: int, received_s: int, payload=None):
+    return EventEnvelope(
+        event_id=event_id,
+        aggregate_id="order-1",
+        event_type=event_type,
+        occurred_at=BASE + timedelta(seconds=occurred_s),
+        received_at=BASE + timedelta(seconds=received_s),
+        correlation_id="corr-1",
+        payload=payload or {},
     )
 
-def test_late_cancellation_produces_compensating_commands():
-    result=reconcile("o-1",[
-        event("confirm","PICKUP_CONFIRMED",1,1),
-        event("cancel","PICKUP_CANCELLED",10,60),
-        event("settle","SETTLED",20,20,9000),
-        event("reward","REWARD_GRANTED",21,21,90),
-    ])
-    commands={x.command for x in result.commands}
-    assert {"REVERSE_SETTLEMENT","REVERSE_REWARD","REBUILD_PROJECTION"} <= commands
-    assert "LATE_FACT_CAUSALITY" in result.anomaly_codes
 
-def test_identical_redelivery_is_noop():
-    e=event("same","SETTLED",10,10,5500)
-    e2=event("same","SETTLED",10,30,5500)
-    result=reconcile("o-1",[e,e2])
-    assert "SAFE_REDELIVERY" in result.anomaly_codes
-    assert any(x.command=="NO_OP_DUPLICATE" for x in result.commands)
-
-def test_conflicting_id_is_quarantined():
-    result=reconcile("o-1",[
-        event("same","SETTLED",10,10,11500),
-        event("same","SETTLED",10,20,13500),
+def test_late_cancellation_triggers_financial_compensation_and_projection_rebuild():
+    request = ReconcileRequest(events=[
+        ev("hold", "PickupSlotHeld", 0, 0, {"capacity_units": 2}),
+        ev("pay", "PaymentAuthorized", 1, 1),
+        ev("confirm", "CommitmentConfirmed", 2, 2, {"capacity_units": 2}),
+        ev("cancel", "CommitmentCancelled", 5, 50),
+        ev("settle", "SettlementPosted", 10, 10, {"amount": "12000"}),
+        ev("reward", "RewardGranted", 11, 11, {"amount": "1200"}),
     ])
-    assert "CONFLICTING_EVENT_REUSE" in result.anomaly_codes
-    assert any(x.command=="MANUAL_REVIEW" for x in result.commands)
+    result = reconcile(request)
+    assert "settlement_posted_after_prior_cancellation" in result.anomalies
+    assert "reward_granted_after_prior_cancellation" in result.anomalies
+    assert "REVERSE_SETTLEMENT" in result.repairs
+    assert "REVERSE_REWARD" in result.repairs
+    assert result.canonical_state.status == "CANCELLED"
 
-def test_capacity_revision_marks_at_risk():
-    result=reconcile("o-1",[
-        event("c","PICKUP_CONFIRMED",1,1),
-        event("r","CAPACITY_REVISED",2,2,payload={"promised_units":4,"available_units":2}),
+
+def test_redelivery_is_deduplicated_without_manual_review():
+    original = ev("settle", "SettlementPosted", 10, 10, {"amount": "12000"})
+    redelivery = original.model_copy(update={"received_at": BASE + timedelta(seconds=15)})
+    request = ReconcileRequest(events=[
+        ev("hold", "PickupSlotHeld", 0, 0),
+        ev("pay", "PaymentAuthorized", 1, 1),
+        ev("confirm", "CommitmentConfirmed", 2, 2),
+        original,
+        redelivery,
     ])
-    assert any(x.command=="MARK_AT_RISK" for x in result.commands)
+    result = reconcile(request)
+    assert result.duplicate_event_ids == ["settle"]
+    assert "NO_OP_DUPLICATE" in result.repairs
+    assert "MANUAL_REVIEW" not in result.repairs
+    assert result.canonical_state.settlement_post_count == 1
+    assert result.receive_order_state.settlement_post_count == 2
+
+
+def test_conflicting_duplicate_requires_manual_review():
+    first = ev("same", "RewardGranted", 10, 10, {"amount": "100"})
+    second = first.model_copy(update={"payload": {"amount": "999"}, "received_at": BASE + timedelta(seconds=11)})
+    result = reconcile(ReconcileRequest(events=[first, second]))
+    assert "conflicting_duplicate_payload" in result.anomalies
+    assert "MANUAL_REVIEW" in result.repairs
+
+
+def test_capacity_revision_marks_confirmed_promise_at_risk():
+    result = reconcile(ReconcileRequest(events=[
+        ev("hold", "PickupSlotHeld", 0, 0, {"capacity_units": 3}),
+        ev("pay", "PaymentAuthorized", 1, 1),
+        ev("confirm", "CommitmentConfirmed", 2, 2, {"capacity_units": 3}),
+        ev("capacity", "CapacityRevised", 3, 3, {"revision": 2, "available_units": 1}),
+    ]))
+    assert result.canonical_state.status == "AT_RISK"
+    assert "RESLOT_REVIEW" in result.repairs
