@@ -1,0 +1,72 @@
+name: ui-e2e
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "demo/**"
+      - "services/reconciler/app/engine.py"
+      - "services/reconciler/app/models.py"
+      - ".github/workflows/ui-e2e.yml"
+  pull_request:
+    paths:
+      - "demo/**"
+      - "services/reconciler/app/engine.py"
+      - "services/reconciler/app/models.py"
+      - ".github/workflows/ui-e2e.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  chromium-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install demo backend dependencies
+        run: pip install -r demo/requirements.txt
+
+      - name: Start demo backend
+        run: |
+          uvicorn demo.main:app --host 127.0.0.1 --port 10000 >/tmp/pickup-pact-demo.log 2>&1 &
+          echo $! >/tmp/pickup-pact-demo.pid
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:10000/health >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/pickup-pact-demo.log
+          exit 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: demo/package-lock.json
+
+      - name: Install Playwright
+        working-directory: demo
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Run browser user-flow tests
+        working-directory: demo
+        run: npm run test:e2e
+
+      - name: Upload Playwright traces on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-failure
+          path: demo/test-results
+          if-no-files-found: ignore
+          retention-days: 7
