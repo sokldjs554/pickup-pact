@@ -87,7 +87,10 @@ assert "/api/v1/ledger/postings" in openapi
 assert "/api/v1/commitments/{id}:" in openapi
 assert "/api/v1/ledger/orders/{aggregateId}" in openapi
 assert "/api/v1/ledger/conflicts" in openapi
-assert "/api/v1/projections/rebuild" in openapi\nassert "/api/v1/projections/{aggregateId}" in openapi\nassert "commitment_projection" in schema and "commitment_projection" in persistence\nassert "ledger_conflicts" in schema
+assert "/api/v1/projections/rebuild" in openapi
+assert "/api/v1/projections/{aggregateId}" in openapi
+assert "commitment_projection" in schema and "commitment_projection" in persistence
+assert "ledger_conflicts" in schema
 assert "required: [eventId, aggregateId, type, amount]" in asyncapi
 assert "reconciliation_run" in schema and "reconciliation_run" in persistence
 assert "outbox_events" in explain and "outbox_event\n" not in explain
