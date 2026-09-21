@@ -40,6 +40,21 @@ def test_health_points_to_real_reconciliation_engine():
     assert payload["engine"] == "services/reconciler/app/engine.py"
     assert payload["release_commit"]
 
+def test_customer_catalog_is_real_demo_api_data():
+    customer = client.get("/api/demo/customer")
+    assert customer.status_code == 200
+    assert customer.json()["label"] == "체험 손님"
+
+    response = client.get("/api/demo/catalog")
+    assert response.status_code == 200
+    stores = response.json()
+    assert len(stores) >= 3
+    assert stores[0]["name"] == "패스카페 강남역점"
+    assert stores[0]["pickup_minutes"] > 0
+    assert any(item["name"] == "아메리카노" for item in stores[0]["menu"])
+    assert all(item["price"] > 0 for store in stores for item in store["menu"])
+
+
 
 def test_landing_page_exposes_guided_and_expert_layers():
     response = client.get("/")
