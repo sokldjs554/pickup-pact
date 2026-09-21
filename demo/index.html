@@ -83,7 +83,7 @@ body.network-busy .main button:not(:disabled),body.network-busy .preset{opacity:
       <button data-page="ledger">정산 · 감사</button>
     </div>
     <div class="sidebar-foot">
-      합성 데이터 전용 포트폴리오 샌드박스<br>
+      체험용 가상 데이터만 사용합니다.<br>
       실제 결제·실제 점주 계정과 연결되지 않습니다.
     </div>
   </aside>
@@ -100,7 +100,7 @@ body.network-busy .main button:not(:disabled),body.network-busy .preset{opacity:
     <div class="content">
       <section class="page active" id="page-overview">
         <div class="hero">
-          <div class="badge">스마트오더 정합성 복구 샌드박스</div>
+          <div class="badge">스마트오더 문제 복구 체험</div>
           <h2>주문은 취소됐는데<br>정산과 포인트가 지급됐다면?</h2>
           <p>
             Pickup Pact는 늦게 도착한 주문·취소 메시지의 <strong>실제 발생 순서</strong>를 다시 확인해
@@ -114,9 +114,9 @@ body.network-busy .main button:not(:disabled),body.network-busy .preset{opacity:
           <div class="promise-row">
             <span class="promise-chip">정상 주문</span>
             <span class="promise-chip">문제 발생</span>
-            <span class="promise-chip">자동 탐지</span>
+            <span class="promise-chip">자동 확인</span>
             <span class="promise-chip">안전한 복구</span>
-            <span class="promise-chip">감사 기록 보존</span>
+            <span class="promise-chip">변경 기록 보존</span>
           </div>
         </div>
 
@@ -128,16 +128,16 @@ body.network-busy .main button:not(:disabled),body.network-busy .preset{opacity:
           <div class="story-arrow">→</div>
           <div class="story-step problem"><span class="n">3</span><strong>잘못된 정산·포인트 발견</strong><span>점주 9,000원 정산과 고객 90P가 남았습니다.</span></div>
           <div class="story-arrow">→</div>
-          <div class="story-step"><span class="n">4</span><strong>안전한 보상 처리</strong><span>기존 기록은 남기고 반대 기록을 추가합니다.</span></div>
+          <div class="story-step"><span class="n">4</span><strong>잘못된 처리 되돌리기</strong><span>기존 기록은 남기고 되돌림 기록을 추가합니다.</span></div>
           <div class="story-arrow">→</div>
           <div class="story-step success"><span class="n">5</span><strong>정상 상태로 복구</strong><span>정산 0원 · 포인트 0P · 변경 이력 보존</span></div>
         </div>
 
-        <div class="section-head"><h2>현재 샌드박스 상태</h2><p>첫 방문은 빈 상태에서 시작합니다.</p></div>
+        <div class="section-head"><h2>현재 체험 상태</h2><p>첫 방문은 빈 상태에서 시작합니다.</p></div>
         <div class="grid g4">
           <div class="card metric"><span>현재 주문</span><b id="mOrder">-</b><span id="mOrderSub">주문 없음</span></div>
           <div class="card metric"><span>기록된 변화</span><b id="mEvents">0</b><span>주문·결제·취소 등</span></div>
-          <div class="card metric"><span>감지한 문제</span><b id="mAnomalies">0</b><span>자동 정합성 검사</span></div>
+          <div class="card metric"><span>감지한 문제</span><b id="mAnomalies">0</b><span>자동 상태 확인</span></div>
           <div class="card metric"><span>금전 기록</span><b id="mLedger">0</b><span>정산·포인트·복구 이력</span></div>
         </div>
 
@@ -705,7 +705,7 @@ function renderGuide(){
     $("guideBefore").innerHTML='<div class="micro">복구 전</div><div class="value">정산 +9,000원 · 포인트 +90P</div><p>취소된 주문인데도 점주 정산과 고객 포인트가 남아 있는 잘못된 상태입니다.</p>';
     $("guideAfter").className="result-card after"+(stage===4?" ready":"");
     $("guideAfter").innerHTML=stage===4
-      ? '<div class="micro">복구 후</div><div class="value">정산 0원 · 포인트 0P</div><p>원본 기록은 삭제하지 않고, 반대 분개와 포인트 회수 기록을 추가해 감사 이력을 보존했습니다.</p>'
+      ? '<div class="micro">복구 후</div><div class="value">정산 0원 · 포인트 0P</div><p>원본 기록은 삭제하지 않고, 되돌림 기록과 포인트 회수 기록을 추가해 변경 이력을 보존했습니다.</p>'
       : '<div class="micro">복구 후</div><div class="value">복구 대기</div><p>문제를 확인한 뒤 안전한 복구 버튼을 누르면 결과를 비교할 수 있습니다.</p>';
   }
 
@@ -774,7 +774,7 @@ function goPage(page){
 }
 
 fetch("/health").then(r=>r.json()).then(body=>{
-  $("health").textContent=body.engine?"● 복구 엔진 연결됨":"● 백엔드 정상";
+  $("health").textContent=body.engine?"● 데모 서비스 정상":"● 데모 서비스 정상";
 }).catch(()=>{$("health").textContent="○ 백엔드 연결 실패";$("health").style.background="#fef3f2";$("health").style.color="#b42318"});
 
 bootstrapSession().catch(e=>toast("데모 세션 준비 실패: "+e.message,true));
