@@ -670,26 +670,31 @@ class DemoStore:
             session["capacity"]["slot"] = order_meta["pickup_at"]
             session["capacity"]["reserved_units"] = units
 
+            financial_side_effects: set[str] = set()
             for event in session["events"]:
                 if event["event_type"] == "CommitmentCancelled":
                     session["order"]["status"] = "CANCELLED"
                     session["capacity"]["reserved_units"] = 0
                 elif event["event_type"] == "SettlementPosted":
                     session["order"]["settled"] = True
-                    self._ledger_locked(
-                        session_id,
-                        "SETTLEMENT",
-                        _money(event["payload"].get("amount")),
-                        event["event_id"],
-                    )
+                    if event["event_id"] not in financial_side_effects:
+                        financial_side_effects.add(event["event_id"])
+                        self._ledger_locked(
+                            session_id,
+                            "SETTLEMENT",
+                            _money(event["payload"].get("amount")),
+                            event["event_id"],
+                        )
                 elif event["event_type"] == "RewardGranted":
                     session["order"]["rewarded"] = True
-                    self._ledger_locked(
-                        session_id,
-                        "REWARD",
-                        _money(event["payload"].get("amount")),
-                        event["event_id"],
-                    )
+                    if event["event_id"] not in financial_side_effects:
+                        financial_side_effects.add(event["event_id"])
+                        self._ledger_locked(
+                            session_id,
+                            "REWARD",
+                            _money(event["payload"].get("amount")),
+                            event["event_id"],
+                        )
                 elif event["event_type"] == "CapacityRevised":
                     session["capacity"]["revision"] = int(event["payload"].get("revision", 2))
                     session["capacity"]["available_units"] = int(
