@@ -19,7 +19,8 @@ class InMemoryCommitmentRepository : CommitmentRepository {
         return Mono.just(commitment)
     }
     override fun find(id: UUID): Mono<PickupCommitment> =
-        Mono.justOrEmpty(rows[id]).switchIfEmpty(Mono.error(NoSuchElementException("commitment not found")))
+        rows[id]?.let { Mono.just(it) }
+            ?: Mono.error(NoSuchElementException("commitment not found"))
 }
 
 @Component
