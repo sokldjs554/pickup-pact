@@ -83,6 +83,7 @@ explain = (ROOT / "sql/explain/commitment_timeline.sql").read_text()
 architecture = (ROOT / "docs/architecture.md").read_text()
 domain_model = (ROOT / "docs/domain-model.md").read_text()
 demo = (ROOT / "demo/main.py").read_text()
+live_demo_workflow = (ROOT / ".github/workflows/live-demo-smoke.yml").read_text()
 demo_dockerfile = (ROOT / "Dockerfile.demo").read_text()
 
 assert "paymentAuthorized" not in openapi, "hold contract must not let a caller self-authorize payment"
@@ -102,6 +103,8 @@ assert "financial_event_receipt" not in architecture
 assert "financial_event_receipt" not in domain_model
 assert "OutboxPublisher" not in architecture
 assert "services.reconciler.app.engine" in demo
+assert "RENDER_GIT_COMMIT" in demo and "release_commit" in demo
+assert "EXPECTED_COMMIT" in live_demo_workflow and 'health["release_commit"] == EXPECTED_COMMIT' in live_demo_workflow
 assert "COPY services /app/services" in demo_dockerfile
 assert (ROOT / "scripts/integration_smoke.py").read_text().count("full topology integration pass") == 1
 env_example = (ROOT / ".env.example").read_text()

@@ -20,18 +20,22 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - name: Wait for expanded public demo release
+      - name: Wait for exact public demo release
         shell: bash
+        env:
+          EXPECTED_COMMIT: ${{ github.sha }}
         run: |
           python - <<'PY'
           from __future__ import annotations
 
           import json
+          import os
           import time
           import urllib.error
           import urllib.request
 
           BASE = "https://pickup-pact-demo.onrender.com"
+          EXPECTED_COMMIT = os.environ["EXPECTED_COMMIT"]
 
           def request(method: str, path: str, payload=None, timeout=20):
               data = None if payload is None else json.dumps(payload).encode()
@@ -55,6 +59,10 @@ jobs:
                   page = text("/")
                   assert health["status"] == "ok"
                   assert health["engine"] == "services/reconciler/app/engine.py"
+                  assert health["release_commit"] == EXPECTED_COMMIT, (
+                      health.get("release_commit"),
+                      EXPECTED_COMMIT,
+                  )
                   for marker in [
                       "주문은 취소됐는데",
                       "3분 데모 시작",
@@ -82,7 +90,7 @@ jobs:
                       },
                   )
                   assert held["state"]["order"]["status"] == "HELD"
-                  print(f"expanded public demo release is ready on attempt {attempt}")
+                  print(f"exact public demo release {EXPECTED_COMMIT} is ready on attempt {attempt}")
                   break
               except Exception as exc:
                   if attempt == 42:

@@ -38,6 +38,7 @@ def test_health_points_to_real_reconciliation_engine():
     payload = client.get("/health").json()
     assert payload["status"] == "ok"
     assert payload["engine"] == "services/reconciler/app/engine.py"
+    assert payload["release_commit"]
 
 
 def test_landing_page_exposes_guided_and_expert_layers():
