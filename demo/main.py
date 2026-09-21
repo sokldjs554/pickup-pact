@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+import os
 from pathlib import Path
 from typing import Any
 
@@ -626,6 +627,7 @@ def health() -> dict[str, str]:
         "status": "ok",
         "service": "pickup-pact-demo",
         "engine": "services/reconciler/app/engine.py",
+        "release_commit": os.getenv("RENDER_GIT_COMMIT", "local"),
     }
 
 
