@@ -1,7 +1,10 @@
 package io.pickuppact.ledger.application;
 
 import io.pickuppact.ledger.domain.LedgerBatch;
+import io.pickuppact.ledger.domain.LedgerPostingPolicy;
+import io.pickuppact.ledger.domain.LedgerPostingType;
 import io.pickuppact.ledger.infra.LedgerRepository;
+import java.math.BigDecimal;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -13,6 +16,11 @@ public class LedgerPostingService {
 
     public LedgerPostingService(LedgerRepository repository) {
         this.repository = repository;
+    }
+
+    @Transactional
+    public Result post(LedgerPostingType type, String eventId, String aggregateId, BigDecimal amount) {
+        return post(LedgerPostingPolicy.posting(type, eventId, aggregateId, amount));
     }
 
     @Transactional

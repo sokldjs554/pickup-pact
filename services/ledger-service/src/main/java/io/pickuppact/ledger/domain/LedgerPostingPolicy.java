@@ -11,26 +11,40 @@ import java.util.List;
 public final class LedgerPostingPolicy {
     private LedgerPostingPolicy() {}
 
+    public static LedgerBatch posting(
+            LedgerPostingType type,
+            String eventId,
+            String aggregateId,
+            BigDecimal amount
+    ) {
+        return switch (type) {
+            case SETTLEMENT -> settlement(eventId, aggregateId, amount);
+            case REVERSE_SETTLEMENT -> reverseSettlement(eventId, aggregateId, amount);
+            case REWARD -> reward(eventId, aggregateId, amount);
+            case REVERSE_REWARD -> reverseReward(eventId, aggregateId, amount);
+        };
+    }
+
     public static LedgerBatch settlement(String eventId, String orderId, BigDecimal amount) {
-        return batch(eventId, orderId, "SETTLEMENT", amount,
+        return batch(eventId, orderId, LedgerPostingType.SETTLEMENT, amount,
                 "platform-clearing", LedgerDirection.DEBIT,
                 "merchant-payable", LedgerDirection.CREDIT);
     }
 
     public static LedgerBatch reverseSettlement(String eventId, String orderId, BigDecimal amount) {
-        return batch(eventId, orderId, "REVERSE_SETTLEMENT", amount,
+        return batch(eventId, orderId, LedgerPostingType.REVERSE_SETTLEMENT, amount,
                 "merchant-payable", LedgerDirection.DEBIT,
                 "platform-clearing", LedgerDirection.CREDIT);
     }
 
     public static LedgerBatch reward(String eventId, String orderId, BigDecimal amount) {
-        return batch(eventId, orderId, "REWARD", amount,
+        return batch(eventId, orderId, LedgerPostingType.REWARD, amount,
                 "reward-expense", LedgerDirection.DEBIT,
                 "customer-reward-liability", LedgerDirection.CREDIT);
     }
 
     public static LedgerBatch reverseReward(String eventId, String orderId, BigDecimal amount) {
-        return batch(eventId, orderId, "REVERSE_REWARD", amount,
+        return batch(eventId, orderId, LedgerPostingType.REVERSE_REWARD, amount,
                 "customer-reward-liability", LedgerDirection.DEBIT,
                 "reward-expense", LedgerDirection.CREDIT);
     }
@@ -38,7 +52,7 @@ public final class LedgerPostingPolicy {
     private static LedgerBatch batch(
             String eventId,
             String aggregateId,
-            String reason,
+            LedgerPostingType type,
             BigDecimal amount,
             String debitAccount,
             LedgerDirection debitDirection,
@@ -47,6 +61,7 @@ public final class LedgerPostingPolicy {
     ) {
         BigDecimal normalized = amount.stripTrailingZeros();
         if (normalized.signum() <= 0) throw new IllegalArgumentException("amount must be positive");
+        String reason = type.name();
         String fingerprint = fingerprint(aggregateId, reason, normalized);
         Instant occurredAt = Instant.now();
         return new LedgerBatch(

@@ -1,13 +1,11 @@
 package io.pickuppact.ledger.api;
 
 import io.pickuppact.ledger.application.LedgerPostingService;
-import io.pickuppact.ledger.domain.*;
+import jakarta.validation.Valid;
+import java.util.Map;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.math.BigDecimal;
-import java.time.Instant;
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/ledger")
@@ -18,20 +16,20 @@ public class LedgerController {
         this.service = service;
     }
 
-    public record PostingRequest(String eventId, String aggregateId, String reason, BigDecimal amount) {}
-
-    @PostMapping("/settlement")
-    @ResponseStatus(HttpStatus.ACCEPTED)
-    public LedgerPostingService.Result settlement(@RequestBody PostingRequest r) {
-        String fp = "SETTLEMENT:" + r.aggregateId() + ":" + r.amount();
-        var now = Instant.now();
-        var batch = new LedgerBatch(
-                r.eventId(), fp, r.aggregateId(), r.reason(),
-                List.of(
-                        new LedgerEntry("platform_payable", LedgerDirection.DEBIT, r.amount(), "KRW", now),
-                        new LedgerEntry("merchant_receivable", LedgerDirection.CREDIT, r.amount(), "KRW", now)
-                )
+    @PostMapping("/postings")
+    public ResponseEntity<Map<String, String>> posting(@Valid @RequestBody LedgerPostingRequest request) {
+        var result = service.post(
+                request.type(),
+                request.eventId(),
+                request.aggregateId(),
+                request.amount()
         );
-        return service.post(batch);
+
+        var body = Map.of("result", result.name());
+        return switch (result) {
+            case POSTED -> ResponseEntity.status(HttpStatus.ACCEPTED).body(body);
+            case DUPLICATE_NOOP -> ResponseEntity.ok(body);
+            case CONFLICTING_EVENT_ID -> ResponseEntity.status(HttpStatus.CONFLICT).body(body);
+        };
     }
 }
