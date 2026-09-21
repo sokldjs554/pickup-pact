@@ -1,0 +1,81 @@
+name: live-demo-smoke
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "demo/**"
+      - "Dockerfile.demo"
+      - "render.yaml"
+      - ".github/workflows/live-demo-smoke.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-live-demo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Wait for public demo
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE_URL="https://pickup-pact-demo.onrender.com"
+          for attempt in $(seq 1 24); do
+            if curl --silent --show-error --fail --max-time 15 "$BASE_URL/health" -o /tmp/health.json; then
+              python - <<'PY'
+          import json
+          payload = json.load(open("/tmp/health.json"))
+          assert payload["status"] == "ok", payload
+          PY
+              break
+            fi
+            if [ "$attempt" -eq 24 ]; then
+              echo "live demo did not become ready" >&2
+              exit 1
+            fi
+            sleep 10
+          done
+
+      - name: Verify interviewer scenarios
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE_URL="https://pickup-pact-demo.onrender.com"
+          for scenario in late-cancel duplicate capacity-drop conflict; do
+            curl --silent --show-error --fail --max-time 20               "$BASE_URL/api/scenarios/$scenario"               -o "/tmp/$scenario.json"
+          done
+
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          expected = {
+              "late-cancel": {"REVERSE_SETTLEMENT", "REVERSE_REWARD", "REBUILD_PROJECTION"},
+              "duplicate": {"NO_OP_DUPLICATE"},
+              "capacity-drop": {"MARK_AT_RISK", "RESLOT_REVIEW"},
+              "conflict": {"QUARANTINE_EVENT", "MANUAL_REVIEW"},
+          }
+
+          for scenario, commands in expected.items():
+              payload = json.loads(Path(f"/tmp/{scenario}.json").read_text())
+              actual = {item["command"] for item in payload["repairs"]}
+              missing = commands - actual
+              assert not missing, (scenario, missing, payload)
+              assert payload["anomalies"], (scenario, payload)
+              assert payload["evidence_event_ids"], (scenario, payload)
+              assert payload["engine"] == "deterministic-temporal-reconciler/v1", payload
+
+          print("live demo smoke passed for all four scenarios")
+          PY
+
+      - name: Verify interviewer landing page
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --silent --show-error --fail --max-time 20             https://pickup-pact-demo.onrender.com/ -o /tmp/index.html
+          grep -F "12:30에 준비됩니다" /tmp/index.html
+          grep -F "30초 시나리오" /tmp/index.html
+          grep -F "백엔드로 재생하기" /tmp/index.html
