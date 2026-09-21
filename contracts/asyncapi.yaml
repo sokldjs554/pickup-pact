@@ -1,32 +1,49 @@
 asyncapi: 3.0.0
 info:
   title: Pickup Pact Domain Events
-  version: 0.1.0
+  version: 0.2.0
 channels:
   commitmentEvents:
     address: pickup.commitment.events.v1
     messages:
-      pickupConfirmed:
+      commitmentConfirmed:
         payload:
           type: object
-          required: [event_id, aggregate_id, type, occurred_at]
+          required: [event_id, aggregate_id, event_type, occurred_at, schema_version, payload]
           properties:
             event_id: {type: string}
             aggregate_id: {type: string}
-            type: {const: PICKUP_CONFIRMED}
+            event_type: {const: CommitmentConfirmed}
             occurred_at: {type: string, format: date-time}
+            schema_version: {type: integer, const: 1}
+            payload:
+              type: object
+              required: [pickup_at, capacity_units]
+      commitmentCancelled:
+        payload:
+          type: object
+          required: [event_id, aggregate_id, event_type, occurred_at, schema_version, payload]
+          properties:
+            event_id: {type: string}
+            aggregate_id: {type: string}
+            event_type: {const: CommitmentCancelled}
+            occurred_at: {type: string, format: date-time}
+            schema_version: {type: integer, const: 1}
+            payload: {type: object}
   financialEvents:
     address: pickup.financial.events.v1
     messages:
-      settlement:
+      posting:
         payload:
           type: object
           required: [eventId, aggregateId, reason, amount]
           properties:
             eventId: {type: string}
             aggregateId: {type: string}
-            reason: {type: string}
-            amount: {type: number}
+            reason:
+              type: string
+              enum: [SETTLEMENT, REVERSE_SETTLEMENT, REWARD, REVERSE_REWARD]
+            amount: {type: number, exclusiveMinimum: 0}
   repairCommands:
     address: pickup.repair.commands.v1
     messages:
@@ -34,3 +51,11 @@ channels:
         payload:
           type: object
           required: [command, aggregate_id, evidence_event_ids]
+          properties:
+            command:
+              type: string
+              enum: [NO_OP_DUPLICATE, REBUILD_PROJECTION, REVERSE_SETTLEMENT, REVERSE_REWARD, RESLOT_REVIEW, MANUAL_REVIEW]
+            aggregate_id: {type: string}
+            evidence_event_ids:
+              type: array
+              items: {type: string}

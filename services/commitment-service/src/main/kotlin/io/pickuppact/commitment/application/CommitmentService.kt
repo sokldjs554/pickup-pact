@@ -39,8 +39,8 @@ class CommitmentService(
             .flatMap { saved ->
                 repository.saveWithEvent(
                     saved,
-                    "PICKUP_CONFIRMED",
-                    mapOf("pickupAt" to saved.pickupAt.toString(), "units" to saved.units)
+                    "CommitmentConfirmed",
+                    mapOf("pickup_at" to saved.pickupAt.toString(), "capacity_units" to saved.units)
                 )
             }
 
@@ -50,8 +50,8 @@ class CommitmentService(
             .flatMap { saved ->
                 repository.saveWithEvent(
                     saved,
-                    "PICKUP_CANCELLED",
-                    mapOf("occurredAt" to Instant.now().toString())
+                    "CommitmentCancelled",
+                    mapOf("reason" to "customer_request")
                 )
             }
             .flatMap { saved -> capacity.release(saved.leaseToken).thenReturn(saved) }
