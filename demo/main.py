@@ -1,154 +1,460 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
-from pydantic import BaseModel
+
+from services.reconciler.app.engine import reconcile as core_reconcile
+from services.reconciler.app.models import EventEnvelope, ReconcileRequest
 
 app = FastAPI(
     title="Pickup Pact Demo",
-    version="1.0.0",
-    description="Scheduled-pickup temporal consistency demo",
+    version="2.0.0",
+    description="Interviewer-facing smart-order consistency demo backed by the real reconciliation engine.",
 )
 
 INDEX = Path(__file__).with_name("index.html")
 
+EVENT_LABELS = {
+    "PickupSlotHeld": "픽업 슬롯 확보",
+    "PaymentAuthorized": "결제 승인",
+    "CommitmentConfirmed": "픽업 주문 확정",
+    "CommitmentCancelled": "고객 주문 취소",
+    "SettlementPosted": "점주 정산 반영",
+    "RewardGranted": "고객 포인트 적립",
+    "CapacityRevised": "매장 처리량 변경",
+    "SettlementReversed": "정산 취소 분개",
+    "RewardReversed": "포인트 회수",
+}
 
-class Event(BaseModel):
-    event_id: str
-    type: str
-    occurred_at: str
-    received_at: str
-    detail: str
-    amount: int | None = None
+ANOMALY_COPY = {
+    "duplicate_event_delivery": (
+        "같은 이벤트가 두 번 도착했습니다.",
+        "Kafka의 at-least-once 전달 때문에 동일한 금전 이벤트가 재전달되었습니다.",
+    ),
+    "conflicting_duplicate_payload": (
+        "같은 이벤트 ID인데 금액이 다릅니다.",
+        "안전한 재전달로 볼 수 없어 자동 반영을 중단하고 사람 검토가 필요합니다.",
+    ),
+    "receive_order_projection_drift": (
+        "서버가 받은 순서와 실제 발생 순서가 다릅니다.",
+        "수신 순서만 믿으면 주문·정산·적립 상태가 실제 업무 순서와 어긋납니다.",
+    ),
+    "confirmed_without_payment_authorization": (
+        "결제 승인 없이 픽업이 확정되었습니다.",
+        "픽업 약속을 확정하기 위한 선행 조건이 충족되지 않았습니다.",
+    ),
+    "confirmed_promise_exceeds_revised_capacity": (
+        "이미 약속한 픽업 수량을 매장이 처리할 수 없습니다.",
+        "확정 뒤 매장 처리 가능 수량이 줄어 기존 픽업 약속이 위험 상태가 되었습니다.",
+    ),
+    "settlement_posted_after_prior_cancellation": (
+        "취소 뒤에 점주 정산이 반영되었습니다.",
+        "고객 취소가 실제로 먼저 발생했기 때문에 정산을 그대로 둘 수 없습니다.",
+    ),
+    "reward_granted_after_prior_cancellation": (
+        "취소 뒤에 포인트가 지급되었습니다.",
+        "취소된 주문에 지급된 포인트를 회수해야 합니다.",
+    ),
+}
 
+REPAIR_COPY = {
+    "NO_OP_DUPLICATE": (
+        "두 번째 금전 반영 차단",
+        "같은 이벤트를 다시 받아도 정산·적립을 한 번 더 만들지 않습니다.",
+    ),
+    "REBUILD_PROJECTION": (
+        "주문 조회 상태 재구성",
+        "실제 발생 순서를 기준으로 고객/점주 화면의 상태를 다시 계산합니다.",
+    ),
+    "REVERSE_SETTLEMENT": (
+        "잘못된 점주 정산 취소",
+        "기존 정산 기록은 삭제하지 않고 반대 분개를 새로 만들어 감사 이력을 유지합니다.",
+    ),
+    "REVERSE_REWARD": (
+        "잘못 지급된 포인트 회수",
+        "취소 이후 지급된 포인트를 보상 이벤트로 회수합니다.",
+    ),
+    "RESLOT_REVIEW": (
+        "대체 픽업 시간 검토",
+        "현재 처리량으로 지킬 수 있는 가장 가까운 슬롯을 다시 검토합니다.",
+    ),
+    "MANUAL_REVIEW": (
+        "자동 금전 변경 중단",
+        "이벤트 의미가 충돌하므로 자동 보정 대신 근거를 묶어 운영자 검토로 보냅니다.",
+    ),
+}
 
 SCENARIOS: dict[str, dict[str, Any]] = {
     "late-cancel": {
-        "title": "늦게 도착한 취소",
-        "subtitle": "취소는 먼저 일어났지만 정산·적립 뒤에 도착했습니다.",
+        "title": "취소 메시지가 늦게 도착한 주문",
+        "tab_title": "취소 메시지 지연",
+        "tab_subtitle": "취소는 먼저, 서버 도착은 나중",
         "customer": "12:30 픽업 · 아메리카노 2잔 · 9,000원",
-        "problem": "수신 순서만 믿으면 이미 취소된 주문에 정산과 포인트가 남습니다.",
+        "problem": "고객은 12:14:10에 취소했지만 취소 메시지는 52초 뒤에 도착했습니다. 그 사이 점주 정산과 포인트 적립이 먼저 처리되었습니다.",
+        "order": {
+            "order_id": "PP-1208",
+            "store": "패스카페 강남역점",
+            "items": "아메리카노 2잔",
+            "total": "9,000원",
+            "pickup_at": "12:30",
+            "customer_action": "12:14:10 주문 취소",
+        },
+        "business_impact": {
+            "customer": "취소한 주문의 포인트가 남아 잘못 사용할 수 있음",
+            "merchant": "취소 주문 대금 9,000원이 정산 대상으로 남음",
+            "service": "주문·정산·적립 상태가 서로 다른 사실을 가리킴",
+        },
+        "before": "주문 취소 / 정산 유지 / 90P 유지",
+        "after": "주문 취소 / 정산 취소 / 90P 회수",
         "events": [
-            {"event_id": "evt-101", "type": "PICKUP_CONFIRMED", "occurred_at": "12:08:00", "received_at": "12:08:01", "detail": "12:30 픽업 약속 확정"},
-            {"event_id": "evt-102", "type": "PAYMENT_AUTHORIZED", "occurred_at": "12:08:02", "received_at": "12:08:03", "detail": "결제 승인 9,000원", "amount": 9000},
-            {"event_id": "evt-104", "type": "CANCELLED", "occurred_at": "12:14:10", "received_at": "12:15:02", "detail": "고객 취소 — 네트워크 지연으로 52초 늦게 수신"},
-            {"event_id": "evt-103", "type": "SETTLED", "occurred_at": "12:14:35", "received_at": "12:14:36", "detail": "점주 정산 반영", "amount": 9000},
-            {"event_id": "evt-105", "type": "REWARD_GRANTED", "occurred_at": "12:14:39", "received_at": "12:14:40", "detail": "포인트 90P 적립", "amount": 90},
+            {
+                "event_id": "slot-101",
+                "aggregate_id": "order-late-cancel",
+                "event_type": "PickupSlotHeld",
+                "occurred_at": "2026-09-21T12:08:00+09:00",
+                "received_at": "2026-09-21T12:08:01+09:00",
+                "payload": {"capacity_units": 2, "pickup_at": "2026-09-21T12:30:00+09:00"},
+                "detail": "12:30 픽업 슬롯 2개 확보",
+            },
+            {
+                "event_id": "payment-102",
+                "aggregate_id": "order-late-cancel",
+                "event_type": "PaymentAuthorized",
+                "occurred_at": "2026-09-21T12:08:02+09:00",
+                "received_at": "2026-09-21T12:08:03+09:00",
+                "payload": {"amount": "9000"},
+                "detail": "결제 9,000원 승인",
+            },
+            {
+                "event_id": "confirm-103",
+                "aggregate_id": "order-late-cancel",
+                "event_type": "CommitmentConfirmed",
+                "occurred_at": "2026-09-21T12:08:04+09:00",
+                "received_at": "2026-09-21T12:08:05+09:00",
+                "payload": {"capacity_units": 2, "pickup_at": "2026-09-21T12:30:00+09:00"},
+                "detail": "고객에게 12:30 픽업 확정",
+            },
+            {
+                "event_id": "cancel-104",
+                "aggregate_id": "order-late-cancel",
+                "event_type": "CommitmentCancelled",
+                "occurred_at": "2026-09-21T12:14:10+09:00",
+                "received_at": "2026-09-21T12:15:02+09:00",
+                "payload": {"reason": "customer_request"},
+                "detail": "고객 취소 — 실제 발생 후 52초 늦게 서버 도착",
+            },
+            {
+                "event_id": "settlement-105",
+                "aggregate_id": "order-late-cancel",
+                "event_type": "SettlementPosted",
+                "occurred_at": "2026-09-21T12:14:36+09:00",
+                "received_at": "2026-09-21T12:14:36+09:00",
+                "payload": {"amount": "9000"},
+                "detail": "점주 정산 9,000원 반영",
+            },
+            {
+                "event_id": "reward-106",
+                "aggregate_id": "order-late-cancel",
+                "event_type": "RewardGranted",
+                "occurred_at": "2026-09-21T12:14:40+09:00",
+                "received_at": "2026-09-21T12:14:40+09:00",
+                "payload": {"amount": "90"},
+                "detail": "고객 포인트 90P 적립",
+            },
         ],
     },
     "duplicate": {
-        "title": "Kafka 중복 전달",
-        "subtitle": "동일 결제 이벤트가 재전달돼도 금전 부작용은 한 번만 발생해야 합니다.",
-        "customer": "13:00 픽업 · 라떼 1잔 · 5,500원",
-        "problem": "at-least-once 전달에서 event_id 멱등성이 없으면 이중 정산이 발생합니다.",
+        "title": "같은 정산 이벤트가 두 번 도착한 주문",
+        "tab_title": "같은 정산 2번",
+        "tab_subtitle": "Kafka 중복 전달",
+        "customer": "13:00 픽업 · 카페라떼 1잔 · 5,500원",
+        "problem": "동일한 정산 이벤트가 재전달되었습니다. 중복을 막지 못하면 점주 정산이 두 번 반영될 수 있습니다.",
+        "order": {
+            "order_id": "PP-1300",
+            "store": "패스카페 역삼점",
+            "items": "카페라떼 1잔",
+            "total": "5,500원",
+            "pickup_at": "13:00",
+            "customer_action": "정상 픽업",
+        },
+        "business_impact": {
+            "customer": "고객 화면은 정상이어도 내부 금전 상태가 틀어질 수 있음",
+            "merchant": "동일 주문 정산이 두 번 잡힐 위험",
+            "service": "at-least-once 메시징의 중복 부작용 가능",
+        },
+        "before": "정산 이벤트 2회 수신",
+        "after": "금전 반영 1회만 유지",
         "events": [
-            {"event_id": "evt-201", "type": "PICKUP_CONFIRMED", "occurred_at": "12:44:00", "received_at": "12:44:01", "detail": "13:00 픽업 확정"},
-            {"event_id": "evt-202", "type": "SETTLED", "occurred_at": "12:44:05", "received_at": "12:44:06", "detail": "정산 5,500원", "amount": 5500},
-            {"event_id": "evt-202", "type": "SETTLED", "occurred_at": "12:44:05", "received_at": "12:44:19", "detail": "Kafka redelivery — 동일 payload", "amount": 5500},
+            {
+                "event_id": "slot-201",
+                "aggregate_id": "order-duplicate",
+                "event_type": "PickupSlotHeld",
+                "occurred_at": "2026-09-21T12:44:00+09:00",
+                "received_at": "2026-09-21T12:44:00+09:00",
+                "payload": {"capacity_units": 1},
+                "detail": "13:00 픽업 슬롯 확보",
+            },
+            {
+                "event_id": "pay-202",
+                "aggregate_id": "order-duplicate",
+                "event_type": "PaymentAuthorized",
+                "occurred_at": "2026-09-21T12:44:01+09:00",
+                "received_at": "2026-09-21T12:44:01+09:00",
+                "payload": {"amount": "5500"},
+                "detail": "결제 5,500원 승인",
+            },
+            {
+                "event_id": "confirm-203",
+                "aggregate_id": "order-duplicate",
+                "event_type": "CommitmentConfirmed",
+                "occurred_at": "2026-09-21T12:44:02+09:00",
+                "received_at": "2026-09-21T12:44:02+09:00",
+                "payload": {"capacity_units": 1},
+                "detail": "13:00 픽업 확정",
+            },
+            {
+                "event_id": "settlement-77",
+                "aggregate_id": "order-duplicate",
+                "event_type": "SettlementPosted",
+                "occurred_at": "2026-09-21T12:44:05+09:00",
+                "received_at": "2026-09-21T12:44:06+09:00",
+                "payload": {"amount": "5500"},
+                "detail": "정산 5,500원 반영",
+            },
+            {
+                "event_id": "settlement-77",
+                "aggregate_id": "order-duplicate",
+                "event_type": "SettlementPosted",
+                "occurred_at": "2026-09-21T12:44:05+09:00",
+                "received_at": "2026-09-21T12:44:19+09:00",
+                "payload": {"amount": "5500"},
+                "detail": "동일 Kafka 이벤트 재전달",
+            },
         ],
     },
     "capacity-drop": {
-        "title": "매장 수용량 급감",
-        "subtitle": "확정 후 제조 가능 수량이 줄어 픽업 약속을 지킬 수 없게 됐습니다.",
-        "customer": "18:10 픽업 · 음료 4잔 · capacity 4→2",
-        "problem": "주문 상태만 보면 CONFIRMED지만 실제 제조 슬롯은 이미 약속을 위반합니다.",
+        "title": "확정 뒤 매장 처리량이 줄어든 주문",
+        "tab_title": "매장 처리량 감소",
+        "tab_subtitle": "확정한 픽업 약속 위험",
+        "customer": "18:10 픽업 · 음료 4잔 · 22,000원",
+        "problem": "4잔을 만들 수 있다고 보고 주문을 확정했지만 머신 장애로 해당 시간대 처리 가능 수량이 2잔으로 줄었습니다.",
+        "order": {
+            "order_id": "PP-1810",
+            "store": "패스카페 성수점",
+            "items": "음료 4잔",
+            "total": "22,000원",
+            "pickup_at": "18:10",
+            "customer_action": "픽업 대기",
+        },
+        "business_impact": {
+            "customer": "약속한 시간에 음료를 받지 못할 가능성",
+            "merchant": "현장에서 주문 지연·문의가 집중될 수 있음",
+            "service": "확정 당시 상태와 현재 제조 가능량이 불일치",
+        },
+        "before": "18:10 픽업 확정",
+        "after": "AT_RISK / 대체 시간 검토",
         "events": [
-            {"event_id": "evt-301", "type": "CAPACITY_LEASED", "occurred_at": "17:48:00", "received_at": "17:48:00", "detail": "18:10 슬롯 4 units 임대"},
-            {"event_id": "evt-302", "type": "PICKUP_CONFIRMED", "occurred_at": "17:48:03", "received_at": "17:48:04", "detail": "픽업 약속 확정"},
-            {"event_id": "evt-303", "type": "CAPACITY_REVISED", "occurred_at": "17:55:00", "received_at": "17:55:01", "detail": "머신 장애로 available units 2", "amount": 2},
+            {
+                "event_id": "slot-301",
+                "aggregate_id": "order-capacity",
+                "event_type": "PickupSlotHeld",
+                "occurred_at": "2026-09-21T17:48:00+09:00",
+                "received_at": "2026-09-21T17:48:00+09:00",
+                "payload": {"capacity_units": 4},
+                "detail": "18:10 제조 슬롯 4잔 확보",
+            },
+            {
+                "event_id": "pay-302",
+                "aggregate_id": "order-capacity",
+                "event_type": "PaymentAuthorized",
+                "occurred_at": "2026-09-21T17:48:01+09:00",
+                "received_at": "2026-09-21T17:48:01+09:00",
+                "payload": {"amount": "22000"},
+                "detail": "결제 22,000원 승인",
+            },
+            {
+                "event_id": "confirm-303",
+                "aggregate_id": "order-capacity",
+                "event_type": "CommitmentConfirmed",
+                "occurred_at": "2026-09-21T17:48:03+09:00",
+                "received_at": "2026-09-21T17:48:04+09:00",
+                "payload": {"capacity_units": 4},
+                "detail": "18:10 픽업 4잔 확정",
+            },
+            {
+                "event_id": "capacity-304",
+                "aggregate_id": "order-capacity",
+                "event_type": "CapacityRevised",
+                "occurred_at": "2026-09-21T17:55:00+09:00",
+                "received_at": "2026-09-21T17:55:01+09:00",
+                "payload": {"revision": 2, "available_units": 2},
+                "detail": "머신 장애로 처리 가능량 4 → 2",
+            },
         ],
     },
     "conflict": {
-        "title": "같은 event_id, 다른 금액",
-        "subtitle": "단순 중복이 아니라 재사용된 이벤트 ID의 의미 충돌입니다.",
+        "title": "같은 이벤트 ID인데 금액이 다른 주문",
+        "tab_title": "같은 ID, 다른 금액",
+        "tab_subtitle": "단순 중복이 아닌 충돌",
         "customer": "09:20 픽업 · 샌드위치 세트 · 11,500원",
-        "problem": "event_id만 보고 중복 제거하면 금액 변조/상류 버그를 조용히 숨기게 됩니다.",
+        "problem": "동일 event_id가 두 번 도착했지만 한 번은 11,500원, 다른 한 번은 13,500원입니다. 자동 dedupe하면 상류 오류를 숨길 수 있습니다.",
+        "order": {
+            "order_id": "PP-0920",
+            "store": "패스카페 시청점",
+            "items": "샌드위치 세트",
+            "total": "11,500원",
+            "pickup_at": "09:20",
+            "customer_action": "정상 픽업",
+        },
+        "business_impact": {
+            "customer": "잘못된 금액 처리 가능성",
+            "merchant": "정산 금액 신뢰성 훼손",
+            "service": "동일 ID의 의미 충돌을 조용히 버리면 장애 근거가 사라짐",
+        },
+        "before": "11,500원 / 13,500원 충돌",
+        "after": "자동 반영 중단 / 운영자 검토",
         "events": [
-            {"event_id": "evt-401", "type": "SETTLED", "occurred_at": "09:01:00", "received_at": "09:01:01", "detail": "정산 11,500원", "amount": 11500},
-            {"event_id": "evt-401", "type": "SETTLED", "occurred_at": "09:01:00", "received_at": "09:01:18", "detail": "동일 ID지만 정산 금액 13,500원", "amount": 13500},
+            {
+                "event_id": "slot-401",
+                "aggregate_id": "order-conflict",
+                "event_type": "PickupSlotHeld",
+                "occurred_at": "2026-09-21T09:00:50+09:00",
+                "received_at": "2026-09-21T09:00:50+09:00",
+                "payload": {"capacity_units": 1},
+                "detail": "09:20 픽업 슬롯 확보",
+            },
+            {
+                "event_id": "pay-402",
+                "aggregate_id": "order-conflict",
+                "event_type": "PaymentAuthorized",
+                "occurred_at": "2026-09-21T09:00:52+09:00",
+                "received_at": "2026-09-21T09:00:52+09:00",
+                "payload": {"amount": "11500"},
+                "detail": "결제 11,500원 승인",
+            },
+            {
+                "event_id": "confirm-403",
+                "aggregate_id": "order-conflict",
+                "event_type": "CommitmentConfirmed",
+                "occurred_at": "2026-09-21T09:00:55+09:00",
+                "received_at": "2026-09-21T09:00:55+09:00",
+                "payload": {"capacity_units": 1},
+                "detail": "09:20 픽업 확정",
+            },
+            {
+                "event_id": "settlement-X",
+                "aggregate_id": "order-conflict",
+                "event_type": "SettlementPosted",
+                "occurred_at": "2026-09-21T09:01:00+09:00",
+                "received_at": "2026-09-21T09:01:01+09:00",
+                "payload": {"amount": "11500"},
+                "detail": "정산 11,500원",
+            },
+            {
+                "event_id": "settlement-X",
+                "aggregate_id": "order-conflict",
+                "event_type": "SettlementPosted",
+                "occurred_at": "2026-09-21T09:01:00+09:00",
+                "received_at": "2026-09-21T09:01:18+09:00",
+                "payload": {"amount": "13500"},
+                "detail": "동일 ID지만 정산 금액 13,500원",
+            },
         ],
     },
 }
 
 
-def _seconds(ts: str) -> int:
-    h, m, s = (int(x) for x in ts.split(":"))
-    return h * 3600 + m * 60 + s
+def _event_time(value: datetime) -> str:
+    return value.astimezone().strftime("%H:%M:%S")
 
 
-def reconcile(scenario_id: str) -> dict[str, Any]:
-    s = SCENARIOS[scenario_id]
-    events = [Event(**e) for e in s["events"]]
-    received = sorted(events, key=lambda e: (_seconds(e.received_at), e.event_id))
-    canonical = sorted(events, key=lambda e: (_seconds(e.occurred_at), _seconds(e.received_at), e.event_id))
+def _build_request(scenario: dict[str, Any]) -> ReconcileRequest:
+    events = [
+        EventEnvelope(
+            event_id=item["event_id"],
+            aggregate_id=item["aggregate_id"],
+            event_type=item["event_type"],
+            occurred_at=item["occurred_at"],
+            received_at=item["received_at"],
+            payload=item["payload"],
+        )
+        for item in scenario["events"]
+    ]
+    return ReconcileRequest(events=events)
 
-    anomalies: list[dict[str, str]] = []
-    repairs: list[dict[str, str]] = []
-    state_before = "CONFIRMED"
-    state_after = "CONFIRMED"
 
-    if scenario_id == "late-cancel":
-        cancel = next(e for e in canonical if e.type == "CANCELLED")
-        bad = [e for e in canonical if e.type in {"SETTLED", "REWARD_GRANTED"} and _seconds(e.occurred_at) > _seconds(cancel.occurred_at)]
-        anomalies.append({
-            "code": "LATE_FACT_CAUSALITY",
-            "title": "수신 순서와 실제 발생 순서가 다름",
-            "detail": f"취소가 {cancel.occurred_at}에 먼저 발생했지만 {cancel.received_at}에 늦게 도착했습니다."
-        })
-        if any(e.type == "SETTLED" for e in bad):
-            repairs.append({"command": "REVERSE_SETTLEMENT", "why": "취소 이후 발생한 정산을 삭제하지 않고 보상 분개합니다."})
-        if any(e.type == "REWARD_GRANTED" for e in bad):
-            repairs.append({"command": "REVERSE_REWARD", "why": "취소 이후 적립된 포인트를 보상 이벤트로 회수합니다."})
-        repairs.append({"command": "REBUILD_PROJECTION", "why": "event-time 기준으로 CQRS read model을 재구성합니다."})
-        state_before, state_after = "SETTLED + REWARDED", "CANCELLED + COMPENSATED"
+def _ui_event(item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "event_id": item["event_id"],
+        "event_type": item["event_type"],
+        "label": EVENT_LABELS[item["event_type"]],
+        "occurred_at": datetime.fromisoformat(item["occurred_at"]).strftime("%H:%M:%S"),
+        "received_at": datetime.fromisoformat(item["received_at"]).strftime("%H:%M:%S"),
+        "detail": item["detail"],
+    }
 
-    elif scenario_id == "duplicate":
-        fingerprints: dict[str, tuple[str, int | None]] = {}
-        duplicate = False
-        for e in received:
-            fp = (e.type, e.amount)
-            if e.event_id in fingerprints and fingerprints[e.event_id] == fp:
-                duplicate = True
-            fingerprints.setdefault(e.event_id, fp)
-        if duplicate:
-            anomalies.append({"code": "SAFE_REDELIVERY", "title": "동일 Kafka 이벤트 재전달", "detail": "event_id와 semantic fingerprint가 동일합니다."})
-            repairs.append({"command": "NO_OP_DUPLICATE", "why": "ledger side effect를 두 번째로 만들지 않습니다."})
-            repairs.append({"command": "VERIFY_PROJECTION", "why": "read model이 한 번만 반영됐는지 검증합니다."})
-        state_before, state_after = "2 deliveries", "1 financial effect"
 
-    elif scenario_id == "capacity-drop":
-        anomalies.append({"code": "PROMISE_CAPACITY_DRIFT", "title": "확정 약속 > 현재 제조 수용량", "detail": "확정 당시 4 units였지만 현재 available capacity는 2입니다."})
-        repairs.append({"command": "MARK_AT_RISK", "why": "기존 확정을 숨기지 않고 약속을 위험 상태로 전환합니다."})
-        repairs.append({"command": "RESLOT_REVIEW", "why": "가장 가까운 대체 픽업 슬롯 검토를 요청합니다."})
-        state_before, state_after = "CONFIRMED", "AT_RISK"
+def _snapshot_label(result: Any) -> str:
+    state = result.canonical_state
+    parts = [state.status]
+    if state.settled:
+        parts.append("정산 반영")
+    if state.rewarded:
+        parts.append("포인트 반영")
+    return " / ".join(parts)
 
-    elif scenario_id == "conflict":
-        first, second = received
-        if first.event_id == second.event_id and (first.type, first.amount) != (second.type, second.amount):
-            anomalies.append({"code": "CONFLICTING_EVENT_REUSE", "title": "같은 event_id에 다른 의미", "detail": "11,500원과 13,500원이 같은 event_id로 들어왔습니다."})
-            repairs.append({"command": "QUARANTINE_EVENT", "why": "안전한 redelivery로 처리하지 않고 격리합니다."})
-            repairs.append({"command": "MANUAL_REVIEW", "why": "자동 금전 보정을 금지하고 근거 이벤트를 운영자에게 제시합니다."})
-        state_before, state_after = "AMBIGUOUS", "QUARANTINED"
+
+def run_scenario(scenario_id: str) -> dict[str, Any]:
+    if scenario_id not in SCENARIOS:
+        raise KeyError(scenario_id)
+
+    scenario = SCENARIOS[scenario_id]
+    request = _build_request(scenario)
+    result = core_reconcile(request)
+
+    received_events = sorted(
+        scenario["events"],
+        key=lambda item: (datetime.fromisoformat(item["received_at"]), item["event_id"]),
+    )
+    business_events = sorted(
+        scenario["events"],
+        key=lambda item: (datetime.fromisoformat(item["occurred_at"]), item["event_id"]),
+    )
+
+    anomalies = []
+    for code in result.anomalies:
+        title, detail = ANOMALY_COPY.get(code, (code, ""))
+        anomalies.append({"code": code, "title": title, "detail": detail})
+
+    repairs = []
+    for code in result.repairs:
+        title, detail = REPAIR_COPY.get(code, (code, ""))
+        repairs.append({"code": code, "title": title, "detail": detail})
 
     return {
         "scenario_id": scenario_id,
-        "title": s["title"],
-        "subtitle": s["subtitle"],
-        "customer": s["customer"],
-        "problem": s["problem"],
-        "received_order": [e.model_dump() for e in received],
-        "canonical_order": [e.model_dump() for e in canonical],
+        "title": scenario["title"],
+        "tab_title": scenario["tab_title"],
+        "tab_subtitle": scenario["tab_subtitle"],
+        "customer": scenario["customer"],
+        "problem": scenario["problem"],
+        "order": scenario["order"],
+        "business_impact": scenario["business_impact"],
+        "before": scenario["before"],
+        "after": scenario["after"],
+        "received_order": [_ui_event(item) for item in received_events],
+        "business_order": [_ui_event(item) for item in business_events],
         "anomalies": anomalies,
         "repairs": repairs,
-        "state_before": state_before,
-        "state_after": state_after,
-        "evidence_event_ids": sorted({e.event_id for e in events}),
-        "engine": "deterministic-temporal-reconciler/v1",
-        "generated_at": datetime.utcnow().isoformat(timespec="seconds") + "Z",
+        "core_state": _snapshot_label(result),
+        "duplicate_event_ids": result.duplicate_event_ids,
+        "evidence_event_ids": result.evidence_event_ids,
+        "engine": "services/reconciler/app/engine.py",
+        "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
     }
 
 
@@ -159,19 +465,28 @@ def home() -> str:
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    return {"status": "ok", "service": "pickup-pact-demo"}
+    return {
+        "status": "ok",
+        "service": "pickup-pact-demo",
+        "engine": "services/reconciler/app/engine.py",
+    }
 
 
 @app.get("/api/scenarios")
 def list_scenarios() -> list[dict[str, str]]:
     return [
-        {"id": key, "title": value["title"], "subtitle": value["subtitle"]}
+        {
+            "id": key,
+            "title": value["tab_title"],
+            "subtitle": value["tab_subtitle"],
+        }
         for key, value in SCENARIOS.items()
     ]
 
 
 @app.get("/api/scenarios/{scenario_id}")
-def run_scenario(scenario_id: str) -> dict[str, Any]:
-    if scenario_id not in SCENARIOS:
-        raise HTTPException(status_code=404, detail="unknown scenario")
-    return reconcile(scenario_id)
+def scenario_endpoint(scenario_id: str) -> dict[str, Any]:
+    try:
+        return run_scenario(scenario_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="unknown scenario") from exc
