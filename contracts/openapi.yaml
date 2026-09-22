@@ -1,10 +1,41 @@
 openapi: 3.1.0
 info:
   title: Pickup Pact API
-  version: 0.2.0
+  version: 0.3.0
   description: API contracts for pickup commitments, financial postings, and deterministic reconciliation.
 
 paths:
+  /api/v1/commitments/slots:
+    get:
+      summary: List five-minute pickup slots from the live capacity ledger before a customer places an order
+      parameters:
+        - in: query
+          name: storeId
+          required: true
+          schema: {type: string, minLength: 1}
+        - in: query
+          name: from
+          required: false
+          schema: {type: string, format: date-time}
+        - in: query
+          name: count
+          required: false
+          schema: {type: integer, minimum: 1, maximum: 12, default: 6}
+        - in: query
+          name: units
+          required: false
+          schema: {type: integer, minimum: 1, default: 1}
+      responses:
+        "200":
+          description: Capacity-aware pickup choices
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PickupSlotOption"
+        "400": {description: Invalid slot query}
+
   /api/v1/commitments/hold:
     post:
       summary: Lease preparation capacity and create a HELD pickup commitment
@@ -169,6 +200,17 @@ components:
       schema: {type: string, format: uuid}
 
   schemas:
+    PickupSlotOption:
+      type: object
+      required: [pickupAt, capacityUnits, reservedUnits, availableUnits, requestedUnits, canFit]
+      properties:
+        pickupAt: {type: string, format: date-time}
+        capacityUnits: {type: integer, minimum: 0}
+        reservedUnits: {type: integer, minimum: 0}
+        availableUnits: {type: integer, minimum: 0}
+        requestedUnits: {type: integer, minimum: 1}
+        canFit: {type: boolean}
+
     LedgerPostingRequest:
       type: object
       required: [eventId, aggregateId, type, amount]
