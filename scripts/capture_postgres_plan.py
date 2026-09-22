@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import time
 import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -13,6 +14,31 @@ import psycopg
 DSN = "postgresql://pickuppact:pickuppact@127.0.0.1:5432/pickuppact"
 OUTBOX_INDEX = "idx_outbox_aggregate_timeline"
 STORE_SCHEDULE_INDEX = "idx_pickup_commitments_store_schedule"
+
+
+def connect_after_schema(timeout_s: int = 45):
+    """Survive the postgres image's temporary init server and final restart."""
+    deadline = time.time() + timeout_s
+    last_error: Exception | None = None
+    while time.time() < deadline:
+        try:
+            connection = psycopg.connect(DSN, connect_timeout=3)
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    select
+                      to_regclass('public.pickup_commitments') is not null,
+                      to_regclass('public.outbox_events') is not null,
+                      to_regclass('public.merchant_orders') is not null
+                    """
+                )
+                if all(cursor.fetchone()):
+                    return connection
+            connection.close()
+        except psycopg.OperationalError as exc:
+            last_error = exc
+        time.sleep(0.5)
+    raise RuntimeError(f"postgres schema did not become stable: {last_error!r}")
 
 
 def walk_plan(node: dict):
@@ -125,7 +151,7 @@ def main() -> None:
             f"plan-fingerprint-noise-{i}",
         ))
 
-    with psycopg.connect(DSN) as connection:
+    with connect_after_schema() as connection:
         with connection.cursor() as cursor:
             cursor.executemany(
                 """
