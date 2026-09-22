@@ -716,6 +716,71 @@ function changeCartQty(menuId,delta){
   if($("cartBackdrop")?.classList.contains("show"))refreshCartPromiseQuote();
 }
 
+function currentPromiseKey(){
+  const store=selectedStore();
+  return store&&cart.length ? store.id+":"+cartItemCount() : null;
+}
+
+function renderCartPromiseQuote(){
+  const quoteBox=$("cartPromiseQuote");
+  const pickup=$("cartPickup");
+  const button=$("checkoutButton");
+  if(!quoteBox||!pickup||!button)return;
+  const total=cartTotalValue();
+  const key=currentPromiseKey();
+  if(!key||!currentPromiseQuote||currentPromiseQuoteKey!==key){
+    quoteBox.className="admission-quote";
+    quoteBox.innerHTML="<b>픽업 시간을 확인하고 있어요.</b><span>현재 매장 상황으로 지킬 수 있는 시간을 계산합니다.</span>";
+    pickup.textContent="확인 중";
+    button.disabled=true;
+    button.textContent="픽업 시간 확인 중";
+    return;
+  }
+
+  const q=currentPromiseQuote;
+  const cls=q.decision==="ACCEPT"?"accept":q.decision==="OFFER_LATER"?"later":"pause";
+  quoteBox.className="admission-quote "+cls;
+  quoteBox.innerHTML="<b>"+q.headline+"</b><span>"+q.message+"</span>";
+
+  if(q.decision==="PAUSE"){
+    pickup.textContent="지금은 주문 잠시 쉬는 중";
+    button.disabled=true;
+    button.textContent="약 "+q.retry_after_minutes+"분 뒤 다시 확인";
+    return;
+  }
+
+  const pickupAt=pickupTimeFromMinutes(q.quoted_minutes);
+  pickup.textContent=pickupAt+" 픽업";
+  button.disabled=false;
+  button.textContent=money(total)+"원 · "+pickupAt+" 픽업 주문";
+}
+
+async function refreshCartPromiseQuote(){
+  const store=selectedStore();
+  const units=cartItemCount();
+  if(!store||!units){
+    currentPromiseQuote=null;currentPromiseQuoteKey=null;
+    renderCartPromiseQuote();
+    return null;
+  }
+  const requestId=++promiseQuoteRequest;
+  const key=store.id+":"+units;
+  try{
+    const quote=await api("/api/demo/promise/quote","POST",{store_id:store.id,order_units:units});
+    if(requestId!==promiseQuoteRequest)return null;
+    currentPromiseQuote=quote;
+    currentPromiseQuoteKey=key;
+    renderCartPromiseQuote();
+    return quote;
+  }catch(e){
+    if(requestId===promiseQuoteRequest){
+      currentPromiseQuote=null;currentPromiseQuoteKey=null;
+      renderCartPromiseQuote();
+    }
+    throw e;
+  }
+}
+
 function renderCart(){
   const bar=$("cartBar");
   if(!bar)return;
@@ -726,20 +791,20 @@ function renderCart(){
   $("cartBarTotal").textContent=money(total)+"원";
   $("cartStoreLabel").textContent=selectedStore()?.name||"";
   if($("cartTotal")) $("cartTotal").textContent=money(total)+"원";
-  if($("cartPickup")) $("cartPickup").textContent=estimatedPickup();
-  if($("checkoutButton")) $("checkoutButton").textContent=money(total)+"원 주문하기";
   if($("cartItems")){
     $("cartItems").innerHTML=cart.length?cart.map(item=>
       '<div class="cart-item"><div><b>'+item.name+'</b><small>'+money(item.price)+'원 · '+money(item.price*item.qty)+'원</small></div>'+
       '<div class="qty-control"><button type="button" aria-label="'+item.name+' 수량 줄이기" onclick="changeCartQty(\''+item.id+'\',-1)">−</button><span>'+item.qty+'</span><button type="button" aria-label="'+item.name+' 수량 늘리기" onclick="changeCartQty(\''+item.id+'\',1)">+</button></div></div>'
     ).join(""):'<div class="empty">아직 담은 메뉴가 없어요.</div>';
   }
+  renderCartPromiseQuote();
 }
 
-function openCart(){
+async function openCart(){
   if(!cart.length)return;
   renderCart();
   $("cartBackdrop").classList.add("show");
+  try{await refreshCartPromiseQuote()}catch(e){toast("픽업 시간을 확인하지 못했어요.",true)}
 }
 
 function closeCart(){
@@ -755,12 +820,21 @@ async function placeCustomerOrder(){
     if(!cart.length)throw new Error("메뉴를 먼저 담아주세요.");
     const store=selectedStore();
     if(!store)throw new Error("매장을 먼저 골라주세요.");
-    await waitForSession();
-    state=await api("/api/demo/sessions/"+sessionId+"/reset","POST",{});
     const items=cartItemSummary();
     const total=cartTotalValue();
     const units=cartItemCount();
-    const pickupAt=pickupTimeForStore(store);
+
+    const quote=await api("/api/demo/promise/quote","POST",{store_id:store.id,order_units:units});
+    currentPromiseQuote=quote;
+    currentPromiseQuoteKey=store.id+":"+units;
+    renderCartPromiseQuote();
+    if(quote.decision==="PAUSE"){
+      throw new Error("지금 받으면 픽업 약속을 지키기 어려워 잠깐 주문을 쉬고 있어요.");
+    }
+
+    const pickupAt=pickupTimeFromMinutes(quote.quoted_minutes);
+    await waitForSession();
+    state=await api("/api/demo/sessions/"+sessionId+"/reset","POST",{});
     let result=await api("/api/demo/sessions/"+sessionId+"/orders","POST",{
       store:store.name,items,total,pickup_at:pickupAt,units
     });
@@ -771,10 +845,11 @@ async function placeCustomerOrder(){
     state=result.state;
     customerOrderStage="received";
     cart=[];
+    currentPromiseQuote=null;currentPromiseQuoteKey=null;
     closeCart();
     renderAll();
     showPage("guided");
-    toast("주문됐어요.");
+    toast(pickupAt+" 픽업으로 주문됐어요.");
     if(orderReadyTimer)clearTimeout(orderReadyTimer);
     if(promiseTimer)clearTimeout(promiseTimer);
     setTimeout(()=>{if(state?.order?.status==="CONFIRMED"){customerOrderStage="preparing";renderCustomerOrder();}},450);
