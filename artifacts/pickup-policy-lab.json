@@ -1,0 +1,31 @@
+{
+  "baseline": {
+    "accepted_orders": 19751,
+    "accepted_units": 31024,
+    "mean_slot_utilization_pct": 77.03,
+    "overbooked_slots": 96,
+    "oversubscribed_units": 213,
+    "rejected_orders": 249
+  },
+  "benchmark": "synthetic-scheduled-pickup-policy-v1",
+  "config": {
+    "baseline_snapshot_batch_size": 4,
+    "capacity_units_per_slot": 40,
+    "max_deferral_slots": 2,
+    "orders": 20000,
+    "seed": 20260922,
+    "slot_count": 1000
+  },
+  "pickup_pact": {
+    "accepted_orders": 20000,
+    "accepted_selected_slot_orders": 19468,
+    "accepted_units": 31438,
+    "deferred_orders": 532,
+    "mean_deferral_slots": 1.0,
+    "mean_slot_utilization_pct": 78.59,
+    "overbooked_slots": 0,
+    "oversubscribed_units": 0,
+    "rejected_orders": 0
+  },
+  "scope": "Deterministic synthetic policy replay; not production demand, SLA, revenue, or real merchant traffic."
+}
