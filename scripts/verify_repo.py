@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import json
 import re
 import sys
 from pathlib import Path
@@ -138,9 +139,10 @@ promise_kotlin_cases = (ROOT / "services/commitment-service/src/test/resources/p
 assert promise_contract == promise_kotlin_cases, "Python/Kotlin promise admission golden cases drifted"
 assert "ACCEPT" in promise_contract and "OFFER_LATER" in promise_contract and "PAUSE" in promise_contract
 assert "Promise Lifecycle" in (ROOT / "docs/promise-lifecycle.md").read_text()
-promise_evidence = (ROOT / "artifacts/promise-admission-benchmark.json").read_text()
-assert '"avoidable_overpromise_rate": 0.0' in promise_evidence
-assert '"accepted_rate": 0.9855' in promise_evidence
+promise_evidence = json.loads((ROOT / "artifacts/promise-admission-benchmark.json").read_text())
+assert promise_evidence["promise_admission"]["avoidable_overpromise_rate"] == 0
+assert promise_evidence["promise_admission"]["accepted_rate"] == 0.9855
+assert promise_evidence["accept_all"]["avoidable_overpromise_rate"] == 0.2424
 for marker in [
     "오늘 뭐 드실래요?",
     "근처 매장",
