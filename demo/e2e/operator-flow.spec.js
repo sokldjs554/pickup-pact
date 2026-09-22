@@ -42,8 +42,8 @@ test('virtual customer can browse, add to cart, order, track, and cancel', async
   const promiseCard=page.locator('.pickup-promise-card.warning');
   const originalPickup=await promiseCard.getAttribute('data-original-pickup');
   const suggestedPickup=await promiseCard.getAttribute('data-suggested-pickup');
-  expect(originalPickup).toMatch(/^\\d{2}:\\d{2}$/);
-  expect(suggestedPickup).toMatch(/^\\d{2}:\\d{2}$/);
+  expect(originalPickup).toMatch(/^\d{2}:\d{2}$/);
+  expect(suggestedPickup).toMatch(/^\d{2}:\d{2}$/);
   const toMinutes=value => {
     const [h,m]=value.split(':').map(Number);
     return h*60+m;
