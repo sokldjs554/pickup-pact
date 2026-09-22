@@ -47,7 +47,9 @@ This matters when a request crosses storage boundaries. If the database transiti
 
 The financial model is append-only. Each settlement, reward, or reversal becomes a balanced debit/credit `LedgerBatch`.
 
-`ledger_batches.event_id` is the idempotency identity and `semantic_fingerprint` is a SHA-256 digest of aggregate, posting type, normalized amount, and currency.
+Settlement batches are denominated in `KRW`; reward/reward-reversal batches are denominated in `PTS`. A batch cannot mix accounting units, so “500 reward points” is never silently represented as 500 KRW.
+
+`ledger_batches.event_id` is the idempotency identity and `semantic_fingerprint` is a SHA-256 digest of aggregate, posting type, normalized amount, and accounting unit.
 
 - same event ID + same fingerprint → `DUPLICATE_NOOP`;
 - same event ID + different fingerprint → `CONFLICTING_EVENT_ID`, with the existing/incoming fingerprints quarantined in `ledger_conflicts`;
