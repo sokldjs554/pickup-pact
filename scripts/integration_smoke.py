@@ -343,6 +343,62 @@ def capacity_concurrency_flow(pass_no: int) -> None:
     assert released_slot["availableUnits"] == 40, released_slot
 
 
+
+def idempotency_concurrency_flow(pass_no: int) -> None:
+    store_id = f"idempotency-store-{pass_no}"
+    quote = expect(
+        httpx.post(
+            f"{COMMITMENT}/api/v1/commitments/quotes",
+            json={
+                "storeId": store_id,
+                "items": [{"sku": "cafe-latte", "quantity": 1}],
+                "count": 1,
+            },
+            timeout=15,
+        ),
+        200,
+    )
+    pickup_at = quote["slots"][0]["pickupAt"]
+    idempotency_key = f"same-key-{pass_no}-{uuid.uuid4().hex[:8]}"
+
+    def retry_same_hold(_: int) -> httpx.Response:
+        return httpx.post(
+            f"{COMMITMENT}/api/v1/commitments/hold",
+            headers={"Idempotency-Key": idempotency_key},
+            json={"quoteToken": quote["quoteToken"], "pickupAt": pickup_at},
+            timeout=20,
+        )
+
+    with ThreadPoolExecutor(max_workers=10) as pool:
+        responses = list(pool.map(retry_same_hold, range(10)))
+
+    assert all(response.status_code == 200 for response in responses), [
+        (response.status_code, response.text) for response in responses
+    ]
+    commitment_ids = {response.json()["id"] for response in responses}
+    assert len(commitment_ids) == 1, commitment_ids
+
+    live_slot = expect(
+        httpx.get(
+            f"{COMMITMENT}/api/v1/commitments/slots",
+            params={"storeId": store_id, "from": pickup_at, "count": 1, "units": 1},
+            timeout=15,
+        ),
+        200,
+    )[0]
+    assert live_slot["reservedUnits"] == 2, live_slot
+
+    commitment_id = next(iter(commitment_ids))
+    expect(
+        httpx.post(
+            f"{COMMITMENT}/api/v1/commitments/{commitment_id}/cancel",
+            timeout=15,
+        ),
+        200,
+    )
+
+
+
 def pact_financial_flow(pass_no: int) -> None:
     store_id = f"pact-financial-store-{pass_no}"
     quote = expect(
@@ -740,6 +796,7 @@ def celery_flow(pass_no: int) -> None:
 def one_pass(pass_no: int) -> None:
     commitment_flow(pass_no)
     capacity_concurrency_flow(pass_no)
+    idempotency_concurrency_flow(pass_no)
     pact_financial_flow(pass_no)
     ledger_flow(pass_no)
     kafka_ledger_flow(pass_no)
