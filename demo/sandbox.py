@@ -1361,6 +1361,9 @@ class DemoStore:
                 "projection_rebuilds": session["projection_rebuilds"],
                 "pickup_protection": deepcopy(session["pickup_protection"]),
                 "pickup_pact": deepcopy(session["pickup_pact"]),
+                "merchant_fulfillment": deepcopy(
+                    session.get("merchant_fulfillment") or _empty_merchant_fulfillment()
+                ),
                 "customer_history": deepcopy(session["customer_history"]),
                 "reconciliation": reconciliation,
                 "metrics": {
