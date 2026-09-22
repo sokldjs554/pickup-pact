@@ -85,6 +85,17 @@ def test_pickup_reschedule_clears_capacity_risk():
     assert "RESLOT_REVIEW" not in result.repairs
 
 
+def test_pickup_claim_is_terminal_customer_handoff_state():
+    result = reconcile(ReconcileRequest(events=[
+        ev("hold", "PickupSlotHeld", 0, 0, {"capacity_units": 1}),
+        ev("pay", "PaymentAuthorized", 1, 1),
+        ev("confirm", "CommitmentConfirmed", 2, 2, {"capacity_units": 1}),
+        ev("claim", "PickupClaimed", 3, 3, {"pickup_code_last2": "21"}),
+    ]))
+    assert result.canonical_state.status == "PICKED_UP"
+    assert "MANUAL_REVIEW" not in result.repairs
+
+
 def test_receive_order_preserves_input_order_when_received_timestamps_tie():
     tied = BASE + timedelta(seconds=1)
     request = ReconcileRequest(events=[
