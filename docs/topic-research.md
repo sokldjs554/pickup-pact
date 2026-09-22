@@ -1,6 +1,6 @@
 # Topic and demo research
 
-Research dates: 2026-09-18, refreshed 2026-09-21.
+Research dates: 2026-09-18, refreshed 2026-09-21 and 2026-09-23.
 
 The goal is twofold:
 
@@ -50,24 +50,44 @@ These projects changed the demo requirement: a finished-looking portfolio should
 - Redis caching as the headline feature;
 - a static architecture dashboard with no interactive state.
 
+## Actual PassOrder product refresh
+
+The original topic research was incomplete because it focused on public code patterns and the job posting more than the actual customer/merchant product surfaces. The 2026-09-23 refresh checked official/public PassOrder sources before changing the project thesis.
+
+Observed public product behavior:
+
+- the customer app already offers customer-selected pickup timing, so scheduled pickup itself is **not** a portfolio differentiator;
+- the merchant app emphasizes real-time order reception, accept/preparation-complete/cancel actions, automatic acceptance, printer/POS integration, pickup-time and sold-out management, and maintaining the order connection when the app is closed;
+- the backend posting explicitly asks for order/payment/settlement/reward business logic, DDD/domain events, Kafka/CQRS/Redis, distributed consistency, performance tuning, and AI-assisted iteration.
+
+Public references:
+- https://recruit.passorder.co.kr/c/XZ4WHRTjx8?back=true
+- https://play.google.com/store/apps/details?id=com.paytalab.mkseo.passorder
+- https://play.google.com/store/apps/details?id=com.paytalab.passorderboss
+- https://biz.passorder.co.kr/
+
+These are used to identify public product problems, **not** to infer Paytalab's private architecture.
+
 ## Selected technical gap
 
-**Scheduled pickup commitment integrity under temporal disorder.**
+**Merchant order intake & fulfillment reliability behind an already customer-selected pickup time.**
 
-A promised pickup time crosses capacity, payment authorization, confirmation, settlement, rewards, and asynchronous events. The project asks what happens after a normal order flow has already succeeded but facts arrive late, twice, or with conflicting meaning.
+The central question is no longer “can the customer reserve 12:30?” It is:
 
-The architecture-level mechanisms remain important, but they are **not the headline differentiator**:
+> after payment and confirmation, can the store reliably receive that order, survive reconnect/redelivery without duplicate POS/notification effects, prepare it in the right freshness window, and feed late execution back into the customer promise and financial ledger?
 
-- explicit `occurred_at` vs `received_at`;
-- atomic pickup-slot capacity protection;
-- idempotent financial posting semantics;
-- canonical replay;
-- late-cancellation compensation;
-- conflicting duplicate isolation;
-- operator-visible evidence;
-- deterministic repair policy with AI kept advisory-only.
+The headline mechanisms are therefore:
 
-## Selected product differentiator — Pickup Pact Guarantee
+- durable merchant delivery + explicit ACK/reconnect;
+- inbox dedupe for at-least-once Kafka delivery;
+- exactly-once **business effects** for POS print and new-order notification;
+- JIT preparation window derived from pickup time + workload;
+- explicit EARLY / ON_TIME / LATE readiness;
+- cancellation and reschedule review after irreversible preparation begins;
+- late READY feedback into Pickup Pact compensation;
+- existing capacity, temporal reconciliation, and financial ledger boundaries underneath.
+
+## Customer promise subdomain — Pickup Pact Guarantee
 
 Public portfolio projects reviewed above mostly differentiate with Saga, CQRS, Kafka, Outbox, DLQ or chaos tooling. Those are useful implementation patterns but are common enough that they do not create a memorable product story by themselves.
 
@@ -88,14 +108,18 @@ https://www.foodpanda.hk/contents/on-time-promise
 
 The first demo version was too thin: four fixed scenario cards and a replay result. It demonstrated the reconciliation engine but did not demonstrate enough product flow.
 
-The current demo is therefore designed as a **session-isolated smart-order operations sandbox** with six operator modules:
+The current demo is therefore designed as a **session-isolated smart-order and merchant-fulfillment sandbox**. The default product layer includes customer ordering plus a merchant-operations page, while the hidden dev layer keeps recovery internals separate.
 
-1. **Overview** — order, anomaly, event, ledger and quick-scenario summary.
-2. **Order Flow** — create HOLD order, attach payment authorization, confirm pickup, cancel.
-3. **Store Capacity** — inspect reserved/available units and publish capacity revisions.
-4. **Fault Injection Lab** — inject delayed cancellation, exact Kafka redelivery, conflicting payload, and capacity drop.
-5. **Reconciliation** — call the real `services/reconciler/app/engine.py`, compare receive-time vs business-time ordering, inspect anomalies and apply safe sandbox repair plans.
-6. **Ledger & Audit** — inspect settlement/reward/reversal batches and every operator action.
+Product layer:
+1. **Customer smart order** — store/menu/cart, signed workload quote behavior, pickup selection, Pickup Pact, pickup code and receipt.
+2. **Merchant operations** — durable delivery/ACK, redelivery without duplicate effects, JIT start, EARLY/LATE READY, cancellation/reschedule review.
+
+Hidden technical layer:
+3. **Order Flow** — create HOLD order, attach payment authorization, confirm pickup, cancel.
+4. **Store Capacity** — inspect reserved/available units and publish capacity revisions.
+5. **Fault Injection Lab** — inject delayed cancellation, exact Kafka redelivery, conflicting payload, and capacity drop.
+6. **Reconciliation** — call the real `services/reconciler/app/engine.py`, compare receive-time vs business-time ordering, inspect anomalies and apply safe sandbox repair plans.
+7. **Ledger & Audit** — inspect settlement/reward/reversal batches and every operator action.
 
 This borrows the **product completeness expectation** of finished admin/order systems (order lifecycle, operator dashboard, visible status, auditability) while keeping Pickup Pact's technical subject uncommon.
 
