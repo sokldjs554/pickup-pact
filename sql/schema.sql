@@ -45,14 +45,18 @@ create index if not exists idx_pickup_commitments_store_schedule
 
 create table if not exists outbox_events (
   id uuid primary key,
+  event_sequence bigserial,
   aggregate_id uuid not null,
   event_type text not null,
   payload jsonb not null,
   occurred_at timestamptz not null,
   published_at timestamptz
 );
+alter table outbox_events add column if not exists event_sequence bigserial;
+create unique index if not exists uq_outbox_event_sequence
+  on outbox_events(event_sequence);
 create index if not exists idx_outbox_unpublished
-  on outbox_events(occurred_at, id)
+  on outbox_events(event_sequence)
   where published_at is null;
 create index if not exists idx_outbox_aggregate_timeline
   on outbox_events(aggregate_id, occurred_at, id);
