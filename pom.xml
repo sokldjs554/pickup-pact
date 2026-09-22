@@ -8,5 +8,6 @@
   <modules>
     <module>services/commitment-service</module>
     <module>services/ledger-service</module>
+    <module>services/merchant-fulfillment-service</module>
   </modules>
 </project>
