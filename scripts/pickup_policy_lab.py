@@ -43,11 +43,12 @@ def run_policy_replay(
         baseline_used[slot] = used
 
     # Pickup Pact: admission is serialized by the atomic slot ledger. If the
-    # selected slot is full, try a small number of later customer-visible slots.
+    # selected slot is full, find a small number of later customer-visible slots
+    # that can be re-offered; the real customer flow still requires explicit choice.
     pact_used = [0] * (slot_count + max_deferral_slots + 1)
     pact_selected_slot_orders = 0
-    pact_deferred_orders = 0
-    pact_rejected_orders = 0
+    pact_later_slot_offerable_orders = 0
+    pact_unserviceable_orders = 0
     pact_accepted_units = 0
     deferral_distances: list[int] = []
 
@@ -62,12 +63,12 @@ def run_policy_replay(
                     if distance == 0:
                         pact_selected_slot_orders += 1
                     else:
-                        pact_deferred_orders += 1
+                        pact_later_slot_offerable_orders += 1
                         deferral_distances.append(distance)
                     placed = True
                     break
             if not placed:
-                pact_rejected_orders += 1
+                pact_unserviceable_orders += 1
 
     baseline_utilization = round(
         100
@@ -109,10 +110,10 @@ def run_policy_replay(
             "mean_slot_utilization_pct": baseline_utilization,
         },
         "pickup_pact": {
-            "accepted_orders": pact_selected_slot_orders + pact_deferred_orders,
-            "accepted_selected_slot_orders": pact_selected_slot_orders,
-            "deferred_orders": pact_deferred_orders,
-            "rejected_orders": pact_rejected_orders,
+            "offerable_orders_within_window": pact_selected_slot_orders + pact_later_slot_offerable_orders,
+            "selected_slot_feasible_orders": pact_selected_slot_orders,
+            "later_slot_offerable_orders": pact_later_slot_offerable_orders,
+            "unserviceable_orders_within_window": pact_unserviceable_orders,
             "accepted_units": pact_accepted_units,
             "oversubscribed_units": sum(
                 max(0, used - capacity_units) for used in pact_used
@@ -121,7 +122,7 @@ def run_policy_replay(
                 1 for used in pact_used if used > capacity_units
             ),
             "mean_slot_utilization_pct": pact_utilization,
-            "mean_deferral_slots": (
+            "mean_reoffer_distance_slots": (
                 round(sum(deferral_distances) / len(deferral_distances), 3)
                 if deferral_distances
                 else 0.0
