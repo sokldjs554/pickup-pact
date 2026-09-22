@@ -9,6 +9,7 @@ _EVENT_PRIORITY = {
     "PaymentAuthorized": 20,
     "CommitmentConfirmed": 30,
     "CapacityRevised": 40,
+    "PickupRescheduled": 45,
     "CommitmentCancelled": 50,
     "SettlementPosted": 60,
     "RewardGranted": 70,
@@ -37,23 +38,31 @@ def _unique_by_event_id(events: list[EventEnvelope]) -> tuple[list[EventEnvelope
 
 
 def _fold(events: list[EventEnvelope], *, count_duplicates: bool = False) -> tuple[Snapshot, list[str]]:
-    state = Snapshot(); anomalies: list[str] = []; seen: set[str] = set(); required_capacity = 1
+    state = Snapshot(); anomalies: list[str] = []; seen: set[str] = set(); required_capacity = 1; capacity_at_risk = False
     for event in events:
         if not count_duplicates and event.event_id in seen: continue
         seen.add(event.event_id)
-        if event.event_type == "PickupSlotHeld": state.status="HELD"; required_capacity=int(event.payload.get("capacity_units", required_capacity))
-        elif event.event_type == "PaymentAuthorized": state.payment_authorized=True
+        if event.event_type == "PickupSlotHeld":
+            state.status="HELD"; required_capacity=int(event.payload.get("capacity_units", required_capacity))
+        elif event.event_type == "PaymentAuthorized":
+            state.payment_authorized=True
         elif event.event_type == "CommitmentConfirmed":
             if not state.payment_authorized: anomalies.append("confirmed_without_payment_authorization")
-            state.status="CONFIRMED"; required_capacity=int(event.payload.get("capacity_units", required_capacity))
+            state.status="CONFIRMED"; required_capacity=int(event.payload.get("capacity_units", required_capacity)); capacity_at_risk=False
         elif event.event_type == "CapacityRevised":
             state.capacity_revision=int(event.payload.get("revision", state.capacity_revision+1)); available=event.payload.get("available_units")
-            if state.status=="CONFIRMED" and available is not None and int(available)<required_capacity: state.status="AT_RISK"; anomalies.append("confirmed_promise_exceeds_revised_capacity")
-        elif event.event_type == "CommitmentCancelled": state.status="CANCELLED"
+            if state.status=="CONFIRMED" and available is not None and int(available)<required_capacity:
+                state.status="AT_RISK"; capacity_at_risk=True
+        elif event.event_type == "PickupRescheduled":
+            state.status="CONFIRMED"; required_capacity=int(event.payload.get("capacity_units", required_capacity)); capacity_at_risk=False
+        elif event.event_type == "CommitmentCancelled":
+            state.status="CANCELLED"; capacity_at_risk=False
         elif event.event_type == "SettlementPosted": state.settlement_post_count+=1; state.settled=True
         elif event.event_type == "RewardGranted": state.reward_post_count+=1; state.rewarded=True
         elif event.event_type == "SettlementReversed": state.settled=False
         elif event.event_type == "RewardReversed": state.rewarded=False
+    if capacity_at_risk:
+        anomalies.append("confirmed_promise_exceeds_revised_capacity")
     return state, anomalies
 
 
