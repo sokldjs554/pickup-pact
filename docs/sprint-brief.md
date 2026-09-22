@@ -36,6 +36,21 @@ The sprint goal is to make those questions answerable in the product while keepi
 - PostgreSQL EXPLAIN plan capture in the release gate;
 - existing three-pass regression, two-pass full topology and live Render smoke remain mandatory.
 
+## Task breakdown / estimation
+
+These are planning-size estimates for the portfolio sprint, not historical team velocity.
+
+| Task | Estimate |
+|---|---:|
+| Customer history + receipt projection/API | M |
+| One-time pickup-code invariant + PickupClaimed event | M |
+| Customer history/receipt/pickup UI | M |
+| E2E + negative/reuse tests | M |
+| PostgreSQL EXPLAIN evidence in release gate | S |
+| JD/process documentation + handoff | S |
+
+Risk-first order: backend invariant and tests → API contract → customer UI → deployed E2E → release evidence.
+
 ## Acceptance criteria
 
 1. A confirmed order receives a 4-digit pickup code.
