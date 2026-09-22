@@ -2,7 +2,7 @@
 
 ## Pickup Commitment aggregate
 
-Implemented states are `HELD`, `CONFIRMED`, `CANCELLED`, and `AT_RISK`.
+Implemented states are `HELD`, `CONFIRMED`, `PICKED_UP`, `CANCELLED`, and `AT_RISK`.
 
 The implemented aggregate stores:
 
@@ -15,26 +15,29 @@ The implemented aggregate stores:
 
 Implemented command flow:
 
+0. `GET /api/v1/commitments/slots` reads 5-minute slot availability for a requested workload so the customer can choose a feasible pickup time.
 1. `HoldCommand` leases pickup capacity and creates a `HELD` commitment with `paymentAuthorized=false`.
 2. `authorizePayment` records an external payment-authorization result and emits `PaymentAuthorized`.
 3. `confirm` is rejected unless payment authorization exists and pickup time is still in the future.
-4. `cancel` appends `CommitmentCancelled` and releases the capacity lease.
-5. Reconciliation can mark a previously confirmed promise `AT_RISK` when later capacity evidence invalidates the promise.
+4. `claimPickup` appends `PickupClaimed`, moves the aggregate to `PICKED_UP`, and releases the lease.
+5. `cancel` appends `CommitmentCancelled` and releases the capacity lease.
+6. Reconciliation can mark a previously confirmed promise `AT_RISK` when later capacity evidence invalidates the promise.
 
 The public API deliberately does **not** let the caller set `paymentAuthorized=true` while creating a hold.
 
 ## Redis capacity model
 
-The current Redis adapter uses a Lua transaction per `(store, 5-minute slot)`:
+The Redis adapter treats future preparation capacity as a **5-minute reservable resource per store**.
 
-- read the slot's current used units;
-- reject when `used + requested > configured capacity`;
-- otherwise increment the counter atomically;
-- attach a TTL as a safety boundary;
-- return an opaque lease token containing the slot key and units;
-- cancellation uses another Lua script to decrement the leased units atomically.
+- `GET /api/v1/commitments/slots` reports configured, reserved, and available units for each future bucket.
+- Menu/order workload is expressed as capacity units rather than assuming every item costs the same preparation effort.
+- Admission runs in Lua: read the current slot usage, reject `used + requested > capacity`, otherwise `INCRBY` atomically.
+- A successful admission creates both the slot counter and a unique `pickup:lease:<uuid>` key containing the leased units.
+- The opaque lease token references the slot key and the lease key.
+- Release Lua first checks the lease key. If it is already gone, release is a no-op; otherwise it deletes that identity and decrements the slot exactly once.
+- The slot TTL extends through pickup plus a grace period, so a confirmed promise cannot silently lose capacity before handoff.
 
-The slot TTL is set through the pickup time plus a small grace period, so a confirmed promise cannot silently lose its reserved units before pickup. If PostgreSQL persistence fails after Redis admission, the application compensates by releasing the lease. This portfolio does not implement a shorter abandoned-checkout timeout or per-token expiry registry; that is an explicit utilization trade-off rather than a claimed production design.
+This matters when a request crosses storage boundaries. If the database transition to `CANCELLED` or `PICKED_UP` commits but Redis release fails, a retry sees the already-terminal commitment and retries only the idempotent release instead of emitting the domain event again. If PostgreSQL persistence fails while creating a hold, the application compensates the Redis admission.
 
 ## Financial Ledger context
 
