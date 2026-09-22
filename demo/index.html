@@ -162,6 +162,7 @@ body:not(.expert-mode) .health{display:none}
 .store-card-top{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
 .store-avatar{width:42px;height:42px;border-radius:14px;background:#101828;color:#fff;display:grid;place-items:center;font-size:12px;font-weight:950}
 .store-time{font-size:10px;font-weight:900;color:#067647;background:#ecfdf3;padding:6px 8px;border-radius:999px}
+.store-promise{font-size:9px;font-weight:900;padding:6px 8px;border-radius:999px;white-space:nowrap}.store-promise.accept{background:#ecfdf3;color:#067647}.store-promise.later{background:#fffaeb;color:#b54708}.store-promise.pause{background:#f2f4f7;color:#475467}
 .store-card h4{font-size:15px;margin:14px 0 5px}.store-meta{font-size:10px;color:#667085}.store-card p{font-size:10px;color:#98a2b3;line-height:1.45;margin:10px 0 0}
 .menu-panel{background:#fff;border:1px solid #eaecf0;border-radius:22px;padding:24px}
 .menu-panel-head{display:flex;justify-content:space-between;align-items:flex-end;gap:18px;margin-bottom:15px}
@@ -180,6 +181,7 @@ body:not(.expert-mode) .health{display:none}
 .cart-items{display:grid;gap:9px;max-height:310px;overflow:auto}.cart-item{display:grid;grid-template-columns:1fr auto;gap:12px;border-bottom:1px solid #f2f4f7;padding:10px 0}.cart-item:last-child{border-bottom:0}.cart-item b{font-size:12px}.cart-item small{display:block;font-size:10px;color:#667085;margin-top:3px}.qty-control{display:flex;align-items:center;gap:8px}.qty-control button{width:27px;height:27px;border:1px solid #d0d5dd;background:#fff;border-radius:8px;cursor:pointer}.qty-control span{font-size:11px;font-weight:900;min-width:14px;text-align:center}
 .cart-summary{border-top:1px solid #eaecf0;margin-top:14px;padding-top:14px;display:grid;gap:8px}.cart-summary-row{display:flex;justify-content:space-between;gap:12px;font-size:11px}.cart-summary-row.total{font-size:14px;font-weight:950}
 .checkout-btn{width:100%;border:0;background:#101828;color:#fff;border-radius:12px;padding:13px 15px;font-size:12px;font-weight:900;margin-top:15px;cursor:pointer}
+.checkout-btn:disabled{background:#eaecf0;color:#98a2b3;cursor:not-allowed}.admission-quote{border-radius:13px;padding:12px 13px;margin-top:12px;background:#f8fafc;border:1px solid #eaecf0}.admission-quote b{display:block;font-size:11px;margin-bottom:3px}.admission-quote span{font-size:10px;line-height:1.45;color:#667085}.admission-quote.accept{background:#f6fef9;border-color:#abefc6}.admission-quote.later{background:#fffcf5;border-color:#fedf89}.admission-quote.pause{background:#f8fafc;border-color:#d0d5dd}
 .order-page{max-width:760px;margin:0 auto;display:grid;gap:14px}
 .order-page-head{display:flex;justify-content:space-between;align-items:center;gap:16px}.order-page-head h2{font-size:25px;letter-spacing:-.04em;margin:0}.order-page-head p{font-size:11px;color:#667085;margin:5px 0 0}
 .order-status-card{background:#fff;border:1px solid #eaecf0;border-radius:22px;padding:24px;box-shadow:0 8px 30px rgba(16,24,40,.04)}
@@ -292,7 +294,7 @@ body.expert-mode .app{display:block}body.expert-mode .sidebar{position:relative;
 
           <div class="promise-benefit">
             <div class="promise-benefit-icon">⏱</div>
-            <div><b>픽업 시간이 바뀌면 먼저 알려드려요.</b><span>매장이 갑자기 바빠져도 그냥 기다리게 두지 않고, 새 픽업 시간을 바로 보여드려요.</span></div>
+            <div><b>지킬 수 있는 시간만 약속해요.</b><span>주문부터 무조건 받지 않아요. 지금 매장 상황으로 가능한 픽업 시간을 먼저 확인하고, 주문 뒤 상황이 바뀌면 새 시간을 바로 알려드려요.</span></div>
           </div>
           <div class="product-footnote">실제 결제는 일어나지 않아요. 메뉴 담기부터 픽업 코드·주문 내역·취소 영수증까지 직접 눌러볼 수 있어요.</div>
         </div>
@@ -307,10 +309,11 @@ body.expert-mode .app{display:block}body.expert-mode .sidebar{position:relative;
             <div class="cart-sheet-head"><h3>장바구니</h3><button class="sheet-close" type="button" onclick="closeCart()" aria-label="장바구니 닫기">×</button></div>
             <div class="cart-items" id="cartItems"></div>
             <div class="cart-summary">
-              <div class="cart-summary-row"><span>픽업</span><b id="cartPickup">-</b></div>
+              <div class="cart-summary-row"><span>픽업</span><b id="cartPickup">확인 중</b></div>
               <div class="cart-summary-row total"><span>총 금액</span><b id="cartTotal">0원</b></div>
             </div>
-            <button class="checkout-btn" id="checkoutButton" type="button" onclick="placeCustomerOrder()">주문하기</button>
+            <div class="admission-quote" id="cartPromiseQuote"><b>픽업 시간을 확인하고 있어요.</b><span>현재 매장 상황으로 지킬 수 있는 시간을 계산합니다.</span></div>
+            <button class="checkout-btn" id="checkoutButton" type="button" onclick="placeCustomerOrder()" disabled>픽업 시간 확인 중</button>
           </div>
         </div>
 
@@ -488,6 +491,9 @@ let cart=[];
 let customerOrderStage="none";
 let orderReadyTimer=null;
 let promiseTimer=null;
+let currentPromiseQuote=null;
+let currentPromiseQuoteKey=null;
+let promiseQuoteRequest=0;
 const $=id=>document.getElementById(id);
 
 const pageNames={
@@ -594,18 +600,34 @@ function cartItemSummary(){
   return cart.map(item=>item.name+(item.qty>1?" "+item.qty+"개":"")).join(", ");
 }
 
-function pickupTimeForStore(store=selectedStore()){
-  if(!store)return "12:30";
-  const target=new Date(Date.now()+Number(store.pickup_minutes||10)*60*1000);
+function pickupTimeFromMinutes(minutes){
+  const target=new Date(Date.now()+Number(minutes||10)*60*1000);
   return new Intl.DateTimeFormat("en-GB",{
     timeZone:"Asia/Seoul",hour:"2-digit",minute:"2-digit",hour12:false
   }).format(target);
 }
 
+function pickupTimeForStore(store=selectedStore()){
+  if(!store)return "12:30";
+  const preview=store.promise_preview||{};
+  const minutes=preview.quoted_minutes||store.pickup_minutes||10;
+  return pickupTimeFromMinutes(minutes);
+}
+
 function estimatedPickup(){
   const store=selectedStore();
   if(!store) return "-";
-  return pickupTimeForStore(store)+" 픽업 · 약 "+store.pickup_minutes+"분";
+  const preview=store.promise_preview||{};
+  if(preview.decision==="PAUSE")return "지금은 주문 잠시 쉬는 중";
+  const minutes=preview.quoted_minutes||store.pickup_minutes||10;
+  return pickupTimeFromMinutes(minutes)+" 픽업 · 약 "+minutes+"분";
+}
+
+function promisePreviewLabel(preview){
+  if(!preview)return {text:"확인 중",cls:""};
+  if(preview.decision==="ACCEPT")return {text:"지금 주문 가능",cls:"accept"};
+  if(preview.decision==="OFFER_LATER")return {text:preview.quoted_minutes+"분 뒤 가능",cls:"later"};
+  return {text:"잠시 쉬는 중",cls:"pause"};
 }
 
 function menuEmoji(name){
@@ -632,12 +654,13 @@ async function loadCustomerExperience(){
 
 function renderCustomerHome(){
   if(!$("storeList")||!$("menuList"))return;
-  $("storeList").innerHTML=catalog.length?catalog.map(store=>
-    '<button class="store-card '+(store.id===selectedStoreId?"active":"")+'" type="button" onclick="selectCustomerStore(\''+store.id+'\')">'+
-      '<div class="store-card-top"><span class="store-avatar">☕</span><span class="store-time">'+store.pickup_minutes+'분</span></div>'+
-      '<h4>'+store.name+'</h4><div class="store-meta">'+store.category+' · '+store.distance_m+'m</div><p>'+store.notice+'</p>'+
-    '</button>'
-  ).join(""):'<div class="empty">매장을 불러오지 못했어요.</div>';
+  $("storeList").innerHTML=catalog.length?catalog.map(store=>{
+    const promise=promisePreviewLabel(store.promise_preview);
+    return '<button class="store-card '+(store.id===selectedStoreId?"active":"")+'" type="button" onclick="selectCustomerStore(\''+store.id+'\')">'+
+      '<div class="store-card-top"><span class="store-avatar">☕</span><span class="store-promise '+promise.cls+'">'+promise.text+'</span></div>'+
+      '<h4>'+store.name+'</h4><div class="store-meta">'+store.category+' · '+store.distance_m+'m</div><p>'+store.promise_preview.message+'</p>'+
+    '</button>';
+  }).join(""):'<div class="empty">매장을 불러오지 못했어요.</div>';
 
   const store=selectedStore();
   if(!store){
@@ -649,7 +672,8 @@ function renderCustomerHome(){
     $("selectedStoreName").textContent=store.name;
     $("selectedStoreNotice").textContent=store.notice;
     $("selectedStoreTime").style.display="inline-block";
-    $("selectedStoreTime").textContent="픽업 "+store.pickup_minutes+"분";
+    const preview=store.promise_preview||{};
+    $("selectedStoreTime").textContent=preview.decision==="PAUSE"?"주문 잠시 쉬는 중":(preview.quoted_minutes+"분 뒤 픽업 가능");
     $("menuList").innerHTML=store.menu.map(item=>{
       const qty=cart.find(row=>row.id===item.id)?.qty||0;
       return '<div class="menu-card"><div class="menu-main"><span class="menu-visual">'+menuEmoji(item.name)+'</span><div><h4>'+item.name+(item.popular?'<span class="menu-popular">인기</span>':'')+'</h4><p>'+item.description+'</p><span class="menu-price">'+money(item.price)+'원</span></div></div>'+
@@ -666,6 +690,7 @@ function selectCustomerStore(storeId){
     toast("매장을 바꿔 장바구니를 비웠어요.");
   }
   selectedStoreId=storeId;
+  currentPromiseQuote=null;currentPromiseQuoteKey=null;
   renderCustomerHome();
 }
 
@@ -675,7 +700,9 @@ function addToCart(menuId){
   const existing=cart.find(row=>row.id===menuId);
   if(existing) existing.qty+=1;
   else cart.push({id:item.id,name:item.name,price:item.price,qty:1});
+  currentPromiseQuote=null;currentPromiseQuoteKey=null;
   renderCustomerHome();
+  if($("cartBackdrop")?.classList.contains("show"))refreshCartPromiseQuote();
   toast(item.name+" 담았어요.");
 }
 
@@ -684,7 +711,9 @@ function changeCartQty(menuId,delta){
   if(!item)return;
   item.qty+=delta;
   if(item.qty<=0) cart=cart.filter(row=>row.id!==menuId);
+  currentPromiseQuote=null;currentPromiseQuoteKey=null;
   renderCustomerHome();
+  if($("cartBackdrop")?.classList.contains("show"))refreshCartPromiseQuote();
 }
 
 function renderCart(){
