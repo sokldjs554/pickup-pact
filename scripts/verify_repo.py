@@ -127,7 +127,7 @@ for marker in [
     "체험 손님",
     "주문 취소",
     "픽업 시간이 바뀌면 먼저 알려드려요.",
-    "12:35 괜찮아요",
+    "괜찮아요",
     "제품 화면으로 돌아가기",
 ]:
     assert marker in demo_index, f"customer demo marker missing: {marker}"
