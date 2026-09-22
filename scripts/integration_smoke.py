@@ -130,6 +130,12 @@ def commitment_flow(pass_no: int) -> None:
     assert redis_client.get(slot_key) == "2", held
     assert redis_client.exists(lease_key) == 1, held
 
+    missing_payment = httpx.post(
+        f"{COMMITMENT}/api/v1/commitments/{commitment_id}/confirm",
+        timeout=15,
+    )
+    assert missing_payment.status_code == 409, missing_payment.text
+
     reserved = expect(
         httpx.get(
             f"{COMMITMENT}/api/v1/commitments/slots",
@@ -157,6 +163,13 @@ def commitment_flow(pass_no: int) -> None:
         200,
     )
     assert paid["paymentAuthorized"] is True, paid
+
+    duplicate_payment = httpx.post(
+        f"{COMMITMENT}/api/v1/commitments/{commitment_id}/authorize-payment",
+        json={"authorizationId": f"auth-integration-{pass_no}"},
+        timeout=15,
+    )
+    assert duplicate_payment.status_code == 409, duplicate_payment.text
 
     confirmed = expect(
         httpx.post(
