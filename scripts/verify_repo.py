@@ -33,6 +33,7 @@ required = [
     "docs/jd-traceability.md",
     "docs/performance.md",
     "sql/explain/commitment_timeline.sql",
+    "sql/explain/store_pickup_schedule.sql",
     "artifacts/consistency-benchmark.json",
     "artifacts/consistency-matrix.json",
     "artifacts/pickup-policy-lab.json",
@@ -104,6 +105,7 @@ assert "/api/v1/projections/rebuild" in openapi
 assert "/api/v1/projections/{aggregateId}" in openapi
 assert "commitment_projection" in schema and "commitment_projection" in persistence
 assert "ledger_conflicts" in schema
+assert "idx_pickup_commitments_store_schedule" in schema
 assert "required: [eventId, aggregateId, type, amount]" in asyncapi
 assert "reconciliation_run" in schema and "reconciliation_run" in persistence
 assert "outbox_events" in explain and "outbox_event\n" not in explain
