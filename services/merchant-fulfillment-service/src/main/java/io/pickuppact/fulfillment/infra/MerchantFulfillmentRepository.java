@@ -115,7 +115,7 @@ public class MerchantFulfillmentRepository {
                 """
                 insert into merchant_deliveries(order_id, store_id, delivery_type, payload)
                 values(?,?,?,?::jsonb)
-                on conflict (order_id, delivery_type) do nothing
+                on conflict (order_id, delivery_type, payload) do nothing
                 """,
                 orderId, storeId, deliveryType, json(payload)
         );
