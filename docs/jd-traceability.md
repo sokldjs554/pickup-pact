@@ -23,6 +23,7 @@ This document makes the job-description mapping auditable instead of listing tec
 | CQRS | command-owned invariants + explicit PostgreSQL projection rebuild/query API from canonical event-time replay |
 | Distributed consistency | outbox, at-least-once delivery, event-level idempotency, conflict quarantine, compensation |
 | Customer requirements → product | public virtual-customer flow: store selection, menu/cart quantity changes, order/payment/confirmation, pickup status and cancellation; Chromium E2E verifies the journey |
+| Pickup promise protection | capacity revision → `RESLOT_REVIEW` → customer-friendly new-time proposal → `PickupRescheduled`; preserves backend evidence while minimizing customer friction |
 | Order/payment/settlement/reward domains | customer checkout exercises order/payment/confirmation; hidden cancellation race exercises settlement/reward reconciliation and compensation |
 | REST/OpenAPI | explicit OpenAPI 3.1 contract for hold → payment authorization → confirm/cancel + tracking, ledger posting/history/conflicts, reconciliation |
 | SQL tuning | committed timeline indexes + executable `EXPLAIN (ANALYZE, BUFFERS)` query template |
