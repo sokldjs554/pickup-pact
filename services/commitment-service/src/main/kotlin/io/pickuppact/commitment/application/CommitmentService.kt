@@ -25,6 +25,7 @@ data class PickupQuote(
     val quoteToken: String,
     val storeId: String,
     val units: Int,
+    val totalAmount: Int,
     val expiresAt: Instant,
     val slots: List<PickupSlotOption>
 )
@@ -51,18 +52,19 @@ class CommitmentService(
         count: Int
     ): Mono<PickupQuote> {
         require(storeId.isNotBlank()) { "storeId must not be blank" }
-        val units = MenuWorkloadPolicy.units(items)
+        val workload = MenuWorkloadPolicy.evaluate(items)
         val now = Instant.now()
         val expiresAt = now.plus(QUOTE_TTL)
-        val token = quoteTokens.issue(storeId, units, expiresAt)
+        val token = quoteTokens.issue(storeId, workload.units, workload.totalAmount, expiresAt)
 
-        return pickupSlots(storeId, from, count, units)
+        return pickupSlots(storeId, from, count, workload.units)
             .collectList()
             .map { slots ->
                 PickupQuote(
                     quoteToken = token,
                     storeId = storeId,
-                    units = units,
+                    units = workload.units,
+                    totalAmount = workload.totalAmount,
                     expiresAt = expiresAt,
                     slots = slots
                 )
@@ -128,6 +130,7 @@ class CommitmentService(
                                 storeId = quote.storeId,
                                 pickupAt = command.pickupAt,
                                 units = quote.units,
+                                totalAmount = quote.totalAmount,
                                 leaseToken = token,
                                 paymentAuthorized = false,
                                 state = CommitmentState.HELD,
@@ -282,7 +285,10 @@ class CommitmentService(
                     repository.saveWithEvent(
                         pickedUp,
                         "PickupClaimed",
-                        mapOf("pickup_at" to pickedUp.pickupAt.toString())
+                        mapOf(
+                            "pickup_at" to pickedUp.pickupAt.toString(),
+                            "amount" to pickedUp.totalAmount
+                        )
                     ).flatMap { saved ->
                         capacity.release(saved.leaseToken).thenReturn(saved)
                     }
