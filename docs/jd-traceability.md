@@ -27,7 +27,7 @@ This document makes the job-description mapping auditable instead of listing tec
 | Customer trust layer | customer adapter validates a one-time pickup code; core Kotlin commitment enforces `CONFIRMED → PICKED_UP`, emits `PickupClaimed`, releases capacity exactly once; mobile Trust Receipt and order history keep backend terminology hidden |
 | Order/payment/settlement/reward domains | customer checkout exercises order/payment/confirmation; hidden cancellation race exercises settlement/reward reconciliation and compensation |
 | REST/OpenAPI | OpenAPI 3.1 contract for capacity-aware slot query → hold → payment authorization → confirm/cancel/claim + tracking, ledger posting/history/conflicts, reconciliation |
-| SQL tuning | PR CI and release-gate both capture PostgreSQL 16 `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)` and require `idx_outbox_aggregate_timeline`; indexed and forced-sequential plans are uploaded as evidence |
+| SQL tuning | CI/release-gate capture PostgreSQL 16 `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)` for both event history and the merchant active-pickup schedule, requiring the outbox timeline index and a partial `(store_id, pickup_at, id)` schedule index; forced-sequential baselines are kept as evidence |
 | Performance troubleshooting | deterministic race benchmark + loopback HTTP baseline + runbook |
 | Docker | commitment, ledger, reconciler, ops-console, and interviewer-demo images |
 | Kubernetes | checked-in deployments/services/probes/resource limits for the service topology |
