@@ -669,6 +669,10 @@ class PickupClaimRequest(BaseModel):
     pickup_code: str = Field(pattern=r"^\d{4}$")
 
 
+class MerchantTimingRequest(BaseModel):
+    timing: str = Field(default="ON_TIME", min_length=3, max_length=16)
+
+
 class RedeliveryRequest(BaseModel):
     conflicting_amount: int | None = Field(default=None, gt=0, le=1_000_000)
 
@@ -800,6 +804,60 @@ def authorize_demo_payment(session_id: str, request: PaymentRequest) -> dict[str
 def confirm_demo_order(session_id: str) -> dict[str, Any]:
     try:
         return demo_store.confirm(session_id)
+    except (KeyError, ValueError) as exc:
+        raise _demo_error(exc) from exc
+
+
+@app.get("/api/demo/sessions/{session_id}/merchant")
+def merchant_demo_state(session_id: str) -> dict[str, Any]:
+    try:
+        return demo_store.merchant_snapshot(session_id)
+    except (KeyError, ValueError) as exc:
+        raise _demo_error(exc) from exc
+
+
+@app.post("/api/demo/sessions/{session_id}/merchant/ack")
+def merchant_demo_ack(session_id: str) -> dict[str, Any]:
+    try:
+        return demo_store.merchant_ack(session_id)
+    except (KeyError, ValueError) as exc:
+        raise _demo_error(exc) from exc
+
+
+@app.post("/api/demo/sessions/{session_id}/merchant/redeliver")
+def merchant_demo_redeliver(session_id: str) -> dict[str, Any]:
+    try:
+        return demo_store.merchant_redeliver(session_id)
+    except (KeyError, ValueError) as exc:
+        raise _demo_error(exc) from exc
+
+
+@app.post("/api/demo/sessions/{session_id}/merchant/accept")
+def merchant_demo_accept(session_id: str) -> dict[str, Any]:
+    try:
+        return demo_store.merchant_accept(session_id)
+    except (KeyError, ValueError) as exc:
+        raise _demo_error(exc) from exc
+
+
+@app.post("/api/demo/sessions/{session_id}/merchant/start")
+def merchant_demo_start(
+    session_id: str,
+    request: MerchantTimingRequest,
+) -> dict[str, Any]:
+    try:
+        return demo_store.merchant_start(session_id, request.timing)
+    except (KeyError, ValueError) as exc:
+        raise _demo_error(exc) from exc
+
+
+@app.post("/api/demo/sessions/{session_id}/merchant/ready")
+def merchant_demo_ready(
+    session_id: str,
+    request: MerchantTimingRequest,
+) -> dict[str, Any]:
+    try:
+        return demo_store.merchant_ready(session_id, request.timing)
     except (KeyError, ValueError) as exc:
         raise _demo_error(exc) from exc
 
