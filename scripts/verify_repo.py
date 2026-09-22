@@ -92,6 +92,7 @@ demo_dockerfile = (ROOT / "Dockerfile.demo").read_text()
 
 assert "paymentAuthorized" not in openapi, "hold contract must not let a caller self-authorize payment"
 assert "/api/v1/commitments/{id}/authorize-payment" in openapi
+assert "/api/v1/commitments/slots" in openapi
 assert "/api/v1/commitments/{id}/claim-pickup" in openapi
 assert "/api/v1/ledger/postings" in openapi
 assert "/api/v1/commitments/{id}:" in openapi
@@ -137,6 +138,7 @@ for marker in [
     "TRUST RECEIPT",
     "수령 완료 체험",
     "픽업 시간이 바뀌면 먼저 알려드려요.",
+    "픽업 시간 선택",
     "괜찮아요",
     "제품 화면으로 돌아가기",
 ]:
