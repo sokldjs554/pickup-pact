@@ -7,7 +7,7 @@ async function openPage(page, label) {
 test('virtual customer can browse, add to cart, order, track, and cancel', async ({ page }) => {
   await page.goto('/');
 
-  await expect(page.getByRole('heading', { name: '커피, 미리 주문해요.' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /오늘 뭐 드실래요/ })).toBeVisible();
   await expect(page.locator('#customerPill')).toHaveText('체험 손님 · 하늘');
   await expect(page.locator('.sidebar')).not.toBeVisible();
   await expect(page.getByRole('button', { name: '정합성 복구', exact: true })).not.toBeVisible();
@@ -124,7 +124,7 @@ test('backend reviewer can enter through the hidden dev URL and operate the expe
 
   await page.getByRole('button', { name: /제품 화면으로 돌아가기/ }).click();
   await expect(page.locator('.sidebar')).not.toBeVisible();
-  await expect(page.getByRole('heading', { name: '커피, 미리 주문해요.' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /오늘 뭐 드실래요/ })).toBeVisible();
 });
 
 test('customer cancellation recovery remains inspectable only in dev mode', async ({ page }) => {
@@ -171,7 +171,7 @@ test('customer smart-order flow remains usable on a narrow mobile viewport', asy
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
 
-  await expect(page.getByRole('heading', { name: '커피, 미리 주문해요.' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /오늘 뭐 드실래요/ })).toBeVisible();
   await expect(page.locator('#menuList')).toContainText('아메리카노');
 
   const initialOverflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
