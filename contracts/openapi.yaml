@@ -152,7 +152,7 @@ paths:
       responses:
         "200": {description: Pact breach persisted and compensation scheduled}
         "404": {description: Commitment not found}
-        "409": {description: No active Pact or compensation already granted}
+        "409": {description: No active Pact, guarantee deadline not reached, or compensation already granted}
 
   /api/v1/commitments/{id}/claim-pickup:
     post:
