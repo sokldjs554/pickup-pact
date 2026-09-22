@@ -48,6 +48,26 @@ class PickupCommitmentTest {
     }
 
     @Test
+    fun confirmedCommitmentCanBeClaimedOnlyOnceAndThenCannotBeCancelled() {
+        val confirmed = PickupCommitment(
+            UUID.randomUUID(),
+            "store-1",
+            Instant.now().plusSeconds(600),
+            1,
+            "lease-claim",
+            true,
+            CommitmentState.CONFIRMED
+        )
+
+        val pickedUp = confirmed.claimPickup()
+
+        assertEquals(CommitmentState.PICKED_UP, pickedUp.state)
+        assertEquals(1, pickedUp.version)
+        assertThrows(IllegalArgumentException::class.java) { pickedUp.claimPickup() }
+        assertThrows(IllegalArgumentException::class.java) { pickedUp.cancel() }
+    }
+
+    @Test
     fun confirmedCommitmentCanBecomeAtRiskWithoutLosingHistory() {
         val confirmed = PickupCommitment(
             UUID.randomUUID(),
