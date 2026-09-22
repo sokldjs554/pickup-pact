@@ -17,15 +17,15 @@
     "slot_count": 1000
   },
   "pickup_pact": {
-    "accepted_orders": 20000,
-    "accepted_selected_slot_orders": 19468,
+    "offerable_orders_within_window": 20000,
+    "selected_slot_feasible_orders": 19468,
+    "later_slot_offerable_orders": 532,
+    "unserviceable_orders_within_window": 0,
     "accepted_units": 31438,
-    "deferred_orders": 532,
-    "mean_deferral_slots": 1.0,
-    "mean_slot_utilization_pct": 78.59,
-    "overbooked_slots": 0,
     "oversubscribed_units": 0,
-    "rejected_orders": 0
+    "overbooked_slots": 0,
+    "mean_slot_utilization_pct": 78.59,
+    "mean_reoffer_distance_slots": 1
   },
   "scope": "Deterministic synthetic policy replay; not production demand, SLA, revenue, or real merchant traffic."
 }
