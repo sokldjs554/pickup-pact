@@ -18,6 +18,7 @@ spring:
 pickup:
   capacity:
     default-units: ${PICKUP_SLOT_CAPACITY:40}
+  quote-secret: ${PICKUP_QUOTE_SECRET:local-dev-quote-secret-change-me}
 
 server:
   port: ${PORT:8080}
