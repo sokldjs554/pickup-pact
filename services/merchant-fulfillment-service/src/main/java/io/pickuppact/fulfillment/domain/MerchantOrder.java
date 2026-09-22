@@ -39,6 +39,17 @@ public record MerchantOrder(
         );
     }
 
+    public MerchantOrder reschedule(Instant newPickupAt) {
+        if (state != FulfillmentState.RECEIVED && state != FulfillmentState.ACCEPTED) {
+            throw new IllegalStateException("pickup time cannot change after preparation has started: current=" + state);
+        }
+        return new MerchantOrder(
+                orderId, storeId, newPickupAt, capacityUnits, state,
+                JitPreparationPolicy.forOrder(newPickupAt, capacityUnits),
+                acceptedAt, startedAt, readyAt, pickedUpAt, cancellationRequestedAt, version + 1
+        );
+    }
+
     public MerchantOrder accept(Instant now) {
         if (state == FulfillmentState.ACCEPTED) return this;
         requireState(FulfillmentState.RECEIVED, "only RECEIVED orders can be accepted");
