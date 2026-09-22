@@ -5,7 +5,7 @@ The public demo is not considered verified from a screenshot, one successful API
 For a release candidate, all of the following automated paths must pass on the same commit:
 
 - `demo-ci`: FastAPI demo unit/API tests and Docker image build.
-- `ui-e2e`: local Chromium verification of the virtual-customer browse/cart/order/cancel journey, the full expert operator flow, capacity/conflict labs, and a narrow mobile viewport.
+- `ui-e2e`: local Chromium verification of the virtual-customer browse/cart/order/pickup-promise/cancel journey, the full expert operator flow, capacity/conflict labs, and a narrow mobile viewport.
 - `live-demo-smoke`: waits until the public `/health` reports the exact `RENDER_GIT_COMMIT` equal to the GitHub Actions SHA, checks the smart-order customer markers and catalog APIs, verifies fixed scenarios and the complete API operator flow twice, then runs the same Chromium suite against that deployed public URL.
 - `ci`: repository guardrails, Python/JVM tests, contracts, evidence reproduction, Docker builds, and Terraform validation.
 - `release-gate`: three repeated test passes, deterministic evidence reproduction, full Docker topology integration twice, and Terraform validation.
