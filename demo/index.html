@@ -1052,9 +1052,10 @@ function renderReceipt(receipt){
     '<div class="receipt-row"><span>픽업</span><b>'+receipt.pickup_at+'</b></div>'+
     '<div class="receipt-row"><span>상태</span><b>'+receiptStatusLabel(receipt.status)+'</b></div>'+
     '<div class="receipt-row"><span>주문 금액</span><b>'+money(receipt.total)+'원</b></div>'+
-    '<div class="receipt-row"><span>최종 정산</span><b>'+money(receipt.net_settlement)+'원</b></div>'+
-    '<div class="receipt-row"><span>포인트 잔액</span><b>'+money(receipt.reward_balance)+'P</b></div>'+
-    '<div class="receipt-total">'+money(receipt.status==="CANCELLED"?0:receipt.total)+'원</div>'+
+    '<div class="receipt-row"><span>최종 결제</span><b>'+money(receipt.charged_amount)+'원</b></div>'+
+    (receipt.cancelled_amount?'<div class="receipt-row"><span>취소 금액</span><b>-'+money(receipt.cancelled_amount)+'원</b></div>':'')+
+    (receipt.points_adjusted?'<div class="receipt-row"><span>포인트 조정</span><b>-'+money(receipt.points_adjusted)+'P</b></div>':'')+
+    '<div class="receipt-total">'+money(receipt.charged_amount)+'원</div>'+
     '<div class="receipt-timeline">'+timeline+'</div>'+
     '<div class="receipt-note">주문·결제·픽업 변경·취소 기록을 같은 주문 근거에서 보여주는 체험용 영수증이에요.</div>';
 }
