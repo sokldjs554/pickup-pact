@@ -2,7 +2,7 @@ package io.pickuppact.commitment.infra
 
 import io.pickuppact.commitment.application.CapacityAvailability
 import io.pickuppact.commitment.application.CapacityLeasePort
-import org.springframework.beans.factory.annotation.Value
+import io.pickuppact.commitment.application.StoreCapacityPolicy
 import org.springframework.context.annotation.Profile
 import org.springframework.data.redis.core.ReactiveStringRedisTemplate
 import org.springframework.data.redis.core.script.DefaultRedisScript
@@ -15,7 +15,7 @@ import java.util.UUID
 @Profile("redis")
 class ReactiveRedisCapacityLease(
     private val redis: ReactiveStringRedisTemplate,
-    @Value("\${pickup.capacity.default-units:40}") private val defaultCapacity: Long
+    private val capacityPolicy: StoreCapacityPolicy
 ) : CapacityLeasePort {
     private val acquireScript = DefaultRedisScript<Long>(
         """
@@ -71,9 +71,10 @@ class ReactiveRedisCapacityLease(
         require(units > 0) { "units must be positive" }
         val capacityKey = slotKey(storeId, pickupAt)
         val leaseKey = "pickup:lease:${UUID.randomUUID()}"
+        val capacity = capacityPolicy.capacityFor(storeId)
         val args = listOf(
             units.toString(),
-            defaultCapacity.toString(),
+            capacity.toString(),
             (ttlSeconds * 1000).toString()
         )
 
@@ -97,7 +98,7 @@ class ReactiveRedisCapacityLease(
             .defaultIfEmpty("0")
             .map { value ->
                 CapacityAvailability(
-                    capacityUnits = defaultCapacity.toInt(),
+                    capacityUnits = capacityPolicy.capacityFor(storeId),
                     reservedUnits = value.toIntOrNull()?.coerceAtLeast(0) ?: 0
                 )
             }
