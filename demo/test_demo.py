@@ -68,6 +68,8 @@ def test_landing_page_exposes_guided_and_expert_layers():
         "체험 손님",
         "메뉴 보기",
         "주문 취소",
+        "픽업 시간이 바뀌면 먼저 알려드려요.",
+        "12:35 괜찮아요",
         "주문 흐름",
         "매장 처리량",
         "장애 주입",
