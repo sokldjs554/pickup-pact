@@ -13,6 +13,10 @@ Customer-supplied workload numbers are not authoritative.
 
 The public FastAPI demo mirrors the trust boundary: the customer browser submits structured line items, and the demo server recalculates amount/workload instead of trusting client-provided totals.
 
+## Outbox ordering
+
+Multiple domain facts can be committed in one database transaction. For example, confirmation writes `CommitmentConfirmed` followed by `PickupPactIssued`. Ordering by timestamp plus random UUID is not sufficient because equal timestamps can reorder those events. The outbox therefore owns a monotonic `event_sequence` and the relay publishes unpublished rows strictly by that sequence. Full-topology integration asserts the committed business order.
+
 ## Core Pact and financial side effects
 
 `confirm` persists `CommitmentConfirmed` and `PickupPactIssued` together with the aggregate. Reschedule persists the new slot and `PickupPactRenegotiated`; breach persists `PickupPactBreached`.
