@@ -539,6 +539,10 @@ class PickupRescheduleRequest(BaseModel):
     pickup_at: str | None = Field(default=None, pattern=r"^\d{2}:\d{2}$")
 
 
+class PickupClaimRequest(BaseModel):
+    pickup_code: str = Field(pattern=r"^\d{4}$")
+
+
 class RedeliveryRequest(BaseModel):
     conflicting_amount: int | None = Field(default=None, gt=0, le=1_000_000)
 
@@ -660,6 +664,38 @@ def accept_demo_pickup_reschedule(
 ) -> dict[str, Any]:
     try:
         return demo_store.accept_pickup_reschedule(session_id, request.pickup_at)
+    except (KeyError, ValueError) as exc:
+        raise _demo_error(exc) from exc
+
+
+@app.post("/api/demo/sessions/{session_id}/pickup/claim")
+def claim_demo_pickup(session_id: str, request: PickupClaimRequest) -> dict[str, Any]:
+    try:
+        return demo_store.claim_pickup(session_id, request.pickup_code)
+    except (KeyError, ValueError) as exc:
+        raise _demo_error(exc) from exc
+
+
+@app.get("/api/demo/sessions/{session_id}/customer/history")
+def customer_order_history(session_id: str) -> list[dict[str, Any]]:
+    try:
+        return demo_store.customer_history(session_id)
+    except (KeyError, ValueError) as exc:
+        raise _demo_error(exc) from exc
+
+
+@app.get("/api/demo/sessions/{session_id}/customer/receipts/{order_id}")
+def customer_order_receipt(session_id: str, order_id: str) -> dict[str, Any]:
+    try:
+        return demo_store.customer_receipt(session_id, order_id)
+    except (KeyError, ValueError) as exc:
+        raise _demo_error(exc) from exc
+
+
+@app.post("/api/demo/sessions/{session_id}/customer/next-order")
+def customer_next_order(session_id: str) -> dict[str, Any]:
+    try:
+        return demo_store.next_customer_order(session_id)
     except (KeyError, ValueError) as exc:
         raise _demo_error(exc) from exc
 
