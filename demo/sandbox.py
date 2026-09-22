@@ -18,6 +18,9 @@ EVENT_LABELS = {
     "RewardGranted": "고객 포인트 적립",
     "CapacityRevised": "매장 처리량 변경",
     "PickupRescheduled": "픽업 시간 변경",
+    "PickupPactIssued": "픽업 보장 발급",
+    "PickupPactRenegotiated": "픽업 보장 재합의",
+    "PickupPactBreached": "픽업 보장 위반",
     "PickupClaimed": "픽업 완료",
     "SettlementReversed": "정산 취소 분개",
     "RewardReversed": "포인트 회수",
@@ -106,6 +109,17 @@ def _new_pickup_code() -> str:
     return f"{int(uuid4().hex[:8], 16) % 10000:04d}"
 
 
+def _empty_pickup_pact() -> dict[str, Any]:
+    return {
+        "status": "NONE",
+        "promised_at": None,
+        "latest_at": None,
+        "compensation_points": 0,
+        "compensation_granted": False,
+        "version": 0,
+    }
+
+
 class DemoStore:
     """Thread-safe, session-isolated in-memory sandbox for the public portfolio demo.
 
@@ -156,6 +170,7 @@ class DemoStore:
                     "original_pickup_at": None,
                     "suggested_pickup_at": None,
                 },
+                "pickup_pact": _empty_pickup_pact(),
                 "customer_history": [],
             }
             self._audit_locked(session_id, "SESSION_CREATED", "새 데모 세션을 만들었습니다.")
@@ -193,6 +208,7 @@ class DemoStore:
                     "original_pickup_at": None,
                     "suggested_pickup_at": None,
                 },
+                "pickup_pact": _empty_pickup_pact(),
                 "customer_history": [],
             }
             self._audit_locked(session_id, "SESSION_RESET", "데모 상태를 초기화했습니다.")
@@ -279,6 +295,9 @@ class DemoStore:
             "PaymentAuthorized": "결제 완료",
             "CommitmentConfirmed": "매장 확인",
             "PickupRescheduled": "픽업 시간 변경",
+            "PickupPactIssued": "픽업 보장 시작",
+            "PickupPactRenegotiated": "픽업 보장 변경",
+            "PickupPactBreached": "픽업 보상 자동 적용",
             "PickupClaimed": "픽업 완료",
             "CommitmentCancelled": "주문 취소",
             "RewardGranted": "포인트 적립",
@@ -293,6 +312,12 @@ class DemoStore:
             detail = event["detail"]
             if event["event_type"] == "PickupRescheduled":
                 detail = f"{event['payload'].get('from_pickup_at')} → {event['payload'].get('pickup_at')}"
+            elif event["event_type"] == "PickupPactIssued":
+                detail = f"{event['payload'].get('promised_at')}~{event['payload'].get('latest_at')} 보장 · 초과 시 {event['payload'].get('compensation_points')}P"
+            elif event["event_type"] == "PickupPactRenegotiated":
+                detail = f"{event['payload'].get('promised_at')}~{event['payload'].get('latest_at')} 새 보장"
+            elif event["event_type"] == "PickupPactBreached":
+                detail = f"보장 시간 초과 · {event['payload'].get('compensation_points')}P 자동 보상"
             elif event["event_type"] == "PickupClaimed":
                 detail = "매장에서 수령 확인"
             elif event["event_type"] == "SettlementReversed":
@@ -337,6 +362,7 @@ class DemoStore:
             "final_charge": final_charge,
             "settlement_balance": settlement,
             "reward_balance": reward,
+            "pickup_pact": deepcopy(session["pickup_pact"]),
             "terminal": terminal,
             "timeline": self._customer_timeline_locked(session_id),
             "updated_at": _iso(session["updated_at"]),
@@ -480,6 +506,32 @@ class DemoStore:
                 {"capacity_units": order["units"], "pickup_at": order["pickup_at"]},
                 detail=f"{order['pickup_at']} 픽업 약속 확정",
             )
+            compensation_points = 500
+            latest_at = _shift_hhmm(order["pickup_at"], 3)
+            session["pickup_pact"] = {
+                "status": "ACTIVE",
+                "promised_at": order["pickup_at"],
+                "latest_at": latest_at,
+                "compensation_points": compensation_points,
+                "compensation_granted": False,
+                "version": 1,
+            }
+            self._append_event_locked(
+                session_id,
+                "PickupPactIssued",
+                {
+                    "promised_at": order["pickup_at"],
+                    "latest_at": latest_at,
+                    "compensation_points": compensation_points,
+                    "version": 1,
+                },
+                detail=f"{order['pickup_at']}~{latest_at} 보장 · 초과 시 {compensation_points}P 자동 보상",
+            )
+            self._audit_locked(
+                session_id,
+                "PICKUP_PACT_ISSUED",
+                f"{order['pickup_at']}~{latest_at} · {compensation_points}P",
+            )
             self._audit_locked(session_id, "ORDER_CONFIRMED", f"{order['order_id']} 픽업 확정")
             return {"event": deepcopy(event), "state": self.snapshot(session_id)}
 
@@ -507,6 +559,8 @@ class DemoStore:
                 "original_pickup_at": protection.get("original_pickup_at") or order["pickup_at"],
                 "suggested_pickup_at": protection.get("suggested_pickup_at"),
             }
+            if session["pickup_pact"]["status"] in {"ACTIVE", "COMPENSATED"}:
+                session["pickup_pact"]["status"] = "CANCELLED"
             event = self._append_event_locked(
                 session_id,
                 "CommitmentCancelled",
@@ -793,6 +847,61 @@ class DemoStore:
                 "state": self.snapshot(session_id),
             }
 
+    def breach_pickup_pact(self, session_id: str) -> dict[str, Any]:
+        with self._lock:
+            session = self.require(session_id)
+            order = session.get("order")
+            if not order:
+                raise ValueError("order not found")
+            if order["status"] != "CONFIRMED":
+                raise ValueError("pickup pact can be breached only for a confirmed order")
+            pact = session.get("pickup_pact") or {}
+            if pact.get("status") != "ACTIVE":
+                raise ValueError("no active pickup pact")
+            if pact.get("compensation_granted"):
+                raise ValueError("pickup pact compensation already granted")
+
+            points = int(pact.get("compensation_points") or 500)
+            breach_event = self._append_event_locked(
+                session_id,
+                "PickupPactBreached",
+                {
+                    "promised_at": pact["promised_at"],
+                    "latest_at": pact["latest_at"],
+                    "compensation_points": points,
+                    "version": pact["version"],
+                },
+                detail=f"{pact['latest_at']} 보장 초과 · {points}P 자동 보상",
+            )
+            reward_event = self._append_event_locked(
+                session_id,
+                "RewardGranted",
+                {"amount": str(points), "source": "pickup_pact_breach"},
+                detail=f"픽업 보장 {points}P 자동 보상",
+            )
+            self._ledger_locked(
+                session_id,
+                "REWARD",
+                points,
+                reward_event["event_id"],
+            )
+            order["rewarded"] = True
+            session["pickup_pact"] = {
+                **pact,
+                "status": "COMPENSATED",
+                "compensation_granted": True,
+            }
+            self._audit_locked(
+                session_id,
+                "PICKUP_PACT_COMPENSATED",
+                f"{breach_event['event_id']} · {points}P",
+            )
+            return {
+                "event": deepcopy(breach_event),
+                "reward_event": deepcopy(reward_event),
+                "state": self.snapshot(session_id),
+            }
+
     def claim_pickup(self, session_id: str, pickup_code: str) -> dict[str, Any]:
         with self._lock:
             session = self.require(session_id)
@@ -814,6 +923,8 @@ class DemoStore:
             )
             order["pickup_claimed"] = True
             order["status"] = "PICKED_UP"
+            if session["pickup_pact"]["status"] == "ACTIVE":
+                session["pickup_pact"]["status"] = "FULFILLED"
             session["capacity"]["reserved_units"] = max(
                 0,
                 session["capacity"]["reserved_units"] - order["units"],
@@ -886,6 +997,7 @@ class DemoStore:
                     "original_pickup_at": None,
                     "suggested_pickup_at": None,
                 },
+                "pickup_pact": _empty_pickup_pact(),
                 "customer_history": history,
             }
             self._audit_locked(session_id, "CUSTOMER_NEXT_ORDER", "이전 주문 내역을 보존하고 새 주문을 시작했습니다.")
@@ -925,6 +1037,33 @@ class DemoStore:
                 "original_pickup_at": protection.get("original_pickup_at") or previous,
                 "suggested_pickup_at": suggested,
             }
+            pact = session["pickup_pact"]
+            next_version = max(1, int(pact.get("version", 0))) + 1
+            latest_at = _shift_hhmm(suggested, 3)
+            session["pickup_pact"] = {
+                "status": "ACTIVE",
+                "promised_at": suggested,
+                "latest_at": latest_at,
+                "compensation_points": int(pact.get("compensation_points") or 500),
+                "compensation_granted": False,
+                "version": next_version,
+            }
+            self._append_event_locked(
+                session_id,
+                "PickupPactRenegotiated",
+                {
+                    "promised_at": suggested,
+                    "latest_at": latest_at,
+                    "compensation_points": session["pickup_pact"]["compensation_points"],
+                    "version": next_version,
+                },
+                detail=f"새 보장 {suggested}~{latest_at}",
+            )
+            self._audit_locked(
+                session_id,
+                "PICKUP_PACT_RENEGOTIATED",
+                f"v{next_version} · {suggested}~{latest_at}",
+            )
             self._audit_locked(
                 session_id,
                 "PICKUP_RESCHEDULE_ACCEPTED",
@@ -1061,6 +1200,7 @@ class DemoStore:
                 "manual_review": session["manual_review"],
                 "projection_rebuilds": session["projection_rebuilds"],
                 "pickup_protection": deepcopy(session["pickup_protection"]),
+                "pickup_pact": deepcopy(session["pickup_pact"]),
                 "customer_history": deepcopy(session["customer_history"]),
                 "reconciliation": reconciliation,
                 "metrics": {
