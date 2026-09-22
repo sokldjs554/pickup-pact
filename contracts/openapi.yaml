@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Pickup Pact API
-  version: 0.4.0
+  version: 0.5.0
   description: API contracts for pickup commitments, financial postings, and deterministic reconciliation.
 
 paths:
@@ -174,6 +174,138 @@ paths:
         "404": {description: Commitment not found}
         "409": {description: Invalid commitment state}
 
+  /api/v1/merchant/orders/{orderId}:
+    get:
+      summary: Read one merchant fulfillment order and its JIT preparation window
+      parameters:
+        - $ref: "#/components/parameters/MerchantOrderId"
+      responses:
+        "200":
+          description: Current merchant fulfillment state
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/MerchantOrder"}
+        "404": {description: Merchant order not found}
+
+  /api/v1/merchant/stores/{storeId}/deliveries:
+    get:
+      summary: Read unacknowledged merchant deliveries in durable sequence order for reconnect
+      parameters:
+        - in: path
+          name: storeId
+          required: true
+          schema: {type: string, minLength: 1}
+        - in: query
+          name: afterSequence
+          schema: {type: integer, minimum: 0, default: 0}
+        - in: query
+          name: limit
+          schema: {type: integer, minimum: 1, maximum: 100, default: 50}
+      responses:
+        "200":
+          description: Pending deliveries
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: "#/components/schemas/MerchantDelivery"}
+
+  /api/v1/merchant/deliveries/{sequence}/ack:
+    post:
+      summary: Acknowledge one durable merchant delivery; repeated ACK is safe
+      parameters:
+        - in: path
+          name: sequence
+          required: true
+          schema: {type: integer, minimum: 1}
+      responses:
+        "200": {description: Delivery acknowledged}
+        "400": {description: Invalid delivery sequence}
+
+  /api/v1/merchant/orders/{orderId}/accept:
+    post:
+      summary: Accept a delivered merchant order
+      parameters:
+        - $ref: "#/components/parameters/MerchantOrderId"
+      responses:
+        "200":
+          description: Order accepted
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/MerchantOrder"}
+        "404": {description: Merchant order not found}
+        "409": {description: Invalid fulfillment state}
+
+  /api/v1/merchant/orders/{orderId}/start:
+    post:
+      summary: Start preparation only after the JIT preparation window opens
+      parameters:
+        - $ref: "#/components/parameters/MerchantOrderId"
+      responses:
+        "200":
+          description: Preparation started
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/MerchantOrder"}
+        "404": {description: Merchant order not found}
+        "409": {description: Preparation window not open or invalid state}
+
+  /api/v1/merchant/orders/{orderId}/ready:
+    post:
+      summary: Mark preparation complete and classify EARLY / ON_TIME / LATE readiness
+      parameters:
+        - $ref: "#/components/parameters/MerchantOrderId"
+      responses:
+        "200":
+          description: Merchant order ready
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/MerchantOrder"}
+        "404": {description: Merchant order not found}
+        "409": {description: Invalid fulfillment state}
+
+  /api/v1/merchant/orders/{orderId}/pickup:
+    post:
+      summary: Complete the merchant handoff after the order is READY
+      parameters:
+        - $ref: "#/components/parameters/MerchantOrderId"
+      responses:
+        "200":
+          description: Merchant handoff completed
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/MerchantOrder"}
+        "404": {description: Merchant order not found}
+        "409": {description: Invalid fulfillment state}
+
+  /api/v1/merchant/orders/{orderId}/effects:
+    get:
+      summary: Read exactly-once merchant side effects such as POS print and new-order notification
+      parameters:
+        - $ref: "#/components/parameters/MerchantOrderId"
+      responses:
+        "200":
+          description: Merchant effects
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: "#/components/schemas/MerchantEffect"}
+
+  /api/v1/merchant/orders/{orderId}/anomalies:
+    get:
+      summary: Read JIT timing and cancellation/reschedule race evidence
+      parameters:
+        - $ref: "#/components/parameters/MerchantOrderId"
+      responses:
+        "200":
+          description: Merchant fulfillment anomalies
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: "#/components/schemas/FulfillmentAnomaly"}
+
   /api/v1/ledger/postings:
     post:
       summary: Append one idempotent balanced financial posting
@@ -267,7 +399,71 @@ components:
       required: true
       schema: {type: string, format: uuid}
 
+    MerchantOrderId:
+      in: path
+      name: orderId
+      required: true
+      schema: {type: string, format: uuid}
+
   schemas:
+    JitPreparationWindow:
+      type: object
+      required: [preparationSeconds, earliestStartAt, targetReadyAt, latestReadyAt]
+      properties:
+        preparationSeconds: {type: integer, minimum: 1}
+        earliestStartAt: {type: string, format: date-time}
+        targetReadyAt: {type: string, format: date-time}
+        latestReadyAt: {type: string, format: date-time}
+
+    MerchantOrder:
+      type: object
+      required: [orderId, storeId, pickupAt, capacityUnits, state, window, version]
+      properties:
+        orderId: {type: string, format: uuid}
+        storeId: {type: string}
+        pickupAt: {type: string, format: date-time}
+        capacityUnits: {type: integer, minimum: 1}
+        state:
+          type: string
+          enum: [RECEIVED, ACCEPTED, PREPARING, READY, PICKED_UP, CANCELLED, CANCELLATION_REVIEW]
+        window: {$ref: "#/components/schemas/JitPreparationWindow"}
+        acceptedAt: {type: [string, "null"], format: date-time}
+        startedAt: {type: [string, "null"], format: date-time}
+        readyAt: {type: [string, "null"], format: date-time}
+        pickedUpAt: {type: [string, "null"], format: date-time}
+        cancellationRequestedAt: {type: [string, "null"], format: date-time}
+        version: {type: integer, minimum: 0}
+
+    MerchantDelivery:
+      type: object
+      required: [sequence, orderId, storeId, type, payload, createdAt]
+      properties:
+        sequence: {type: integer, minimum: 1}
+        orderId: {type: string, format: uuid}
+        storeId: {type: string}
+        type: {type: string}
+        payload: {type: string}
+        acknowledgedAt: {type: [string, "null"], format: date-time}
+        createdAt: {type: string, format: date-time}
+
+    MerchantEffect:
+      type: object
+      required: [type, payload, createdAt]
+      properties:
+        type: {type: string, enum: [NEW_ORDER_NOTIFICATION, POS_PRINT]}
+        payload: {type: string}
+        createdAt: {type: string, format: date-time}
+
+    FulfillmentAnomaly:
+      type: object
+      required: [code, detail, observedAt]
+      properties:
+        code:
+          type: string
+          enum: [STARTED_LATE, READY_TOO_EARLY, READY_LATE, CANCEL_AFTER_PREPARATION, RESCHEDULE_AFTER_PREPARATION]
+        detail: {type: string}
+        observedAt: {type: string, format: date-time}
+
     PickupItem:
       type: object
       required: [sku, quantity]
