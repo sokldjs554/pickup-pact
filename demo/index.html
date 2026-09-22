@@ -349,12 +349,6 @@ body.expert-mode .app{display:block}body.expert-mode .sidebar{position:relative;
           </div>
           <div class="history-list" id="customerHistoryList"></div>
         </div>
-        <div class="sheet-backdrop" id="receiptBackdrop" onclick="closeReceiptFromBackdrop(event)">
-          <div class="cart-sheet receipt-sheet" role="dialog" aria-modal="true" aria-label="모바일 영수증">
-            <div class="cart-sheet-head"><h3>모바일 영수증</h3><button class="sheet-close" type="button" onclick="closeReceipt()" aria-label="영수증 닫기">×</button></div>
-            <div id="receiptContent"></div>
-          </div>
-        </div>
       </section>
 
       <section class="page" id="page-orders">
@@ -473,6 +467,12 @@ body.expert-mode .app{display:block}body.expert-mode .sidebar{position:relative;
       </section>
     </div>
   </main>
+</div>
+<div class="sheet-backdrop" id="receiptBackdrop" onclick="closeReceiptFromBackdrop(event)">
+  <div class="cart-sheet receipt-sheet" role="dialog" aria-modal="true" aria-label="모바일 영수증">
+    <div class="cart-sheet-head"><h3>모바일 영수증</h3><button class="sheet-close" type="button" onclick="closeReceipt()" aria-label="영수증 닫기">×</button></div>
+    <div id="receiptContent"></div>
+  </div>
 </div>
 <div class="toast" id="toast"></div>
 
