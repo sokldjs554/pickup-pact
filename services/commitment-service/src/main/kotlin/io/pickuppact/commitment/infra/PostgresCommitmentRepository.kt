@@ -121,6 +121,7 @@ class PostgresCommitmentRepository(
 
     override fun find(id: UUID): Mono<PickupCommitment> =
         queryOne("id = :value", id)
+            .switchIfEmpty(Mono.error(NoSuchElementException("commitment not found: $id")))
 
     override fun findByIdempotencyKey(idempotencyKey: String): Mono<PickupCommitment> =
         queryOne("idempotency_key = :value", idempotencyKey)
