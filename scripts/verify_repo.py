@@ -37,6 +37,10 @@ required = [
     "artifacts/consistency-matrix.json",
     "artifacts/reconciler-http-summary.json",
     "scripts/integration_smoke.py",
+    "scripts/capture_postgres_plan.py",
+    "docs/ai-iteration-log.md",
+    "docs/customer-feedback-to-product.md",
+    "docs/jd-audit-2026-09-22.md",
     ".github/workflows/release-gate.yml",
 ]
 missing = [path for path in required if not (ROOT / path).exists()]
@@ -126,6 +130,11 @@ for marker in [
     "내 주문",
     "체험 손님",
     "주문 취소",
+    "주문 내역",
+    "모바일 영수증",
+    "ONE-TIME PICKUP CODE",
+    "TRUST RECEIPT",
+    "수령 완료 체험",
     "픽업 시간이 바뀌면 먼저 알려드려요.",
     "괜찮아요",
     "제품 화면으로 돌아가기",
