@@ -27,7 +27,9 @@ Pickup Pact는 서버가 받은 순서만 믿지 않고 `occurred_at`과 `receiv
 4. **주문하기** — 주문 생성 → 결제 승인 → 픽업 확정 API를 실제로 호출합니다.
 5. **주문 상태 확인** — 주문 접수 → 준비 중 → 픽업 준비 상태를 `내 주문`에서 확인합니다.
 6. **픽업 약속 보호** — 2개 이상 주문에서는 가상 매장 혼잡을 재현합니다. 처리 가능량이 줄면 백엔드가 capacity risk를 감지하고 손님에게 `12:30 → 12:35`처럼 새 픽업 시간을 제안합니다. 손님이 수락하면 `PickupRescheduled` 이벤트와 감사 기록이 남습니다.
-7. **주문 취소** — 손님은 단순한 취소 완료 화면만 봅니다. 데모 내부에서는 취소 메시지 지연과 잘못된 정산/포인트 상황을 재현하고 reconciliation + compensating repair를 자동 실행해 최종 순액을 0으로 맞춥니다.
+7. **1회용 픽업 코드** — 픽업 준비가 끝나면 4자리 코드를 보여주고, 수령 확인 시 `PickupClaimed` 이벤트를 기록합니다. 같은 코드는 두 번 사용할 수 없습니다.
+8. **Trust Receipt / 주문 내역** — 픽업 완료 또는 취소된 주문을 모바일 영수증과 주문 내역에서 다시 확인합니다. 결제, 픽업시간 변경, 취소, 금액/포인트 조정은 같은 주문 근거에서 타임라인으로 보입니다.
+9. **주문 취소** — 손님은 단순한 취소 완료 화면만 봅니다. 데모 내부에서는 취소 메시지 지연과 잘못된 정산/포인트 상황을 재현하고 reconciliation + compensating repair를 자동 실행해 최종 순액을 0으로 맞춥니다.
 
 일반 사용자는 Kafka, CQRS, ledger, anomaly, repair command 같은 용어를 볼 필요가 없습니다. 해당 내용은 백엔드 검토용 **숨김 개발자 모드(`?dev=1`)** 에서만 확인합니다.
 
@@ -126,7 +128,7 @@ flowchart LR
 | Slack / Jira / Notion | 자동화의 선택적 destination; 실제 계정 연동을 했다고 주장하지 않음 |
 | REST / OpenAPI / AsyncAPI | commitment tracking, ledger posting/history/conflict, reconciliation HTTP 및 event contract |
 
-상세 매핑: [docs/jd-traceability.md](docs/jd-traceability.md)
+상세 매핑: [docs/jd-traceability.md](docs/jd-traceability.md) · [현재 공고 전체 gap audit](docs/jd-gap-audit.md)
 
 ## 검증된 합성 실험
 
