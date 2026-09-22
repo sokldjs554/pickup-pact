@@ -7,7 +7,7 @@
 
 ### 핵심 문제
 
-단순히 `pickup_at=12:30`을 저장하면 여러 고객이 동시에 같은 시간을 선택할 때 매장이 실제로 처리할 수 있는 양보다 많은 주문을 확정할 수 있습니다. Pickup Pact는 **메뉴별 제조 부담을 capacity unit으로 환산하고, (매장, 5분 슬롯)의 미래 capacity를 Redis Lua로 원자 예약**합니다. 주문 전에는 남은 용량을 조회해 고객이 가능한 시간 중 원하는 슬롯을 직접 고르고, 취소/수령 뒤에는 같은 lease를 여러 번 해제해도 용량이 과반환되지 않도록 lease identity를 별도로 보존합니다.
+단순히 `pickup_at=12:30`과 클라이언트가 보낸 `units=1`을 저장하면 여러 고객이 같은 시간을 선택하거나 요청 값을 축소했을 때 매장의 실제 처리량을 초과 예약할 수 있습니다. Pickup Pact는 **서버가 메뉴 SKU/수량으로 제조 부담과 주문 금액을 계산하고, 짧게 유효한 HMAC quote를 발급한 뒤 (매장, 5분 슬롯)의 미래 capacity를 Redis Lua로 원자 예약**합니다. HOLD는 `Idempotency-Key`로 중복 네트워크 재시도를 한 commitment로 접고, 취소/수령 뒤에는 같은 lease를 여러 번 해제해도 용량이 과반환되지 않도록 lease identity를 별도로 보존합니다.
 
 ### Pickup Pact Guarantee
 
@@ -32,8 +32,8 @@ Pickup Pact는 서버가 받은 순서만 믿지 않고 `occurred_at`과 `receiv
 1. **매장 선택** — 근처 가상 카페 3곳 중 하나를 고릅니다.
 2. **메뉴 담기** — 아메리카노, 라떼, 샌드위치 등을 장바구니에 담습니다.
 3. **수량 변경 / 금액 확인** — 장바구니에서 수량과 총 금액이 실제로 바뀝니다.
-4. **픽업 시간 선택** — 메뉴별 제조 부담을 합산해 현재 주문이 들어갈 수 있는 5분 슬롯을 조회하고, 고객이 가능한 시간 중 하나를 직접 선택합니다.
-5. **주문하기** — 선택한 슬롯 capacity를 HOLD한 뒤 주문 생성 → 결제 승인 → 픽업 확정 API를 호출합니다.
+4. **픽업 시간 선택** — 브라우저는 SKU/수량만 보내고, 서버가 금액·제조 workload를 다시 계산해 현재 주문이 들어갈 수 있는 5분 슬롯을 반환합니다. 고객은 가능한 시간 중 하나를 직접 선택합니다.
+5. **주문하기** — core 경로는 signed quote + `Idempotency-Key`로 선택 슬롯 capacity를 HOLD한 뒤 주문 생성 → 결제 승인 → 픽업 확정을 수행합니다.
 6. **Pickup Pact 발급** — 확정 시 선택한 픽업 시간을 기준으로 v1 보장 구간과 500P 자동 보상 조건을 발급합니다.
 7. **주문 상태 확인** — 주문 접수 → 준비 중 → 픽업 준비 상태를 `내 주문`에서 확인합니다.
 8. **픽업 약속 보호·재합의** — 확정 이후 처리량이 줄면 capacity risk를 감지해 새 시간을 제안하고, 고객이 수락하면 `PickupRescheduled`와 v2 `PickupPactRenegotiated`가 남습니다. 새 보장까지 넘기면 `PickupPactBreached` 후 500P를 자동 적립합니다.
@@ -105,7 +105,8 @@ flowchart LR
 
 ### 시스템 불변식
 
-- 고객은 주문 전에 **5분 단위 capacity-aware pickup slot**을 조회하고 가능한 시간 중 원하는 시간을 선택합니다.
+- 고객 admission은 **menu line items → server workload/price calculation → signed quote → 5분 slot 선택** 순서이며, HOLD API는 클라이언트가 직접 만든 capacity units를 신뢰하지 않습니다.
+- 동일 `Idempotency-Key` + 동일 요청의 HOLD 재시도는 같은 commitment를 반환하며 capacity를 다시 차감하지 않습니다.
 - 픽업 확정에는 **capacity lease + payment authorization**이 모두 필요합니다.
 - Redis Lua 경로에서는 동일 슬롯의 제조 capacity를 원자적으로 초과할 수 없습니다.
 - lease identity를 별도 Redis key로 저장해 취소/수령 API가 재시도되어도 같은 capacity를 두 번 반환하지 않습니다.
@@ -113,6 +114,7 @@ flowchart LR
 - 같은 `event_id` + 다른 fingerprint는 조용히 dedupe하지 않고 `ledger_conflicts`에 근거를 격리해 조회할 수 있습니다.
 - 취소가 뒤늦게 도착해도 이미 기록한 회계 이력을 삭제하지 않고 **compensating entry**를 생성합니다.
 - canonical state는 수신 순서가 아니라 business occurrence time과 근거 이벤트에서 재구성합니다.
+- `PickupPactBreached`는 동일 outbox row에서 결정적 REWARD 금융 이벤트로 파생되고, `PickupClaimed`는 SETTLEMENT 금융 이벤트로 파생됩니다. 둘 다 Kafka consumer의 idempotent ledger 경계를 통과합니다.
 - AI는 사고 설명·테스트 생성·리뷰를 도울 수 있지만 금전 repair command를 직접 실행하지 못합니다.
 
 ## 공고 스택 → 실제 구현
@@ -125,7 +127,7 @@ flowchart LR
 | Flask | 원본 ops-console 구현 경로의 운영 콘솔; 공개 데모는 배포 단순화를 위해 FastAPI 단일 프로세스로 구성 |
 | PostgreSQL | commitment, transactional outbox, ledger, reconciliation audit |
 | MongoDB | 재생 가능한 raw event evidence archive |
-| Redis | Lua 기반 atomic capacity lease + Celery broker |
+| Redis | 매장별 capacity policy + Lua atomic lease + lease identity + Celery broker |
 | Elasticsearch | incident 검색/포렌식 index |
 | Kafka | commitment/financial domain events |
 | Celery | 비동기 replay worker와 retry/backoff |
