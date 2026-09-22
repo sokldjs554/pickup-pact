@@ -59,7 +59,7 @@ def test_customer_catalog_is_real_demo_api_data():
 def test_customer_can_query_capacity_aware_pickup_slots():
     response = client.get(
         "/api/demo/catalog/gangnam-pass-cafe/pickup-slots",
-        params={"units": 2},
+        params={"units": 3},
     )
     assert response.status_code == 200
     slots = response.json()
