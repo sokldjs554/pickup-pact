@@ -270,11 +270,12 @@ components:
 
     PickupQuote:
       type: object
-      required: [quoteToken, storeId, units, expiresAt, slots]
+      required: [quoteToken, storeId, units, totalAmount, expiresAt, slots]
       properties:
         quoteToken: {type: string}
         storeId: {type: string}
         units: {type: integer, minimum: 1}
+        totalAmount: {type: integer, minimum: 1}
         expiresAt: {type: string, format: date-time}
         slots:
           type: array
