@@ -14,6 +14,7 @@ EventType = Literal[
     "RewardGranted",
     "CapacityRevised",
     "PickupRescheduled",
+    "PickupClaimed",
     "SettlementReversed",
     "RewardReversed",
 ]
