@@ -1,5 +1,17 @@
 # Architecture
 
+## Runtime readiness boundary
+
+The reconciler now separates process liveness from dependency readiness.
+
+- `GET /health` is a liveness signal only.
+- `GET /ready` checks PostgreSQL, MongoDB, and Elasticsearch when persisted reconciliation is enabled.
+- Kubernetes uses `/ready` for readiness and keeps `/health` for liveness.
+- Full-topology integration waits for `/ready` before sending persisted reconciliation traffic.
+- Elasticsearch indexing uses a deterministic document ID plus bounded timeout retries, so retrying a reconciliation request cannot create a second incident document.
+
+This boundary was added after the release gate reproduced a cold-start race: the FastAPI process was healthy while Elasticsearch was still warming, causing the first persisted reconciliation to fail. The fix gates traffic on dependency readiness instead of hiding the race with a fixed sleep.
+
 ## Design objective
 
 Protect the customer's pickup-time promise and the merchant's financial state when event delivery order is unreliable.
