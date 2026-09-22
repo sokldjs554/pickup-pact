@@ -31,6 +31,7 @@ required = [
     "automation/make/README.md",
     "docs/ai-first-workflow.md",
     "docs/jd-traceability.md",
+    "docs/jd-gap-audit.md",
     "docs/performance.md",
     "sql/explain/commitment_timeline.sql",
     "artifacts/consistency-benchmark.json",
@@ -97,6 +98,7 @@ assert "/api/v1/projections/{aggregateId}" in openapi
 assert "commitment_projection" in schema and "commitment_projection" in persistence
 assert "ledger_conflicts" in schema
 assert "required: [eventId, aggregateId, type, amount]" in asyncapi
+assert "PickupClaimed" in openapi and "PickupClaimed" in asyncapi
 assert "reconciliation_run" in schema and "reconciliation_run" in persistence
 assert "outbox_events" in explain and "outbox_event\n" not in explain
 assert "financial_event_receipt" not in architecture
@@ -119,6 +121,13 @@ assert "session-isolated smart-order customer demo" in demo_doc
 assert "Customer smart-order experience" in demo_doc
 assert "Technical detail layer" in demo_doc
 assert "REVERSE_SETTLEMENT" in demo_doc and "REVERSE_REWARD" in demo_doc
+performance_doc = (ROOT / "docs/performance.md").read_text()
+release_gate = (ROOT / ".github/workflows/release-gate.yml").read_text()
+jd_gap = (ROOT / "docs/jd-gap-audit.md").read_text()
+assert "idx_outbox_aggregate_timeline" in performance_doc
+assert "commitment-timeline-explain.json" in release_gate
+assert "Query execution-plan analysis" in jd_gap
+assert "Trust Receipt" in jd_gap and "Pickup Code" in jd_gap
 for marker in [
     "오늘 뭐 드실래요?",
     "근처 매장",
@@ -128,6 +137,10 @@ for marker in [
     "주문 취소",
     "픽업 시간이 바뀌면 먼저 알려드려요.",
     "괜찮아요",
+    "주문 내역",
+    "모바일 영수증",
+    "1회용 픽업 코드",
+    "TRUST RECEIPT",
     "제품 화면으로 돌아가기",
 ]:
     assert marker in demo_index, f"customer demo marker missing: {marker}"
