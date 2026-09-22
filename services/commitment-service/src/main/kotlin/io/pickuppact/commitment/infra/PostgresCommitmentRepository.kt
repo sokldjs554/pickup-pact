@@ -29,11 +29,11 @@ class PostgresCommitmentRepository(
         var spec = db.sql(
             """
             insert into pickup_commitments
-              (id, store_id, pickup_at, units, lease_token, payment_authorized, state, version,
+              (id, store_id, pickup_at, units, order_amount, lease_token, payment_authorized, state, version,
                idempotency_key, request_fingerprint,
                pact_promised_at, pact_latest_at, pact_compensation_points, pact_version,
                pact_status, pact_compensation_granted, updated_at)
-            values (:id, :store, :pickup, :units, :lease, :payment, :state, :version,
+            values (:id, :store, :pickup, :units, :amount, :lease, :payment, :state, :version,
                     :idempotency, :fingerprint,
                     :pactPromised, :pactLatest, :pactPoints, :pactVersion,
                     :pactStatus, :pactGranted, now())
@@ -57,6 +57,7 @@ class PostgresCommitmentRepository(
             .bind("store", c.storeId)
             .bind("pickup", OffsetDateTime.ofInstant(c.pickupAt, ZoneOffset.UTC))
             .bind("units", c.units)
+            .bind("amount", c.totalAmount)
             .bind("lease", c.leaseToken)
             .bind("payment", c.paymentAuthorized)
             .bind("state", c.state.name)
@@ -128,7 +129,7 @@ class PostgresCommitmentRepository(
 
     private fun queryOne(predicate: String, value: Any): Mono<PickupCommitment> =
         db.sql(
-            """select id, store_id, pickup_at, units, lease_token, payment_authorized, state, version,
+            """select id, store_id, pickup_at, units, order_amount, lease_token, payment_authorized, state, version,
                       idempotency_key, request_fingerprint,
                       pact_promised_at, pact_latest_at, pact_compensation_points, pact_version,
                       pact_status, pact_compensation_granted
@@ -151,6 +152,7 @@ class PostgresCommitmentRepository(
                     pickupAt = row.get("pickup_at", OffsetDateTime::class.java)!!.toInstant(),
                     units = row.get("units", Integer::class.java)!!.toInt(),
                     leaseToken = row.get("lease_token", String::class.java)!!,
+                    totalAmount = row.get("order_amount", Integer::class.java)!!.toInt(),
                     paymentAuthorized = row.get("payment_authorized", java.lang.Boolean::class.java)!!.booleanValue(),
                     state = CommitmentState.valueOf(row.get("state", String::class.java)!!),
                     version = row.get("version", java.lang.Long::class.java)!!.toLong(),
