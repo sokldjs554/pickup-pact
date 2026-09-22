@@ -79,6 +79,7 @@ EVENT_LABELS = {
     "RewardGranted": "고객 포인트 적립",
     "CapacityRevised": "매장 처리량 변경",
     "PickupRescheduled": "픽업 시간 변경",
+    "PickupClaimed": "픽업 완료",
     "SettlementReversed": "정산 취소 분개",
     "RewardReversed": "포인트 회수",
 }
@@ -539,6 +540,10 @@ class PickupRescheduleRequest(BaseModel):
     pickup_at: str | None = Field(default=None, pattern=r"^\d{2}:\d{2}$")
 
 
+class PickupClaimRequest(BaseModel):
+    code: str = Field(pattern=r"^\d{4}$")
+
+
 class RedeliveryRequest(BaseModel):
     conflicting_amount: int | None = Field(default=None, gt=0, le=1_000_000)
 
@@ -660,6 +665,30 @@ def accept_demo_pickup_reschedule(
 ) -> dict[str, Any]:
     try:
         return demo_store.accept_pickup_reschedule(session_id, request.pickup_at)
+    except (KeyError, ValueError) as exc:
+        raise _demo_error(exc) from exc
+
+
+@app.get("/api/demo/sessions/{session_id}/receipt")
+def get_demo_receipt(session_id: str) -> dict[str, Any]:
+    try:
+        return demo_store.receipt(session_id)
+    except (KeyError, ValueError) as exc:
+        raise _demo_error(exc) from exc
+
+
+@app.get("/api/demo/sessions/{session_id}/history")
+def get_demo_history(session_id: str) -> list[dict[str, Any]]:
+    try:
+        return demo_store.history(session_id)
+    except (KeyError, ValueError) as exc:
+        raise _demo_error(exc) from exc
+
+
+@app.post("/api/demo/sessions/{session_id}/pickup/claim")
+def claim_demo_pickup(session_id: str, request: PickupClaimRequest) -> dict[str, Any]:
+    try:
+        return demo_store.claim_pickup(session_id, request.code)
     except (KeyError, ValueError) as exc:
         raise _demo_error(exc) from exc
 
