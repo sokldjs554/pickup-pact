@@ -83,6 +83,7 @@ def commitment_flow(pass_no: int) -> None:
     )
     assert quote["storeId"] == store_id, quote
     assert quote["units"] == 2, quote
+    assert quote["totalAmount"] == 5000, quote
     slot_options = quote["slots"]
     assert len(slot_options) == 3, slot_options
     assert all(option["pickupAt"] for option in slot_options), slot_options
@@ -418,6 +419,28 @@ def pact_financial_flow(pass_no: int) -> None:
     )
     assert claimed["state"] == "PICKED_UP", claimed
     assert claimed["pact"]["status"] == "COMPENSATED", claimed
+
+    def settlement_reaches_ledger():
+        response = httpx.get(
+            f"{LEDGER}/api/v1/ledger/orders/{commitment_id}?limit=10",
+            timeout=10,
+        )
+        if response.status_code != 200:
+            return False
+        rows = response.json()
+        reasons = sorted(item["reason"] for item in rows)
+        return (
+            len(rows) == 2
+            and reasons == ["REWARD", "SETTLEMENT"]
+            and any(item["eventId"].endswith("-settlement") for item in rows)
+            and any(item["eventId"].endswith("-pact-reward") for item in rows)
+        )
+
+    wait_until(
+        settlement_reaches_ledger,
+        timeout_s=30,
+        label="PickupClaimed settlement through outbox Kafka ledger",
+    )
 
 
 def ledger_flow(pass_no: int) -> None:
