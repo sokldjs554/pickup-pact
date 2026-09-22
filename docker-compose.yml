@@ -67,6 +67,18 @@ services:
       - redis
       - kafka
 
+  merchant-fulfillment:
+    build: ./services/merchant-fulfillment-service
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:19092
+      POSTGRES_JDBC_URL: jdbc:postgresql://postgres:5432/pickuppact
+      POSTGRES_USER: ${POSTGRES_USER:-pickuppact}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pickuppact}
+    ports: ["8082:8082"]
+    depends_on:
+      - postgres
+      - kafka
+
   ledger:
     build: ./services/ledger-service
     environment:
