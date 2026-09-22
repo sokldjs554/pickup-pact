@@ -38,7 +38,8 @@ pipeline {
       steps {
         sh 'python3 scripts/consistency_benchmark.py --orders 20000 --seed 42 --output /tmp/pickup-pact-benchmark.json'
         sh 'python3 scripts/consistency_matrix.py --orders 20000 --seeds 11,22,33,44,55 --output /tmp/pickup-pact-matrix.json'
-        sh 'python3 scripts/verify_evidence.py --benchmark-actual /tmp/pickup-pact-benchmark.json --matrix-actual /tmp/pickup-pact-matrix.json'
+        sh 'python3 scripts/pickup_policy_lab.py --orders 20000 --seed 20260922 --output /tmp/pickup-policy-lab.json'
+        sh 'python3 scripts/verify_evidence.py --benchmark-actual /tmp/pickup-pact-benchmark.json --matrix-actual /tmp/pickup-pact-matrix.json --policy-actual /tmp/pickup-policy-lab.json'
       }
     }
 

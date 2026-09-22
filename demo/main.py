@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 import os
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
@@ -36,10 +37,10 @@ CUSTOMER_CATALOG: list[dict[str, Any]] = [
         "distance_m": 180,
         "notice": "지금 주문하면 빠르게 픽업할 수 있어요.",
         "menu": [
-            {"id": "americano", "name": "아메리카노", "description": "깔끔하고 진한 기본 커피", "price": 4500, "popular": True},
-            {"id": "cafe-latte", "name": "카페라떼", "description": "고소한 우유와 에스프레소", "price": 5000, "popular": True},
-            {"id": "vanilla-latte", "name": "바닐라라떼", "description": "부드럽고 달콤한 바닐라 라떼", "price": 5500, "popular": False},
-            {"id": "cold-brew", "name": "콜드브루", "description": "천천히 내려 부드러운 커피", "price": 5200, "popular": False},
+            {"id": "americano", "name": "아메리카노", "description": "깔끔하고 진한 기본 커피", "price": 4500, "popular": True, "capacity_units": 1},
+            {"id": "cafe-latte", "name": "카페라떼", "description": "고소한 우유와 에스프레소", "price": 5000, "popular": True, "capacity_units": 2},
+            {"id": "vanilla-latte", "name": "바닐라라떼", "description": "부드럽고 달콤한 바닐라 라떼", "price": 5500, "popular": False, "capacity_units": 2},
+            {"id": "cold-brew", "name": "콜드브루", "description": "천천히 내려 부드러운 커피", "price": 5200, "popular": False, "capacity_units": 1},
         ],
     },
     {
@@ -50,9 +51,9 @@ CUSTOMER_CATALOG: list[dict[str, Any]] = [
         "distance_m": 420,
         "notice": "샌드위치와 커피를 함께 주문할 수 있어요.",
         "menu": [
-            {"id": "morning-americano", "name": "아메리카노", "description": "고소한 블렌드 원두", "price": 4300, "popular": True},
-            {"id": "flat-white", "name": "플랫화이트", "description": "진한 커피와 부드러운 우유", "price": 5300, "popular": False},
-            {"id": "ham-sandwich", "name": "햄치즈 샌드위치", "description": "간단하게 먹기 좋은 샌드위치", "price": 6800, "popular": True},
+            {"id": "morning-americano", "name": "아메리카노", "description": "고소한 블렌드 원두", "price": 4300, "popular": True, "capacity_units": 1},
+            {"id": "flat-white", "name": "플랫화이트", "description": "진한 커피와 부드러운 우유", "price": 5300, "popular": False, "capacity_units": 2},
+            {"id": "ham-sandwich", "name": "햄치즈 샌드위치", "description": "간단하게 먹기 좋은 샌드위치", "price": 6800, "popular": True, "capacity_units": 3},
         ],
     },
     {
@@ -63,12 +64,91 @@ CUSTOMER_CATALOG: list[dict[str, Any]] = [
         "distance_m": 510,
         "notice": "주문이 비교적 빨리 준비되는 매장이에요.",
         "menu": [
-            {"id": "on-americano", "name": "아메리카노", "description": "산뜻한 산미의 아메리카노", "price": 4200, "popular": True},
-            {"id": "peach-iced-tea", "name": "복숭아 아이스티", "description": "달콤하고 시원한 아이스티", "price": 4000, "popular": False},
-            {"id": "matcha-latte", "name": "말차라떼", "description": "쌉쌀한 말차와 우유", "price": 5600, "popular": True},
+            {"id": "on-americano", "name": "아메리카노", "description": "산뜻한 산미의 아메리카노", "price": 4200, "popular": True, "capacity_units": 1},
+            {"id": "peach-iced-tea", "name": "복숭아 아이스티", "description": "달콤하고 시원한 아이스티", "price": 4000, "popular": False, "capacity_units": 1},
+            {"id": "matcha-latte", "name": "말차라떼", "description": "쌉쌀한 말차와 우유", "price": 5600, "popular": True, "capacity_units": 2},
         ],
     },
 ]
+
+STORE_CAPACITY_PROFILES: dict[str, dict[str, Any]] = {
+    "gangnam-pass-cafe": {
+        "capacity_units": 12,
+        "reserved_pattern": [8, 10, 5, 2, 7, 1],
+    },
+    "seolleung-morning-bean": {
+        "capacity_units": 10,
+        "reserved_pattern": [7, 4, 8, 3, 6, 1],
+    },
+    "yeoksam-coffee-on": {
+        "capacity_units": 9,
+        "reserved_pattern": [6, 8, 3, 5, 1, 4],
+    },
+}
+
+SEOUL = ZoneInfo("Asia/Seoul")
+
+
+def _catalog_store(store_id: str) -> dict[str, Any]:
+    for store in CUSTOMER_CATALOG:
+        if store["id"] == store_id:
+            return store
+    raise KeyError(store_id)
+
+
+def _ceil_to_five_minutes(value: datetime) -> datetime:
+    rounded = value.replace(second=0, microsecond=0)
+    remainder = rounded.minute % 5
+    if remainder:
+        rounded += timedelta(minutes=5 - remainder)
+    return rounded
+
+
+def _pickup_slot_state(store_id: str, pickup_at: datetime, units: int) -> dict[str, Any]:
+    _catalog_store(store_id)
+    profile = STORE_CAPACITY_PROFILES[store_id]
+    capacity_units = int(profile["capacity_units"])
+    reserved_pattern = list(profile["reserved_pattern"])
+    bucket = int(pickup_at.timestamp()) // 300
+    reserved_units = int(reserved_pattern[bucket % len(reserved_pattern)])
+    available_units = max(0, capacity_units - reserved_units)
+    can_fit = available_units >= units
+    if not can_fit:
+        status = "FULL"
+    elif available_units <= max(units, 2):
+        status = "LIMITED"
+    else:
+        status = "AVAILABLE"
+    return {
+        "pickup_at": pickup_at.strftime("%H:%M"),
+        "capacity_units": capacity_units,
+        "reserved_units": reserved_units,
+        "available_units": available_units,
+        "requested_units": units,
+        "can_fit": can_fit,
+        "status": status,
+    }
+
+
+def _pickup_slot_options(store_id: str, units: int) -> list[dict[str, Any]]:
+    store = _catalog_store(store_id)
+    first = _ceil_to_five_minutes(
+        datetime.now(SEOUL) + timedelta(minutes=int(store["pickup_minutes"]))
+    )
+    return [
+        _pickup_slot_state(store_id, first + timedelta(minutes=offset * 5), units)
+        for offset in range(6)
+    ]
+
+
+def _pickup_slot_for_clock(store_id: str, pickup_clock: str, units: int) -> dict[str, Any]:
+    hour, minute = (int(part) for part in pickup_clock.split(":", 1))
+    now = datetime.now(SEOUL)
+    pickup_at = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    if pickup_at <= now:
+        pickup_at += timedelta(days=1)
+    return _pickup_slot_state(store_id, pickup_at, units)
+
 
 EVENT_LABELS = {
     "PickupSlotHeld": "픽업 슬롯 확보",
@@ -517,6 +597,7 @@ def run_scenario(scenario_id: str) -> dict[str, Any]:
 
 class DemoOrderCreate(BaseModel):
     store: str = Field(min_length=1, max_length=80)
+    store_id: str | None = Field(default=None, min_length=1, max_length=80)
     items: str = Field(min_length=1, max_length=160)
     total: int = Field(gt=0, le=1_000_000)
     pickup_at: str = Field(pattern=r"^\d{2}:\d{2}$")
@@ -567,6 +648,17 @@ def demo_catalog() -> list[dict[str, Any]]:
     return CUSTOMER_CATALOG
 
 
+@app.get("/api/demo/catalog/{store_id}/pickup-slots")
+def demo_pickup_slots(
+    store_id: str,
+    units: int = Query(default=1, ge=1, le=50),
+) -> list[dict[str, Any]]:
+    try:
+        return _pickup_slot_options(store_id, units)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="store not found") from exc
+
+
 @app.post("/api/demo/sessions")
 def create_demo_session() -> dict[str, Any]:
     return demo_store.create_session()
@@ -601,6 +693,10 @@ def load_demo_preset(session_id: str, scenario_id: str) -> dict[str, Any]:
 @app.post("/api/demo/sessions/{session_id}/orders")
 def create_demo_order(session_id: str, request: DemoOrderCreate) -> dict[str, Any]:
     try:
+        if request.store_id is not None:
+            slot = _pickup_slot_for_clock(request.store_id, request.pickup_at, request.units)
+            if not slot["can_fit"]:
+                raise ValueError("selected pickup slot no longer has enough capacity")
         return demo_store.create_order(
             session_id,
             store=request.store,

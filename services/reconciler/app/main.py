@@ -34,7 +34,29 @@ if os.getenv("ELASTIC_APM_ENABLED", "false").lower() == "true":
 
 @app.get("/health")
 def health() -> dict[str, str]:
+    """Liveness only: the process can serve requests."""
     return {"status": "ok"}
+
+
+@app.get("/ready")
+def ready() -> dict:
+    """Readiness includes external stores used by persisted reconciliation."""
+    if os.getenv("PERSIST_RECONCILIATION", "false").lower() != "true":
+        return {"status": "ready", "mode": "stateless", "dependencies": {}}
+
+    from .persistence import persistence_readiness
+
+    dependencies = persistence_readiness()
+    if any(value != "ok" for value in dependencies.values()):
+        raise HTTPException(
+            status_code=503,
+            detail={"status": "not_ready", "dependencies": dependencies},
+        )
+    return {
+        "status": "ready",
+        "mode": "persisted",
+        "dependencies": dependencies,
+    }
 
 
 @app.post("/api/v1/reconcile", response_model=ReconcileResult)
@@ -69,7 +91,12 @@ def replay_api(request: ReconcileRequest) -> dict:
 def incidents_api(aggregate_id: str) -> dict:
     from elasticsearch import Elasticsearch, NotFoundError
 
-    es = Elasticsearch(os.environ.get("ELASTICSEARCH_URL", "http://localhost:9200"), request_timeout=2)
+    es = Elasticsearch(
+        os.environ.get("ELASTICSEARCH_URL", "http://localhost:9200"),
+        request_timeout=2,
+        max_retries=3,
+        retry_on_timeout=True,
+    )
     try:
         response = es.search(
             index="pickup-pact-incidents-v1",

@@ -34,8 +34,11 @@ required = [
     "docs/jd-traceability.md",
     "docs/performance.md",
     "sql/explain/commitment_timeline.sql",
+    "sql/explain/store_pickup_schedule.sql",
     "artifacts/consistency-benchmark.json",
     "artifacts/consistency-matrix.json",
+    "artifacts/pickup-policy-lab.json",
+    "scripts/pickup_policy_lab.py",
     "artifacts/reconciler-http-summary.json",
     "scripts/integration_smoke.py",
     "scripts/capture_postgres_plan.py",
@@ -93,6 +96,7 @@ demo_dockerfile = (ROOT / "Dockerfile.demo").read_text()
 
 assert "paymentAuthorized" not in openapi, "hold contract must not let a caller self-authorize payment"
 assert "/api/v1/commitments/{id}/authorize-payment" in openapi
+assert "/api/v1/commitments/slots" in openapi
 assert "/api/v1/commitments/{id}/claim-pickup" in openapi
 assert "/api/v1/ledger/postings" in openapi
 assert "/api/v1/commitments/{id}:" in openapi
@@ -102,6 +106,7 @@ assert "/api/v1/projections/rebuild" in openapi
 assert "/api/v1/projections/{aggregateId}" in openapi
 assert "commitment_projection" in schema and "commitment_projection" in persistence
 assert "ledger_conflicts" in schema
+assert "idx_pickup_commitments_store_schedule" in schema
 assert "required: [eventId, aggregateId, type, amount]" in asyncapi
 assert "PickupPactIssued" in openapi and "PickupPactIssued" in asyncapi
 assert "PickupPactRenegotiated" in openapi and "PickupPactRenegotiated" in asyncapi
@@ -112,6 +117,11 @@ assert "financial_event_receipt" not in architecture
 assert "financial_event_receipt" not in domain_model
 assert "OutboxPublisher" not in architecture
 assert "services.reconciler.app.engine" in demo
+reconciler_main = (ROOT / "services/reconciler/app/main.py").read_text()
+reconciler_k8s = (ROOT / "infra/k8s/reconciler.yaml").read_text()
+assert '@app.get("/ready")' in reconciler_main
+assert "persistence_readiness" in reconciler_main
+assert "path: /ready" in reconciler_k8s
 assert "RENDER_GIT_COMMIT" in demo and "release_commit" in demo
 assert "EXPECTED_COMMIT" in live_demo_workflow and 'health["release_commit"] == EXPECTED_COMMIT' in live_demo_workflow
 assert "COPY services /app/services" in demo_dockerfile
@@ -142,6 +152,7 @@ for marker in [
     "수령 완료 체험",
     "Pickup Pact — 픽업 시간을 약속해요.",
     "보장 시간을 넘기면 500P",
+    "픽업 시간 선택",
     "괜찮아요",
     "제품 화면으로 돌아가기",
 ]:

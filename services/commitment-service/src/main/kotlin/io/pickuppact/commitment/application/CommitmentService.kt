@@ -3,6 +3,7 @@ package io.pickuppact.commitment.application
 import io.pickuppact.commitment.domain.CommitmentState
 import io.pickuppact.commitment.domain.PickupCommitment
 import org.springframework.stereotype.Service
+import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
 import java.time.Duration
 import java.time.Instant
@@ -10,11 +11,51 @@ import java.util.UUID
 
 data class HoldCommand(val storeId: String, val pickupAt: Instant, val units: Int)
 
+data class PickupSlotOption(
+    val pickupAt: Instant,
+    val capacityUnits: Int,
+    val reservedUnits: Int,
+    val availableUnits: Int,
+    val requestedUnits: Int,
+    val canFit: Boolean,
+)
+
 @Service
 class CommitmentService(
     private val capacity: CapacityLeasePort,
     private val repository: CommitmentRepository
 ) {
+    fun pickupSlots(
+        storeId: String,
+        from: Instant,
+        count: Int,
+        units: Int
+    ): Flux<PickupSlotOption> {
+        require(storeId.isNotBlank()) { "storeId must not be blank" }
+        require(count in 1..12) { "count must be between 1 and 12" }
+        require(units > 0) { "units must be positive" }
+
+        val now = Instant.now()
+        val seed = if (from.isAfter(now)) from else now.plusSeconds(SLOT_SECONDS)
+        val firstSlot = alignToSlot(seed)
+
+        return Flux.range(0, count)
+            .concatMap { offset ->
+                val pickupAt = firstSlot.plusSeconds(SLOT_SECONDS * offset.toLong())
+                capacity.availability(storeId, pickupAt)
+                    .map { availability ->
+                        PickupSlotOption(
+                            pickupAt = pickupAt,
+                            capacityUnits = availability.capacityUnits,
+                            reservedUnits = availability.reservedUnits,
+                            availableUnits = availability.availableUnits,
+                            requestedUnits = units,
+                            canFit = availability.availableUnits >= units,
+                        )
+                    }
+            }
+    }
+
     fun hold(command: HoldCommand): Mono<PickupCommitment> {
         val now = Instant.now()
         require(command.pickupAt.isAfter(now)) { "pickup time must be in the future" }
@@ -74,25 +115,45 @@ class CommitmentService(
 
     fun claimPickup(id: UUID): Mono<PickupCommitment> =
         repository.find(id)
-            .map { it.claimPickup() }
-            .flatMap { saved ->
-                repository.saveWithEvent(
-                    saved,
-                    "PickupClaimed",
-                    mapOf("pickup_at" to saved.pickupAt.toString())
-                )
+            .flatMap { current ->
+                if (current.state == CommitmentState.PICKED_UP) {
+                    capacity.release(current.leaseToken).thenReturn(current)
+                } else {
+                    val pickedUp = current.claimPickup()
+                    repository.saveWithEvent(
+                        pickedUp,
+                        "PickupClaimed",
+                        mapOf("pickup_at" to pickedUp.pickupAt.toString())
+                    ).flatMap { saved ->
+                        capacity.release(saved.leaseToken).thenReturn(saved)
+                    }
+                }
             }
-            .flatMap { saved -> capacity.release(saved.leaseToken).thenReturn(saved) }
 
     fun cancel(id: UUID): Mono<PickupCommitment> =
         repository.find(id)
-            .map { it.cancel() }
-            .flatMap { saved ->
-                repository.saveWithEvent(
-                    saved,
-                    "CommitmentCancelled",
-                    mapOf("reason" to "customer_request")
-                )
+            .flatMap { current ->
+                if (current.state == CommitmentState.CANCELLED) {
+                    capacity.release(current.leaseToken).thenReturn(current)
+                } else {
+                    val cancelled = current.cancel()
+                    repository.saveWithEvent(
+                        cancelled,
+                        "CommitmentCancelled",
+                        mapOf("reason" to "customer_request")
+                    ).flatMap { saved ->
+                        capacity.release(saved.leaseToken).thenReturn(saved)
+                    }
+                }
             }
-            .flatMap { saved -> capacity.release(saved.leaseToken).thenReturn(saved) }
+
+    private fun alignToSlot(value: Instant): Instant {
+        val epoch = value.epochSecond
+        val aligned = ((epoch + SLOT_SECONDS - 1) / SLOT_SECONDS) * SLOT_SECONDS
+        return Instant.ofEpochSecond(aligned)
+    }
+
+    private companion object {
+        const val SLOT_SECONDS = 300L
+    }
 }

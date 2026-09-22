@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import json
 import os
 import subprocess
@@ -45,7 +46,7 @@ def wait_http(url: str, *, timeout_s: int = 180) -> None:
     while time.time() < deadline:
         try:
             response = httpx.get(url, timeout=5)
-            if response.status_code < 500:
+            if response.status_code == 200:
                 return
             last = f"HTTP {response.status_code}: {response.text[:200]}"
         except Exception as exc:
@@ -67,12 +68,28 @@ def expect(response: httpx.Response, status: int | set[int]) -> dict:
 
 
 def commitment_flow(pass_no: int) -> None:
-    pickup_at = (datetime.now(UTC) + timedelta(hours=2)).isoformat()
+    store_id = f"integration-store-{pass_no}"
+    slot_options = expect(
+        httpx.get(
+            f"{COMMITMENT}/api/v1/commitments/slots",
+            params={"storeId": store_id, "count": 3, "units": 2},
+            timeout=15,
+        ),
+        200,
+    )
+    assert len(slot_options) == 3, slot_options
+    assert all(option["pickupAt"] for option in slot_options), slot_options
+    assert all(option["canFit"] is True for option in slot_options), slot_options
+    assert slot_options[0]["capacityUnits"] == 40, slot_options
+    assert slot_options[0]["reservedUnits"] == 0, slot_options
+    assert slot_options[0]["availableUnits"] == 40, slot_options
+
+    pickup_at = slot_options[0]["pickupAt"]
     held = expect(
         httpx.post(
             f"{COMMITMENT}/api/v1/commitments/hold",
             json={
-                "storeId": f"integration-store-{pass_no}",
+                "storeId": store_id,
                 "pickupAt": pickup_at,
                 "units": 2,
             },
@@ -83,11 +100,33 @@ def commitment_flow(pass_no: int) -> None:
     assert held["state"] == "HELD", held
     assert held["paymentAuthorized"] is False, held
     commitment_id = held["id"]
-    lease_key = held["leaseToken"].split("|", 1)[0]
+
+    token_parts = held["leaseToken"].split("|")
+    assert len(token_parts) == 2, held
+    slot_key, lease_key = token_parts
 
     import redis
     redis_client = redis.Redis(host="127.0.0.1", port=6379, decode_responses=True)
+    assert redis_client.get(slot_key) == "2", held
     assert redis_client.exists(lease_key) == 1, held
+
+    reserved = expect(
+        httpx.get(
+            f"{COMMITMENT}/api/v1/commitments/slots",
+            params={
+                "storeId": store_id,
+                "from": pickup_at,
+                "count": 1,
+                "units": 2,
+            },
+            timeout=15,
+        ),
+        200,
+    )
+    assert reserved[0]["pickupAt"] == pickup_at, reserved
+    assert reserved[0]["reservedUnits"] == 2, reserved
+    assert reserved[0]["availableUnits"] == 38, reserved
+    assert reserved[0]["canFit"] is True, reserved
 
     paid = expect(
         httpx.post(
@@ -126,10 +165,41 @@ def commitment_flow(pass_no: int) -> None:
         200,
     )
     assert cancelled["state"] == "CANCELLED", cancelled
+    assert redis_client.exists(slot_key) == 0, {
+        "slot_key": slot_key,
+        "cancelled": cancelled,
+    }
     assert redis_client.exists(lease_key) == 0, {
         "lease_key": lease_key,
         "cancelled": cancelled,
     }
+
+    retry = expect(
+        httpx.post(
+            f"{COMMITMENT}/api/v1/commitments/{commitment_id}/cancel",
+            timeout=15,
+        ),
+        200,
+    )
+    assert retry["state"] == "CANCELLED", retry
+    assert redis_client.exists(slot_key) == 0, retry
+    assert redis_client.exists(lease_key) == 0, retry
+
+    released = expect(
+        httpx.get(
+            f"{COMMITMENT}/api/v1/commitments/slots",
+            params={
+                "storeId": store_id,
+                "from": pickup_at,
+                "count": 1,
+                "units": 2,
+            },
+            timeout=15,
+        ),
+        200,
+    )
+    assert released[0]["reservedUnits"] == 0, released
+    assert released[0]["availableUnits"] == 40, released
 
     def outbox_published():
         with postgres_connection() as connection:
@@ -143,13 +213,91 @@ def commitment_flow(pass_no: int) -> None:
                     (commitment_id,),
                 )
                 published, total = cursor.fetchone()
-                return total >= 4 and published == total
+                return total == 4 and published == total
 
     wait_until(
         outbox_published,
         timeout_s=30,
         label="commitment outbox delivery to Kafka",
     )
+
+
+
+def capacity_concurrency_flow(pass_no: int) -> None:
+    store_id = f"concurrency-store-{pass_no}"
+    slots = expect(
+        httpx.get(
+            f"{COMMITMENT}/api/v1/commitments/slots",
+            params={"storeId": store_id, "count": 1, "units": 2},
+            timeout=15,
+        ),
+        200,
+    )
+    pickup_at = slots[0]["pickupAt"]
+
+    def hold_one(index: int) -> httpx.Response:
+        return httpx.post(
+            f"{COMMITMENT}/api/v1/commitments/hold",
+            json={
+                "storeId": store_id,
+                "pickupAt": pickup_at,
+                "units": 2,
+            },
+            timeout=20,
+        )
+
+    with ThreadPoolExecutor(max_workers=30) as pool:
+        responses = list(pool.map(hold_one, range(30)))
+
+    statuses = [response.status_code for response in responses]
+    assert set(statuses) <= {200, 409}, statuses
+    assert statuses.count(200) == 20, statuses
+    assert statuses.count(409) == 10, statuses
+
+    accepted = [response.json() for response in responses if response.status_code == 200]
+    live_slot = expect(
+        httpx.get(
+            f"{COMMITMENT}/api/v1/commitments/slots",
+            params={
+                "storeId": store_id,
+                "from": pickup_at,
+                "count": 1,
+                "units": 1,
+            },
+            timeout=15,
+        ),
+        200,
+    )[0]
+    assert live_slot["reservedUnits"] == 40, live_slot
+    assert live_slot["availableUnits"] == 0, live_slot
+    assert live_slot["canFit"] is False, live_slot
+
+    for commitment in accepted:
+        cancelled = expect(
+            httpx.post(
+                f"{COMMITMENT}/api/v1/commitments/{commitment['id']}/cancel",
+                timeout=15,
+            ),
+            200,
+        )
+        assert cancelled["state"] == "CANCELLED", cancelled
+
+    released_slot = expect(
+        httpx.get(
+            f"{COMMITMENT}/api/v1/commitments/slots",
+            params={
+                "storeId": store_id,
+                "from": pickup_at,
+                "count": 1,
+                "units": 1,
+            },
+            timeout=15,
+        ),
+        200,
+    )[0]
+    assert released_slot["reservedUnits"] == 0, released_slot
+    assert released_slot["availableUnits"] == 40, released_slot
+
 
 
 def ledger_flow(pass_no: int) -> None:
@@ -448,6 +596,7 @@ def celery_flow(pass_no: int) -> None:
 
 def one_pass(pass_no: int) -> None:
     commitment_flow(pass_no)
+    capacity_concurrency_flow(pass_no)
     ledger_flow(pass_no)
     kafka_ledger_flow(pass_no)
     reconciler_flow(pass_no)
@@ -464,6 +613,7 @@ def main() -> None:
     wait_http(f"{COMMITMENT}/actuator/health", timeout_s=240)
     wait_http(f"{LEDGER}/actuator/health", timeout_s=240)
     wait_http(f"{RECONCILER}/health", timeout_s=240)
+    wait_http(f"{RECONCILER}/ready", timeout_s=240)
     wait_http(f"{OPS}/health", timeout_s=240)
 
     for pass_no in range(1, args.passes + 1):
