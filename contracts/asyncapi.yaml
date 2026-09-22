@@ -16,6 +16,9 @@ channels:
       commitmentCancelled:
         payload:
           $ref: "#/components/schemas/CommitmentEvent"
+      pickupRescheduled:
+        payload:
+          $ref: "#/components/schemas/CommitmentEvent"
 
   financialEvents:
     address: pickup.financial.events.v1
@@ -41,7 +44,7 @@ components:
         aggregate_id: {type: string}
         event_type:
           type: string
-          enum: [PaymentAuthorized, CommitmentConfirmed, CommitmentCancelled]
+          enum: [PaymentAuthorized, CommitmentConfirmed, CommitmentCancelled, PickupRescheduled]
         occurred_at: {type: string, format: date-time}
         schema_version: {type: integer, const: 1}
         payload: {type: object}
