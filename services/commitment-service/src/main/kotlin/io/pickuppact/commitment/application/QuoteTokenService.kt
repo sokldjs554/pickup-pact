@@ -12,6 +12,7 @@ import javax.crypto.spec.SecretKeySpec
 data class QuoteClaims(
     val storeId: String,
     val units: Int,
+    val totalAmount: Int,
     val expiresAt: Instant
 )
 
@@ -20,12 +21,18 @@ class QuoteTokenService(
     @Value("\${pickup.quote-secret:local-dev-quote-secret-change-me}")
     private val secret: String
 ) {
-    fun issue(storeId: String, units: Int, expiresAt: Instant): String {
+    fun issue(storeId: String, units: Int, totalAmount: Int, expiresAt: Instant): String {
         require(storeId.isNotBlank()) { "storeId must not be blank" }
         require(units > 0) { "units must be positive" }
+        require(totalAmount > 0) { "totalAmount must be positive" }
         require(expiresAt.isAfter(Instant.now())) { "quote must expire in the future" }
 
-        val payload = listOf(storeId, units.toString(), expiresAt.epochSecond.toString()).joinToString("|")
+        val payload = listOf(
+            storeId,
+            units.toString(),
+            totalAmount.toString(),
+            expiresAt.epochSecond.toString()
+        ).joinToString("|")
         val encoded = Base64.getUrlEncoder().withoutPadding()
             .encodeToString(payload.toByteArray(StandardCharsets.UTF_8))
         return "$encoded.${signature(encoded)}"
@@ -47,11 +54,12 @@ class QuoteTokenService(
             StandardCharsets.UTF_8
         )
         val values = payload.split("|")
-        require(values.size == 3) { "invalid quote payload" }
+        require(values.size == 4) { "invalid quote payload" }
         val claims = QuoteClaims(
             storeId = values[0],
             units = values[1].toInt(),
-            expiresAt = Instant.ofEpochSecond(values[2].toLong())
+            totalAmount = values[2].toInt(),
+            expiresAt = Instant.ofEpochSecond(values[3].toLong())
         )
         require(claims.expiresAt.isAfter(now)) { "quote has expired" }
         return claims
