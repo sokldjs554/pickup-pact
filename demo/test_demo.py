@@ -61,7 +61,7 @@ def test_landing_page_exposes_guided_and_expert_layers():
     assert response.status_code == 200
     body = response.text
     for label in [
-        "커피, 미리 주문해요.",
+        "오늘 뭐 드실래요?",
         "근처 매장",
         "장바구니 보기",
         "내 주문",
