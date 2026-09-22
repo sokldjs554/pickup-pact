@@ -14,6 +14,12 @@ required = [
     ".github/workflows/live-demo-smoke.yml",
     ".github/workflows/ui-e2e.yml",
     "demo/index.html",
+    "demo/promise_admission.py",
+    "contracts/promise-admission-cases.json",
+    "services/commitment-service/src/main/kotlin/io/pickuppact/commitment/domain/PromiseAdmissionPolicy.kt",
+    "services/commitment-service/src/test/resources/promise-admission-cases.json",
+    "scripts/promise_admission_benchmark.py",
+    "docs/promise-lifecycle.md",
     "demo/e2e/operator-flow.spec.js",
     "demo/VERIFICATION.md",
     "docker-compose.yml",
@@ -92,6 +98,7 @@ demo_dockerfile = (ROOT / "Dockerfile.demo").read_text()
 
 assert "paymentAuthorized" not in openapi, "hold contract must not let a caller self-authorize payment"
 assert "/api/v1/commitments/{id}/authorize-payment" in openapi
+assert "/api/v1/commitments/promise-quote" in openapi
 assert "/api/v1/commitments/{id}/claim-pickup" in openapi
 assert "/api/v1/ledger/postings" in openapi
 assert "/api/v1/commitments/{id}:" in openapi
@@ -124,6 +131,11 @@ assert "session-isolated smart-order customer demo" in demo_doc
 assert "Customer smart-order experience" in demo_doc
 assert "Technical detail layer" in demo_doc
 assert "REVERSE_SETTLEMENT" in demo_doc and "REVERSE_REWARD" in demo_doc
+promise_contract = (ROOT / "contracts/promise-admission-cases.json").read_text()
+promise_kotlin_cases = (ROOT / "services/commitment-service/src/test/resources/promise-admission-cases.json").read_text()
+assert promise_contract == promise_kotlin_cases, "Python/Kotlin promise admission golden cases drifted"
+assert "ACCEPT" in promise_contract and "OFFER_LATER" in promise_contract and "PAUSE" in promise_contract
+assert "Promise Lifecycle" in (ROOT / "docs/promise-lifecycle.md").read_text()
 for marker in [
     "오늘 뭐 드실래요?",
     "근처 매장",
@@ -136,7 +148,9 @@ for marker in [
     "ONE-TIME PICKUP CODE",
     "TRUST RECEIPT",
     "수령 완료 체험",
-    "픽업 시간이 바뀌면 먼저 알려드려요.",
+    "지킬 수 있는 시간만 약속해요.",
+    "지금 주문 가능",
+    "잠시 쉬는 중",
     "괜찮아요",
     "제품 화면으로 돌아가기",
 ]:
