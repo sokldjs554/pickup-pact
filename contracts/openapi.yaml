@@ -203,7 +203,14 @@ paths:
           name: limit
           schema: {type: integer, minimum: 1, maximum: 100, default: 50}
       responses:
-        "200": {description: Ledger batch history}
+        "200":
+          description: Ledger batch history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LedgerBatchSummary"
 
   /api/v1/ledger/conflicts:
     get:
@@ -291,6 +298,21 @@ components:
         availableUnits: {type: integer, minimum: 0}
         requestedUnits: {type: integer, minimum: 1}
         canFit: {type: boolean}
+
+    LedgerBatchSummary:
+      type: object
+      required: [eventId, aggregateId, reason, amount, unit, createdAt]
+      properties:
+        eventId: {type: string}
+        aggregateId: {type: string}
+        reason:
+          type: string
+          enum: [SETTLEMENT, REVERSE_SETTLEMENT, REWARD, REVERSE_REWARD]
+        amount: {type: number, exclusiveMinimum: 0}
+        unit:
+          type: string
+          enum: [KRW, PTS]
+        createdAt: {type: string, format: date-time}
 
     LedgerPostingRequest:
       type: object
