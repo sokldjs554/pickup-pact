@@ -1,17 +1,25 @@
 # Pickup Pact
 
-**주문마다 ‘픽업 보장 구간’을 발급하고, 매장 상황이 바뀌면 고객과 새 시간으로 재합의하며, 그 보장까지 넘기면 고객 문의 없이 포인트를 자동 보상하는 스마트오더 백엔드 프로젝트입니다.**
+**고객이 원하는 픽업 시간을 직접 고르면 미래 제조 capacity를 5분 슬롯으로 원자 예약하고, 확정된 주문에는 버전드 `Pickup Pact Guarantee`를 발급해 약속 변경과 자동 보상까지 추적하는 이벤트 기반 스마트오더 백엔드 프로젝트입니다.**
 
 **Live Demo:** <https://pickup-pact-demo.onrender.com>  
 **Public demo engine:** `services/reconciler/app/engine.py` · 합성 데이터만 사용
 
-### 대표 제품 시나리오 — Pickup Pact Guarantee
+### 핵심 문제
 
-고객이 12:30 픽업 주문을 확정하면 시스템은 단순 ETA가 아니라 **12:30~12:33 보장 · 초과 시 500P 자동 보상**이라는 `PickupPactIssued` 계약을 발급합니다.
+단순히 `pickup_at=12:30`을 저장하면 여러 고객이 동시에 같은 시간을 선택할 때 매장이 실제로 처리할 수 있는 양보다 많은 주문을 확정할 수 있습니다. Pickup Pact는 **메뉴별 제조 부담을 capacity unit으로 환산하고, (매장, 5분 슬롯)의 미래 capacity를 Redis Lua로 원자 예약**합니다. 주문 전에는 남은 용량을 조회해 고객이 가능한 시간 중 원하는 슬롯을 직접 고르고, 취소/수령 뒤에는 같은 lease를 여러 번 해제해도 용량이 과반환되지 않도록 lease identity를 별도로 보존합니다.
 
-매장 처리량이 줄면 기존 약속을 조용히 덮어쓰지 않습니다. 고객에게 12:35 픽업을 제안하고, 동의하면 **v2 보장(12:35~12:38)** 으로 `PickupPactRenegotiated`를 기록합니다. 새 보장도 넘기면 `PickupPactBreached`와 500P `RewardGranted`가 자동으로 남고 Trust Receipt에 근거가 이어집니다.
+### Pickup Pact Guarantee
 
-이 아래에서 늦은 취소·Kafka 중복 전달·event-time 순서 뒤바뀜·정산/포인트 보상 같은 기존 분산 정합성 로직이 Pact를 지탱합니다. 즉 **Kafka/CQRS/Saga가 주제가 아니라, 고객에게 한 약속을 지키기 위한 구현 수단**입니다.
+고객이 선택한 슬롯의 주문을 확정하면 단순 ETA가 아니라 **선택 시각~+3분 보장 · 초과 시 500P 자동 보상**이라는 `PickupPactIssued` 계약을 발급합니다. 이후 매장 처리량이 줄어 새 시간이 필요해지면 기존 약속을 덮어쓰지 않고 고객 동의와 함께 `PickupPactRenegotiated` v2를 남깁니다. 새 보장까지 넘기면 `PickupPactBreached`와 500P `RewardGranted`가 자동 기록되고 Trust Receipt에 근거가 이어집니다.
+
+### 대표 장애 시나리오
+
+고객이 **12:14:10에 9,000원짜리 12:30 픽업 주문을 취소**했지만 취소 메시지가 52초 늦게 도착합니다. 그 사이 점주 정산 9,000원과 고객 포인트 90P가 먼저 반영됩니다.
+
+Pickup Pact는 서버가 받은 순서만 믿지 않고 `occurred_at`과 `received_at`을 분리합니다. 그 결과 **취소가 실제로 정산보다 먼저 발생했다는 사실을 복원하고, 기존 금전 이력을 삭제하지 않은 채 정산 reversal과 포인트 회수 계획을 생성**합니다.
+
+이 주제를 선택한 이유는 주문/결제/정산/적립 같은 비즈니스 로직, Kafka 기반 비동기 처리, CQRS, Redis, 분산 트랜잭션과 데이터 정합성, 장애 추적이라는 페이타랩 백엔드 공고의 핵심 문제와 직접 연결되면서도 흔한 주문 CRUD/음식배달 MSA 클론과 다른 문제를 보여주기 위해서입니다.
 
 ## 공개 데모: 손님용 스마트오더와 개발자 콘솔을 분리
 
@@ -24,16 +32,18 @@
 1. **매장 선택** — 근처 가상 카페 3곳 중 하나를 고릅니다.
 2. **메뉴 담기** — 아메리카노, 라떼, 샌드위치 등을 장바구니에 담습니다.
 3. **수량 변경 / 금액 확인** — 장바구니에서 수량과 총 금액이 실제로 바뀝니다.
-4. **주문하기** — 주문 생성 → 결제 승인 → 픽업 확정 API를 실제로 호출합니다.
-5. **주문 상태 확인** — 주문 접수 → 준비 중 → 픽업 준비 상태를 `내 주문`에서 확인합니다.
-6. **픽업 약속 보호** — 2개 이상 주문에서는 가상 매장 혼잡을 재현합니다. 처리 가능량이 줄면 백엔드가 capacity risk를 감지하고 손님에게 `12:30 → 12:35`처럼 새 픽업 시간을 제안합니다. 손님이 수락하면 `PickupRescheduled` 이벤트와 감사 기록이 남습니다.
-7. **1회용 픽업 코드** — 픽업 준비가 되면 이름/전화번호 대신 주문별 4자리 코드를 보여줍니다. 정상 수령 시 `PickupClaimed`가 기록되고 같은 코드는 다시 사용할 수 없습니다.
-8. **Trust Receipt + 주문 내역** — 픽업 완료/취소 주문은 이력에 남고, 모바일 영수증에서 주문·결제·픽업시간 변경·취소 정리·최종 청구·포인트 결과를 한 번에 확인합니다.
-9. **주문 취소** — 손님은 단순한 취소 완료 화면만 봅니다. 데모 내부에서는 취소 메시지 지연과 잘못된 정산/포인트 상황을 재현하고 reconciliation + compensating repair를 자동 실행해 최종 순액을 0으로 맞춥니다.
+4. **픽업 시간 선택** — 메뉴별 제조 부담을 합산해 현재 주문이 들어갈 수 있는 5분 슬롯을 조회하고, 고객이 가능한 시간 중 하나를 직접 선택합니다.
+5. **주문하기** — 선택한 슬롯 capacity를 HOLD한 뒤 주문 생성 → 결제 승인 → 픽업 확정 API를 호출합니다.
+6. **Pickup Pact 발급** — 확정 시 선택한 픽업 시간을 기준으로 v1 보장 구간과 500P 자동 보상 조건을 발급합니다.
+7. **주문 상태 확인** — 주문 접수 → 준비 중 → 픽업 준비 상태를 `내 주문`에서 확인합니다.
+8. **픽업 약속 보호·재합의** — 확정 이후 처리량이 줄면 capacity risk를 감지해 새 시간을 제안하고, 고객이 수락하면 `PickupRescheduled`와 v2 `PickupPactRenegotiated`가 남습니다. 새 보장까지 넘기면 `PickupPactBreached` 후 500P를 자동 적립합니다.
+9. **1회용 픽업 코드** — 픽업 준비가 되면 이름/전화번호 대신 주문별 4자리 코드를 보여줍니다. 정상 수령 시 `PickupClaimed`가 기록되고 같은 코드는 다시 사용할 수 없습니다.
+10. **Trust Receipt + 주문 내역** — 픽업 완료/취소 주문은 이력에 남고, 모바일 영수증에서 슬롯 선택·Pact 버전·자동 보상·결제·취소·포인트 결과를 한 번에 확인합니다.
+11. **주문 취소** — 손님은 단순한 취소 완료 화면만 봅니다. 데모 내부에서는 취소 메시지 지연과 잘못된 정산/포인트 상황을 재현하고 reconciliation + compensating repair를 자동 실행해 최종 순액을 맞춥니다.
 
 일반 사용자는 Kafka, CQRS, ledger, anomaly, repair command 같은 용어를 볼 필요가 없습니다. 해당 내용은 백엔드 검토용 **숨김 개발자 모드(`?dev=1`)** 에서만 확인합니다.
 
-이 프로젝트의 중심 차별점은 **Pickup Pact Guarantee**입니다. Pickup Promise·Trust Receipt·One-time Pickup Code는 이 보장 계약을 고객이 이해하고 확인하고 안전하게 수령하기 위한 보조 기능입니다. 정상 주문뿐 아니라 매장 처리량·이벤트 지연·중복·취소·수령 확인 문제가 생겨도 고객에게는 약속·재합의·자동 보상이라는 한 흐름만 보여주고, 백엔드에는 정합성·ledger·audit 근거를 보존합니다.
+이 프로젝트의 중심 차별점은 **User-selected Capacity Slot + Pickup Pact Guarantee**입니다. Capacity Slot은 애초에 지킬 수 있는 시간만 선택하게 만들고, Pickup Pact는 확정 뒤 생기는 변화도 버전드 약속·재합의·자동 보상으로 이어갑니다. Trust Receipt와 One-time Pickup Code는 이 약속을 고객이 확인하고 안전하게 수령하기 위한 신뢰 레이어이며, 백엔드에는 정합성·ledger·audit 근거를 보존합니다.
 
 ### 기술 상세
 
@@ -95,8 +105,10 @@ flowchart LR
 
 ### 시스템 불변식
 
+- 고객은 주문 전에 **5분 단위 capacity-aware pickup slot**을 조회하고 가능한 시간 중 원하는 시간을 선택합니다.
 - 픽업 확정에는 **capacity lease + payment authorization**이 모두 필요합니다.
 - Redis Lua 경로에서는 동일 슬롯의 제조 capacity를 원자적으로 초과할 수 없습니다.
+- lease identity를 별도 Redis key로 저장해 취소/수령 API가 재시도되어도 같은 capacity를 두 번 반환하지 않습니다.
 - 같은 `event_id` + 같은 semantic fingerprint는 안전한 재전달로 간주해 financial side effect를 다시 만들지 않습니다.
 - 같은 `event_id` + 다른 fingerprint는 조용히 dedupe하지 않고 `ledger_conflicts`에 근거를 격리해 조회할 수 있습니다.
 - 취소가 뒤늦게 도착해도 이미 기록한 회계 이력을 삭제하지 않고 **compensating entry**를 생성합니다.
@@ -144,6 +156,22 @@ flowchart LR
 5개 seed 총 100,000 orders에서도 세 오류 유형은 모델 경로에서 0이었습니다. 원본 결과는 [artifacts/consistency-benchmark.json](artifacts/consistency-benchmark.json), [artifacts/consistency-matrix.json](artifacts/consistency-matrix.json)에 보존했습니다.
 
 **이 수치는 합성 correctness 실험이며 production TPS/SLA 주장이 아닙니다.**
+
+## Pickup Policy Lab — 차별점 검증
+
+`scripts/pickup_policy_lab.py`는 같은 합성 주문 20,000건을 **stale snapshot admission**과 **capacity-aware admission**에 각각 replay합니다.
+
+| 정책 결과 | Baseline | Pickup Pact |
+|---|---:|---:|
+| baseline admitted / offerable within window | 19,751 | 20,000 |
+| baseline rejected / no feasible slot | 249 | 0 |
+| overbooked slots | 96 | 0 |
+| oversubscribed units | 213 | 0 |
+| later-slot re-offers required | — | 532 |
+
+Pickup Pact의 0 overbooking은 공짜가 아닙니다. 이 workload에서는 532건이 선택 슬롯에 바로 들어가지 못해 다음 가능한 5분 슬롯을 고객에게 다시 제안해야 했습니다. 따라서 포트폴리오에서는 **“항상 더 빠르다”가 아니라 “약속할 수 없는 시간을 과예약하지 않고, 필요하면 사용자에게 다음 가능한 시간을 제시한다”**는 trade-off로 설명합니다.
+
+이 결과는 결정적 합성 policy replay이며 실제 패스오더 주문량·매출·SLA를 의미하지 않습니다. 원본: [artifacts/pickup-policy-lab.json](artifacts/pickup-policy-lab.json)
 
 ## 저장소 구조
 
@@ -194,7 +222,7 @@ GitHub Actions는 Python reconciler, interviewer demo tests/live smoke, Docker b
 
 ## 왜 이 주제인가
 
-공개 주문 백엔드 포트폴리오는 `order/payment/restaurant + Kafka + Saga/Outbox/CQRS` 조합이 이미 매우 흔합니다. Pickup Pact는 패스오더를 복제하는 대신 **예약 픽업 약속이 이미 확정된 이후 발생하는 시간적 정합성 문제**를 중심에 둡니다.
+공개 주문 백엔드 포트폴리오는 `order/payment/restaurant + Kafka + Saga/Outbox/CQRS` 조합이 이미 매우 흔합니다. Pickup Pact는 여기에 기술을 더 붙이는 대신 **사용자가 고른 미래 픽업 시간을 실제 제조 capacity와 충돌 없이 예약하는 문제**를 먼저 도메인 자원으로 모델링하고, 확정 이후에는 이벤트 지연·중복·취소·capacity 변화까지 같은 약속의 수명주기로 연결합니다.
 
 특정 회사의 비공개 시스템을 추정하거나 복제하지 않았습니다. 공개 채용 요구와 일반적인 스마트오더 장애 조건에서 독립적으로 설계했습니다.
 

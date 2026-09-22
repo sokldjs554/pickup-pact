@@ -11,7 +11,8 @@ import psycopg
 
 
 DSN = "postgresql://pickuppact:pickuppact@127.0.0.1:5432/pickuppact"
-INDEX_NAME = "idx_outbox_aggregate_timeline"
+OUTBOX_INDEX = "idx_outbox_aggregate_timeline"
+STORE_SCHEDULE_INDEX = "idx_pickup_commitments_store_schedule"
 
 
 def walk_plan(node: dict):
@@ -20,7 +21,16 @@ def walk_plan(node: dict):
         yield from walk_plan(child)
 
 
-def run_explain(cursor, aggregate_id: str, *, force_seq: bool) -> dict:
+def require_index(plan: dict, expected_index: str) -> None:
+    nodes = list(walk_plan(plan["Plan"]))
+    if not any(node.get("Index Name") == expected_index for node in nodes):
+        raise AssertionError(
+            f"expected {expected_index} in plan, got "
+            f"{[(node.get('Node Type'), node.get('Index Name')) for node in nodes]}"
+        )
+
+
+def explain_outbox(cursor, aggregate_id: str, *, force_seq: bool) -> dict:
     mode = "off" if force_seq else "on"
     cursor.execute(f"set enable_indexscan = {mode}")
     cursor.execute(f"set enable_bitmapscan = {mode}")
@@ -38,6 +48,28 @@ def run_explain(cursor, aggregate_id: str, *, force_seq: bool) -> dict:
     return cursor.fetchone()[0][0]
 
 
+def explain_store_schedule(cursor, store_id: str, start: datetime, end: datetime, *, force_seq: bool) -> dict:
+    mode = "off" if force_seq else "on"
+    cursor.execute(f"set enable_indexscan = {mode}")
+    cursor.execute(f"set enable_bitmapscan = {mode}")
+    cursor.execute("set enable_seqscan = on")
+    cursor.execute(
+        """
+        explain (analyze, buffers, format json)
+        select id, pickup_at, units, state
+        from pickup_commitments
+        where store_id = %s
+          and state in ('HELD', 'CONFIRMED', 'AT_RISK')
+          and pickup_at >= %s
+          and pickup_at < %s
+        order by pickup_at, id
+        limit 100
+        """,
+        (store_id, start, end),
+    )
+    return cursor.fetchone()[0][0]
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", default="/tmp/postgres-plan-evidence.json")
@@ -45,24 +77,48 @@ def main() -> None:
     parser.add_argument("--target-rows", type=int, default=100)
     args = parser.parse_args()
 
-    target = str(uuid.uuid4())
+    target_aggregate = str(uuid.uuid4())
+    target_store = "store-plan-target"
     base = datetime.now(UTC)
-    rows = []
+
+    outbox_rows = []
     for i in range(args.target_rows):
-        rows.append((
+        outbox_rows.append((
             str(uuid.uuid4()),
-            target,
+            target_aggregate,
             "CommitmentConfirmed",
             json.dumps({"n": i, "kind": "target"}),
             base + timedelta(milliseconds=i),
         ))
     for i in range(args.noise_rows):
-        rows.append((
+        outbox_rows.append((
             str(uuid.uuid4()),
             str(uuid.uuid4()),
             "CommitmentConfirmed",
             json.dumps({"n": i, "kind": "noise"}),
             base + timedelta(milliseconds=args.target_rows + i),
+        ))
+
+    commitment_rows = []
+    for i in range(args.target_rows):
+        commitment_rows.append((
+            str(uuid.uuid4()),
+            target_store,
+            base + timedelta(minutes=10, seconds=i),
+            1 + (i % 3),
+            f"plan-target-{i}",
+            True,
+            "CONFIRMED",
+        ))
+    for i in range(args.noise_rows):
+        commitment_rows.append((
+            str(uuid.uuid4()),
+            f"noise-store-{i % 200}",
+            base + timedelta(minutes=i % 240),
+            1 + (i % 3),
+            f"plan-noise-{i}",
+            bool(i % 2),
+            "CANCELLED" if i % 5 == 0 else "CONFIRMED",
         ))
 
     with psycopg.connect(DSN) as connection:
@@ -72,38 +128,78 @@ def main() -> None:
                 insert into outbox_events(id, aggregate_id, event_type, payload, occurred_at)
                 values (%s::uuid, %s::uuid, %s, %s::jsonb, %s)
                 """,
-                rows,
+                outbox_rows,
+            )
+            cursor.executemany(
+                """
+                insert into pickup_commitments(
+                    id, store_id, pickup_at, units, lease_token,
+                    payment_authorized, state, version, updated_at
+                )
+                values (%s::uuid, %s, %s, %s, %s, %s, %s, 0, now())
+                """,
+                commitment_rows,
             )
             cursor.execute("analyze outbox_events")
-            indexed = run_explain(cursor, target, force_seq=False)
-            sequential = run_explain(cursor, target, force_seq=True)
+            cursor.execute("analyze pickup_commitments")
 
-            index_nodes = [
-                node for node in walk_plan(indexed["Plan"])
-                if node.get("Index Name") == INDEX_NAME
-            ]
-            if not index_nodes:
-                raise AssertionError(
-                    f"expected {INDEX_NAME} in plan, got "
-                    f"{[(n.get('Node Type'), n.get('Index Name')) for n in walk_plan(indexed['Plan'])]}"
-                )
+            outbox_indexed = explain_outbox(cursor, target_aggregate, force_seq=False)
+            outbox_sequential = explain_outbox(cursor, target_aggregate, force_seq=True)
+            require_index(outbox_indexed, OUTBOX_INDEX)
+
+            schedule_start = base
+            schedule_end = base + timedelta(hours=2)
+            schedule_indexed = explain_store_schedule(
+                cursor,
+                target_store,
+                schedule_start,
+                schedule_end,
+                force_seq=False,
+            )
+            schedule_sequential = explain_store_schedule(
+                cursor,
+                target_store,
+                schedule_start,
+                schedule_end,
+                force_seq=True,
+            )
+            require_index(schedule_indexed, STORE_SCHEDULE_INDEX)
 
             evidence = {
                 "scope": "CI PostgreSQL 16 container; synthetic plan evidence, not production latency",
-                "target_aggregate_id": target,
                 "target_rows": args.target_rows,
                 "noise_rows": args.noise_rows,
-                "expected_index": INDEX_NAME,
-                "index_used": True,
-                "indexed": {
-                    "planning_time_ms": indexed.get("Planning Time"),
-                    "execution_time_ms": indexed.get("Execution Time"),
-                    "plan": indexed["Plan"],
+                "outbox_timeline": {
+                    "target_aggregate_id": target_aggregate,
+                    "expected_index": OUTBOX_INDEX,
+                    "index_used": True,
+                    "indexed": {
+                        "planning_time_ms": outbox_indexed.get("Planning Time"),
+                        "execution_time_ms": outbox_indexed.get("Execution Time"),
+                        "plan": outbox_indexed["Plan"],
+                    },
+                    "forced_sequential_baseline": {
+                        "planning_time_ms": outbox_sequential.get("Planning Time"),
+                        "execution_time_ms": outbox_sequential.get("Execution Time"),
+                        "plan": outbox_sequential["Plan"],
+                    },
                 },
-                "forced_sequential_baseline": {
-                    "planning_time_ms": sequential.get("Planning Time"),
-                    "execution_time_ms": sequential.get("Execution Time"),
-                    "plan": sequential["Plan"],
+                "store_pickup_schedule": {
+                    "target_store_id": target_store,
+                    "expected_index": STORE_SCHEDULE_INDEX,
+                    "index_used": True,
+                    "window_start": schedule_start.isoformat(),
+                    "window_end": schedule_end.isoformat(),
+                    "indexed": {
+                        "planning_time_ms": schedule_indexed.get("Planning Time"),
+                        "execution_time_ms": schedule_indexed.get("Execution Time"),
+                        "plan": schedule_indexed["Plan"],
+                    },
+                    "forced_sequential_baseline": {
+                        "planning_time_ms": schedule_sequential.get("Planning Time"),
+                        "execution_time_ms": schedule_sequential.get("Execution Time"),
+                        "plan": schedule_sequential["Plan"],
+                    },
                 },
             }
             Path(args.output).write_text(
@@ -111,10 +207,12 @@ def main() -> None:
                 encoding="utf-8",
             )
             print(json.dumps({
-                "index_used": evidence["index_used"],
-                "expected_index": INDEX_NAME,
-                "indexed_execution_ms": evidence["indexed"]["execution_time_ms"],
-                "forced_seq_execution_ms": evidence["forced_sequential_baseline"]["execution_time_ms"],
+                "outbox_index": OUTBOX_INDEX,
+                "outbox_indexed_execution_ms": evidence["outbox_timeline"]["indexed"]["execution_time_ms"],
+                "outbox_forced_seq_execution_ms": evidence["outbox_timeline"]["forced_sequential_baseline"]["execution_time_ms"],
+                "store_schedule_index": STORE_SCHEDULE_INDEX,
+                "store_schedule_indexed_execution_ms": evidence["store_pickup_schedule"]["indexed"]["execution_time_ms"],
+                "store_schedule_forced_seq_execution_ms": evidence["store_pickup_schedule"]["forced_sequential_baseline"]["execution_time_ms"],
             }, ensure_ascii=False))
 
 

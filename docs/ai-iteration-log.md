@@ -24,8 +24,8 @@ Result: commit 354d1091... stabilized the deployed verification without weakenin
 ## 4. Fixed pickup time → dynamic promise
 
 Problem found during review: the cart said about N minutes while the created order still used a fixed 12:30 pickup time.
-Decision: compute the customer pickup clock from current Korea time + store preparation time, then verify that congestion proposes exactly +5 minutes.
-Result: commit f953d2a7... connected capacity risk to a customer-friendly pickup-time proposal and PickupRescheduled event.
+Decision at that stage: compute the customer pickup clock from current Korea time + store preparation time, then verify that congestion proposes exactly +5 minutes.
+Result: commit f953d2a7... connected capacity risk to a customer-friendly pickup-time proposal and PickupRescheduled event. This solved the fixed-clock bug but still let the system choose the initial pickup time for the customer.
 
 ## 5. Current trust-layer iteration
 
@@ -42,3 +42,36 @@ Decision: differentiate with a customer-trust layer:
 AI-assisted changes are not accepted because they look correct. Each release candidate must pass repository guardrails, unit/API tests, Chromium E2E, full CI, repeated release-gate verification and deployed Render smoke test on the same commit.
 
 AI remains advisory for financial repair policy; deterministic code is authoritative.
+
+## 6. Auto-assigned pickup time → customer-selected capacity slot
+
+Problem found by rereading the target posting: the product description explicitly emphasizes that the customer chooses the pickup time. The previous auto-computed ETA therefore weakened product fit even though the recovery logic was technically sound.
+
+Rejected approach: keep adding ETA prediction or make the existing dynamic time look more intelligent.
+
+Accepted approach:
+- expose five-minute capacity availability before checkout;
+- weight menu items by preparation capacity units;
+- require the customer to choose a feasible slot;
+- reserve that slot atomically at hold time;
+- preserve the existing post-confirmation promise-recovery path for unexpected capacity loss.
+
+During the same review, an AI-assisted code audit found a more serious reliability issue: the Redis release script ignored the random lease identity embedded in the token. A duplicate release could decrement the shared slot twice. The fix stores a dedicated lease key and makes release idempotent. Terminal APIs are retry-safe when the database transition commits but Redis release fails.
+
+Verification contract: unit tests cover slot alignment/fit and release-retry semantics; Docker integration smoke checks reservation `0 → 2 → 0` and repeats cancellation without capacity underflow; browser E2E requires an explicit pickup-time selection before checkout.
+
+
+## 7. Green unit tests → failed full topology → readiness boundary
+
+The first full release-gate run after the scheduled-pickup work passed unit tests, browser E2E and repeated evidence checks but failed the persisted Docker topology. The reconciler process had already returned `/health=200`, while Elasticsearch was still warming; synchronous incident indexing timed out and made `POST /api/v1/reconcile` return 500.
+
+Rejected approach: add an arbitrary startup sleep to the integration test.
+
+Accepted approach:
+- keep `/health` as liveness;
+- add `/ready` that verifies PostgreSQL, MongoDB and Elasticsearch for persisted mode;
+- make Kubernetes readiness use `/ready`;
+- make topology smoke require HTTP 200 from `/ready`;
+- add bounded Elasticsearch timeout retries with deterministic document IDs.
+
+This iteration is deliberately kept in the history because the full-system failure was only visible after running the actual service topology, not from isolated tests.

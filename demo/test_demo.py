@@ -53,6 +53,55 @@ def test_customer_catalog_is_real_demo_api_data():
     assert stores[0]["pickup_minutes"] > 0
     assert any(item["name"] == "아메리카노" for item in stores[0]["menu"])
     assert all(item["price"] > 0 for store in stores for item in store["menu"])
+    assert all(item["capacity_units"] > 0 for store in stores for item in store["menu"])
+
+
+def test_customer_can_query_capacity_aware_pickup_slots():
+    response = client.get(
+        "/api/demo/catalog/gangnam-pass-cafe/pickup-slots",
+        params={"units": 3},
+    )
+    assert response.status_code == 200
+    slots = response.json()
+    assert len(slots) == 6
+    assert all(slot["pickup_at"] and len(slot["pickup_at"]) == 5 for slot in slots)
+    assert all(slot["capacity_units"] == 12 for slot in slots)
+    assert all(
+        slot["available_units"] == slot["capacity_units"] - slot["reserved_units"]
+        for slot in slots
+    )
+    assert any(slot["can_fit"] for slot in slots)
+    assert any(not slot["can_fit"] for slot in slots)
+    assert {slot["status"] for slot in slots} <= {"AVAILABLE", "LIMITED", "FULL"}
+
+
+def test_pickup_slot_query_rejects_unknown_store():
+    response = client.get("/api/demo/catalog/not-a-store/pickup-slots")
+    assert response.status_code == 404
+
+
+def test_customer_order_api_rechecks_selected_slot_capacity():
+    slots = client.get(
+        "/api/demo/catalog/gangnam-pass-cafe/pickup-slots",
+        params={"units": 3},
+    ).json()
+    blocked = next(slot for slot in slots if not slot["can_fit"])
+    session_id = client.post("/api/demo/sessions").json()["session_id"]
+
+    response = client.post(
+        f"/api/demo/sessions/{session_id}/orders",
+        json={
+            "store": "패스카페 강남역점",
+            "store_id": "gangnam-pass-cafe",
+            "items": "아메리카노 3개",
+            "total": 13500,
+            "pickup_at": blocked["pickup_at"],
+            "units": 3,
+        },
+    )
+
+    assert response.status_code == 409
+    assert "no longer has enough capacity" in response.json()["detail"]
 
 
 
@@ -75,6 +124,7 @@ def test_landing_page_exposes_guided_and_expert_layers():
         "수령 완료 체험",
         "Pickup Pact — 픽업 시간을 약속해요.",
         "보장 시간을 넘기면 500P",
+        "픽업 시간 선택",
         "괜찮아요",
         "주문 흐름",
         "매장 처리량",

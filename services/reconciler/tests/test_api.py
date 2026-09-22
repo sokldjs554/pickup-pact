@@ -9,6 +9,64 @@ def test_health():
     assert client.get("/health").json() == {"status": "ok"}
 
 
+def test_ready_is_immediate_for_stateless_mode(monkeypatch):
+    monkeypatch.delenv("PERSIST_RECONCILIATION", raising=False)
+
+    response = client.get("/ready")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "ready",
+        "mode": "stateless",
+        "dependencies": {},
+    }
+
+
+def test_ready_reports_persisted_dependencies(monkeypatch):
+    import app.persistence as persistence
+
+    monkeypatch.setenv("PERSIST_RECONCILIATION", "true")
+    monkeypatch.setattr(
+        persistence,
+        "persistence_readiness",
+        lambda: {
+            "postgres": "ok",
+            "mongodb": "ok",
+            "elasticsearch": "ok",
+        },
+    )
+
+    response = client.get("/ready")
+
+    assert response.status_code == 200
+    assert response.json()["mode"] == "persisted"
+    assert response.json()["dependencies"]["elasticsearch"] == "ok"
+
+
+def test_ready_rejects_traffic_when_persistence_dependency_is_unavailable(monkeypatch):
+    import app.persistence as persistence
+
+    monkeypatch.setenv("PERSIST_RECONCILIATION", "true")
+    monkeypatch.setattr(
+        persistence,
+        "persistence_readiness",
+        lambda: {
+            "postgres": "ok",
+            "mongodb": "ok",
+            "elasticsearch": "unavailable:ConnectionTimeout",
+        },
+    )
+
+    response = client.get("/ready")
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["status"] == "not_ready"
+    assert (
+        response.json()["detail"]["dependencies"]["elasticsearch"]
+        == "unavailable:ConnectionTimeout"
+    )
+
+
 def test_reconcile_validation_and_response():
     payload = {
         "events": [

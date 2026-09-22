@@ -47,12 +47,57 @@ def archive_raw_events(events: list[EventEnvelope]) -> None:
         )
 
 
-def index_reconciliation(result: ReconcileResult) -> None:
+def _elasticsearch_client():
     from elasticsearch import Elasticsearch
 
+    return Elasticsearch(
+        os.environ["ELASTICSEARCH_URL"],
+        request_timeout=2,
+        max_retries=3,
+        retry_on_timeout=True,
+    )
+
+
+def persistence_readiness() -> dict[str, str]:
+    """Check the dependencies required by the persisted reconciliation path."""
+    status: dict[str, str] = {}
+
+    try:
+        import psycopg
+
+        with psycopg.connect(os.environ["POSTGRES_DSN"], connect_timeout=2) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("select 1")
+                cursor.fetchone()
+        status["postgres"] = "ok"
+    except Exception as exc:
+        status["postgres"] = f"unavailable:{type(exc).__name__}"
+
+    try:
+        from pymongo import MongoClient
+
+        client = MongoClient(os.environ["MONGODB_URL"], serverSelectionTimeoutMS=2000)
+        client.admin.command("ping")
+        status["mongodb"] = "ok"
+    except Exception as exc:
+        status["mongodb"] = f"unavailable:{type(exc).__name__}"
+
+    try:
+        es = _elasticsearch_client()
+        health = es.cluster.health(wait_for_status="yellow", timeout="1s")
+        status["elasticsearch"] = (
+            "ok" if health.get("timed_out") is False else "unavailable:cluster_timeout"
+        )
+    except Exception as exc:
+        status["elasticsearch"] = f"unavailable:{type(exc).__name__}"
+
+    return status
+
+
+def index_reconciliation(result: ReconcileResult) -> None:
     document = result.model_dump(mode="json")
     document_id = f"{result.aggregate_id}:{_stable_digest(document)[:24]}"
-    es = Elasticsearch(os.environ["ELASTICSEARCH_URL"], request_timeout=2)
+    es = _elasticsearch_client()
     es.index(
         index="pickup-pact-incidents-v1",
         id=document_id,

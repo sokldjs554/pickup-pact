@@ -10,6 +10,10 @@ create table if not exists pickup_commitments (
   updated_at timestamptz not null default now()
 );
 
+create index if not exists idx_pickup_commitments_store_schedule
+  on pickup_commitments(store_id, pickup_at, id)
+  where state in ('HELD', 'CONFIRMED', 'AT_RISK');
+
 create table if not exists outbox_events (
   id uuid primary key,
   aggregate_id uuid not null,

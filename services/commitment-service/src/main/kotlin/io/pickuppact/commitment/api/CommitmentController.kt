@@ -4,12 +4,14 @@ import com.fasterxml.jackson.annotation.JsonCreator
 import com.fasterxml.jackson.annotation.JsonProperty
 import io.pickuppact.commitment.application.CommitmentService
 import io.pickuppact.commitment.application.HoldCommand
+import io.pickuppact.commitment.application.PickupSlotOption
 import io.pickuppact.commitment.domain.PickupCommitment
 import jakarta.validation.Valid
 import jakarta.validation.constraints.Future
 import jakarta.validation.constraints.Min
 import jakarta.validation.constraints.NotBlank
 import org.springframework.web.bind.annotation.*
+import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
 import java.time.Instant
 import java.util.UUID
@@ -27,6 +29,20 @@ data class PaymentAuthorizationRequest @JsonCreator(mode = JsonCreator.Mode.PROP
 @RestController
 @RequestMapping("/api/v1/commitments")
 class CommitmentController(private val service: CommitmentService) {
+    @GetMapping("/slots")
+    fun slots(
+        @RequestParam storeId: String,
+        @RequestParam(required = false) from: Instant?,
+        @RequestParam(defaultValue = "6") count: Int,
+        @RequestParam(defaultValue = "1") units: Int,
+    ): Flux<PickupSlotOption> =
+        service.pickupSlots(
+            storeId = storeId,
+            from = from ?: Instant.now().plusSeconds(300),
+            count = count,
+            units = units,
+        )
+
     @PostMapping("/hold")
     fun hold(@Valid @RequestBody request: HoldRequest): Mono<PickupCommitment> =
         service.hold(HoldCommand(request.storeId, request.pickupAt, request.units))
