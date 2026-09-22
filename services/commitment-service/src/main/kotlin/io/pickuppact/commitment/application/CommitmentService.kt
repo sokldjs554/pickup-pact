@@ -260,7 +260,7 @@ class CommitmentService(
 
     fun breachPact(id: UUID): Mono<PickupCommitment> =
         repository.find(id)
-            .map { it.breachPact() }
+            .map { it.breachPact(Instant.now()) }
             .flatMap { breached ->
                 val pact = checkNotNull(breached.pact)
                 repository.saveWithEvent(
