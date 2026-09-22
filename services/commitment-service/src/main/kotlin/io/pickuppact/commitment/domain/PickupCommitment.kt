@@ -10,11 +10,11 @@ data class PickupCommitment(
     val storeId: String,
     val pickupAt: Instant,
     val units: Int,
-    val totalAmount: Int = 0,
     val leaseToken: String,
     val paymentAuthorized: Boolean,
     val state: CommitmentState,
     val version: Long = 0,
+    val totalAmount: Int = 0,
     val idempotencyKey: String = "",
     val requestFingerprint: String = "",
     val pact: PickupPact? = null
