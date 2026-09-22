@@ -21,7 +21,7 @@ class PickupCommitmentTest {
             CommitmentState.HELD
         )
 
-        assertThrows(IllegalArgumentException::class.java) { held.confirm(Instant.now()) }
+        assertThrows(IllegalStateException::class.java) { held.confirm(Instant.now()) }
 
         val paid = held.authorizePayment()
         assertTrue(paid.paymentAuthorized)
@@ -30,6 +30,7 @@ class PickupCommitmentTest {
         val confirmed = paid.confirm(Instant.now())
         assertEquals(CommitmentState.CONFIRMED, confirmed.state)
         assertEquals(2, confirmed.version)
+        assertEquals(PickupPactStatus.ACTIVE, confirmed.pact!!.status)
     }
 
     @Test
@@ -44,7 +45,7 @@ class PickupCommitmentTest {
             CommitmentState.HELD
         )
         val paid = held.authorizePayment()
-        assertThrows(IllegalArgumentException::class.java) { paid.authorizePayment() }
+        assertThrows(IllegalStateException::class.java) { paid.authorizePayment() }
     }
 
     @Test
@@ -63,8 +64,8 @@ class PickupCommitmentTest {
 
         assertEquals(CommitmentState.PICKED_UP, pickedUp.state)
         assertEquals(1, pickedUp.version)
-        assertThrows(IllegalArgumentException::class.java) { pickedUp.claimPickup() }
-        assertThrows(IllegalArgumentException::class.java) { pickedUp.cancel() }
+        assertThrows(IllegalStateException::class.java) { pickedUp.claimPickup() }
+        assertThrows(IllegalStateException::class.java) { pickedUp.cancel() }
     }
 
     @Test
