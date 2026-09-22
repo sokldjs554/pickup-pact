@@ -39,6 +39,9 @@ test('virtual customer can order, protect pickup time, claim once, and read a tr
 
   await expect(page.locator('#customerOrderView')).toHaveAttribute('data-stage', 'promise', { timeout: 10000 });
   await expect(page.locator('#customerOrderView')).toContainText('픽업 시간이 조금 늦어져요.');
+  await expect(page.locator('.pact-card')).toContainText('PICKUP PACT');
+  await expect(page.locator('.pact-card')).toContainText('500P');
+  await expect(page.locator('.pact-card')).toHaveAttribute('data-pact-status', 'ACTIVE');
   const promiseCard=page.locator('.pickup-promise-card.warning');
   const originalPickup=await promiseCard.getAttribute('data-original-pickup');
   const suggestedPickup=await promiseCard.getAttribute('data-suggested-pickup');
@@ -53,6 +56,9 @@ test('virtual customer can order, protect pickup time, claim once, and read a tr
 
   await page.getByRole('button', { name: /괜찮아요$/ }).click();
   await expect(page.locator('#customerOrderView')).toContainText(suggestedPickup+' 픽업');
+  await expect(page.locator('.pact-card')).toHaveAttribute('data-pact-status', 'COMPENSATED', { timeout: 8000 });
+  await expect(page.locator('#customerOrderView')).toContainText('500P');
+  await expect(page.locator('#customerOrderView')).toContainText('자동 적립');
   await expect(page.locator('#customerOrderView')).toHaveAttribute('data-stage', 'ready', { timeout: 8000 });
   await expect(page.locator('#customerOrderView')).toContainText('픽업 준비됐어요.');
 
@@ -69,8 +75,12 @@ test('virtual customer can order, protect pickup time, claim once, and read a tr
   await expect(page.locator('#receiptContent')).toContainText('TRUST RECEIPT');
   await expect(page.locator('#receiptContent')).toContainText('최종 청구');
   await expect(page.locator('#receiptContent')).toContainText('9,000원');
-  await expect(page.locator('#receiptContent')).toContainText('90P');
+  await expect(page.locator('#receiptContent')).toContainText('590P');
+  await expect(page.locator('#receiptContent')).toContainText('Pickup Pact');
+  await expect(page.locator('#receiptContent')).toContainText('자동 보상');
+  await expect(page.locator('#receiptContent')).toContainText('500P');
   await expect(page.locator('#receiptContent')).toContainText('픽업 시간 변경');
+  await expect(page.locator('#receiptContent')).toContainText('픽업 보상 자동 적용');
   await expect(page.locator('#receiptContent')).toContainText('픽업 완료');
   await page.getByRole('button', { name: '영수증 닫기', exact: true }).click();
 
@@ -81,11 +91,17 @@ test('virtual customer can order, protect pickup time, claim once, and read a tr
   // Customer-facing complexity stays hidden, while the backend evidence remains inspectable.
   await expect(page.getByRole('button', { name: '정합성 복구', exact: true })).not.toBeVisible();
   await page.goto('/?dev=1');
+  await expect(page.locator('#orderEvents')).toContainText('PickupPactIssued');
   await expect(page.locator('#orderEvents')).toContainText('PickupRescheduled');
+  await expect(page.locator('#orderEvents')).toContainText('PickupPactRenegotiated');
+  await expect(page.locator('#orderEvents')).toContainText('PickupPactBreached');
   await expect(page.locator('#orderEvents')).toContainText('PickupClaimed');
   await openPage(page, '정산 · 감사');
+  await expect(page.locator('#auditList')).toContainText('PICKUP_PACT_ISSUED');
   await expect(page.locator('#auditList')).toContainText('PICKUP_RESLOT_SUGGESTED');
+  await expect(page.locator('#auditList')).toContainText('PICKUP_PACT_RENEGOTIATED');
   await expect(page.locator('#auditList')).toContainText('PICKUP_RESCHEDULE_ACCEPTED');
+  await expect(page.locator('#auditList')).toContainText('PICKUP_PACT_COMPENSATED');
   await expect(page.locator('#auditList')).toContainText('PICKUP_CLAIMED');
 });
 
