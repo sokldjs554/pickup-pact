@@ -1,6 +1,6 @@
 # Public demo
 
-The public demo is a **session-isolated smart-order customer demo** with a separate hidden backend console.
+The public demo is a **session-isolated smart-order customer demo** with a merchant-operations product page and a separate hidden backend console.
 
 ## Customer smart-order experience
 
@@ -31,6 +31,23 @@ The cancellation UI intentionally stays simple. The demo silently reproduces a l
 
 The customer-facing route does not expose backend navigation or recovery terminology.
 
+## Merchant fulfillment experience
+
+The **매장 운영** product page demonstrates the project’s main differentiator without pretending the public Render process is the real Kafka topology.
+
+After a synthetic order is confirmed, the merchant view shows:
+
+- an unacknowledged merchant delivery;
+- duplicate redelivery count while `NEW_ORDER_NOTIFICATION` and `POS_PRINT` remain one effect each;
+- explicit delivery ACK;
+- JIT preparation window: earliest start / target ready / guarantee deadline;
+- server rejection of an intentionally too-early preparation start;
+- `READY_TOO_EARLY` and `READY_LATE` signals;
+- late READY flowing into the customer Pickup Pact 500P compensation;
+- cancellation / pickup-time-change review evidence once preparation has started.
+
+The full Postgres/Kafka implementation of these rules lives in `merchant-fulfillment-service` and is exercised separately in the Docker release gate. The public page mirrors the same domain decisions in session state for reviewer convenience.
+
 ## Technical detail layer
 
 Backend reviewers use `/?dev=1` to enter the separate operator console. That console exposes:
@@ -59,6 +76,6 @@ A projection rebuild is proposed only when receive-order folding actually differ
 
 ## Public-demo boundary
 
-The public demo packages the real reconciliation engine but intentionally does not boot Kafka, PostgreSQL, Redis, MongoDB, Elasticsearch, both Spring services, and Celery on the free Render process. Those integrations are represented by the service code, Compose topology, contracts, infrastructure manifests, tests, and evidence artifacts in the repository.
+The public demo packages the real reconciliation engine but intentionally does not boot Kafka, PostgreSQL, Redis, MongoDB, Elasticsearch, all three Spring services, and Celery on the free Render process. Those integrations are represented by the service code, Compose topology, contracts, infrastructure manifests, tests, and evidence artifacts in the repository.
 
 All customer, store, menu, order, payment, and reward data in the public demo is synthetic.
