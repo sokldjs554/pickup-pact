@@ -10,6 +10,7 @@ _EVENT_PRIORITY = {
     "CommitmentConfirmed": 30,
     "CapacityRevised": 40,
     "PickupRescheduled": 45,
+    "PickupClaimed": 47,
     "CommitmentCancelled": 50,
     "SettlementPosted": 60,
     "RewardGranted": 70,
@@ -55,6 +56,8 @@ def _fold(events: list[EventEnvelope], *, count_duplicates: bool = False) -> tup
                 state.status="AT_RISK"; capacity_at_risk=True
         elif event.event_type == "PickupRescheduled":
             state.status="CONFIRMED"; required_capacity=int(event.payload.get("capacity_units", required_capacity)); capacity_at_risk=False
+        elif event.event_type == "PickupClaimed":
+            state.status="PICKED_UP"; capacity_at_risk=False
         elif event.event_type == "CommitmentCancelled":
             state.status="CANCELLED"; capacity_at_risk=False
         elif event.event_type == "SettlementPosted": state.settlement_post_count+=1; state.settled=True
