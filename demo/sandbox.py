@@ -120,6 +120,31 @@ def _empty_pickup_pact() -> dict[str, Any]:
     }
 
 
+def _empty_merchant_fulfillment() -> dict[str, Any]:
+    return {
+        "status": "NONE",
+        "delivery_sequence": 0,
+        "delivery_acknowledged": False,
+        "effects": [],
+        "anomalies": [],
+        "window": None,
+        "ready_quality": None,
+    }
+
+
+def _merchant_window(pickup_at: str, units: int) -> dict[str, Any]:
+    prep_minutes = max(1, min(10, (units * 45 + 59) // 60))
+    target_ready = _shift_hhmm(pickup_at, -1)
+    earliest_start = _shift_hhmm(target_ready, -(prep_minutes + 2))
+    latest_ready = _shift_hhmm(pickup_at, 3)
+    return {
+        "preparation_minutes": prep_minutes,
+        "earliest_start_at": earliest_start,
+        "target_ready_at": target_ready,
+        "latest_ready_at": latest_ready,
+    }
+
+
 class DemoStore:
     """Thread-safe, session-isolated in-memory sandbox for the public portfolio demo.
 
@@ -171,6 +196,7 @@ class DemoStore:
                     "suggested_pickup_at": None,
                 },
                 "pickup_pact": _empty_pickup_pact(),
+                "merchant_fulfillment": _empty_merchant_fulfillment(),
                 "customer_history": [],
             }
             self._audit_locked(session_id, "SESSION_CREATED", "새 데모 세션을 만들었습니다.")
@@ -209,6 +235,7 @@ class DemoStore:
                     "suggested_pickup_at": None,
                 },
                 "pickup_pact": _empty_pickup_pact(),
+                "merchant_fulfillment": _empty_merchant_fulfillment(),
                 "customer_history": [],
             }
             self._audit_locked(session_id, "SESSION_RESET", "데모 상태를 초기화했습니다.")
@@ -279,7 +306,7 @@ class DemoStore:
             "source_event_id": source_event_id,
             "posting_type": posting_type,
             "amount": amount,
-            "currency": "KRW",
+            "currency": "PTS" if posting_type in {"REWARD", "REVERSE_REWARD"} else "KRW",
             "debit_account": debit,
             "credit_account": credit,
             "created_at": _iso(_now()),
@@ -532,6 +559,21 @@ class DemoStore:
                 "PICKUP_PACT_ISSUED",
                 f"{order['pickup_at']}~{latest_at} · {compensation_points}P",
             )
+            merchant = {
+                "status": "RECEIVED",
+                "delivery_sequence": 1,
+                "delivery_acknowledged": False,
+                "effects": ["NEW_ORDER_NOTIFICATION", "POS_PRINT"],
+                "anomalies": [],
+                "window": _merchant_window(order["pickup_at"], order["units"]),
+                "ready_quality": None,
+            }
+            session["merchant_fulfillment"] = merchant
+            self._audit_locked(
+                session_id,
+                "MERCHANT_ORDER_RECEIVED",
+                "점주 delivery 생성 · 알림/POS effect exactly-once",
+            )
             self._audit_locked(session_id, "ORDER_CONFIRMED", f"{order['order_id']} 픽업 확정")
             return {"event": deepcopy(event), "state": self.snapshot(session_id)}
 
@@ -561,6 +603,14 @@ class DemoStore:
             }
             if session["pickup_pact"]["status"] in {"ACTIVE", "COMPENSATED"}:
                 session["pickup_pact"]["status"] = "CANCELLED"
+            merchant = session.get("merchant_fulfillment") or _empty_merchant_fulfillment()
+            if merchant.get("status") in {"RECEIVED", "ACCEPTED"}:
+                merchant["status"] = "CANCELLED"
+            elif merchant.get("status") in {"PREPARING", "READY"}:
+                merchant["status"] = "CANCELLATION_REVIEW"
+                if "CANCEL_AFTER_PREPARATION" not in merchant["anomalies"]:
+                    merchant["anomalies"].append("CANCEL_AFTER_PREPARATION")
+            session["merchant_fulfillment"] = merchant
             event = self._append_event_locked(
                 session_id,
                 "CommitmentCancelled",
@@ -923,6 +973,9 @@ class DemoStore:
             )
             order["pickup_claimed"] = True
             order["status"] = "PICKED_UP"
+            merchant = session.get("merchant_fulfillment") or _empty_merchant_fulfillment()
+            merchant["status"] = "PICKED_UP"
+            session["merchant_fulfillment"] = merchant
             if session["pickup_pact"]["status"] == "ACTIVE":
                 session["pickup_pact"]["status"] = "FULFILLED"
             session["capacity"]["reserved_units"] = max(
@@ -998,6 +1051,7 @@ class DemoStore:
                     "suggested_pickup_at": None,
                 },
                 "pickup_pact": _empty_pickup_pact(),
+                "merchant_fulfillment": _empty_merchant_fulfillment(),
                 "customer_history": history,
             }
             self._audit_locked(session_id, "CUSTOMER_NEXT_ORDER", "이전 주문 내역을 보존하고 새 주문을 시작했습니다.")
@@ -1037,6 +1091,13 @@ class DemoStore:
                 "original_pickup_at": protection.get("original_pickup_at") or previous,
                 "suggested_pickup_at": suggested,
             }
+            merchant = session.get("merchant_fulfillment") or _empty_merchant_fulfillment()
+            if merchant.get("status") in {"RECEIVED", "ACCEPTED"}:
+                merchant["window"] = _merchant_window(suggested, order["units"])
+            elif merchant.get("status") in {"PREPARING", "READY"}:
+                if "RESCHEDULE_AFTER_PREPARATION" not in merchant["anomalies"]:
+                    merchant["anomalies"].append("RESCHEDULE_AFTER_PREPARATION")
+            session["merchant_fulfillment"] = merchant
             pact = session["pickup_pact"]
             next_version = max(1, int(pact.get("version", 0))) + 1
             latest_at = _shift_hhmm(suggested, 3)
