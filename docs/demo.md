@@ -18,7 +18,10 @@ The visitor can:
 3. increase or decrease item quantities and see totals recalculate;
 4. place an order, which calls the real session order/payment/confirm APIs;
 5. follow the order through received, preparing, and pickup-ready presentation states;
-6. cancel the order through a customer-facing confirmation dialog.
+6. see **pickup promise protection** when a multi-item demo order exceeds a revised synthetic capacity: the UI offers a new time such as `12:30 → 12:35`, and accepting it records `PickupRescheduled`;
+7. cancel the order through a customer-facing confirmation dialog.
+
+The multi-item capacity change is an intentional synthetic demo condition used to make the promise-protection behavior observable; it is not presented as random production traffic.
 
 The cancellation UI intentionally stays simple. The demo silently reproduces a late-cancellation race behind the customer experience, runs reconciliation, applies deterministic `REVERSE_SETTLEMENT` and `REVERSE_REWARD`, and then shows only the customer-relevant outcome: the order is cancelled and payment/points are cleaned up.
 

@@ -61,13 +61,15 @@ def test_landing_page_exposes_guided_and_expert_layers():
     assert response.status_code == 200
     body = response.text
     for label in [
-        "커피, 미리 주문해요.",
+        "오늘 뭐 드실래요?",
         "근처 매장",
         "장바구니 보기",
         "내 주문",
         "체험 손님",
         "메뉴 보기",
         "주문 취소",
+        "픽업 시간이 바뀌면 먼저 알려드려요.",
+        "괜찮아요",
         "주문 흐름",
         "매장 처리량",
         "장애 주입",
@@ -227,6 +229,52 @@ def test_capacity_drop_marks_confirmed_promise_at_risk():
     applied = client.post(f"/api/demo/sessions/{session_id}/repairs/apply").json()
     assert "RESLOT_REVIEW" in applied["applied"]
     assert applied["state"]["order"]["status"] == "AT_RISK"
+
+
+def test_capacity_risk_can_offer_and_accept_a_new_pickup_time():
+    session_id = create_session()
+    create_order(session_id, units=2, total=9000)
+    assert client.post(
+        f"/api/demo/sessions/{session_id}/payment",
+        json={"authorization_id": "auth-promise"},
+    ).status_code == 200
+    assert client.post(f"/api/demo/sessions/{session_id}/confirm").status_code == 200
+
+    revised = client.post(
+        f"/api/demo/sessions/{session_id}/capacity",
+        json={"available_units": 1},
+    )
+    assert revised.status_code == 200
+
+    reconciled = client.post(f"/api/demo/sessions/{session_id}/reconcile")
+    assert reconciled.status_code == 200
+    assert "RESLOT_REVIEW" in {
+        item["code"] for item in reconciled.json()["reconciliation"]["repairs"]
+    }
+
+    applied = client.post(f"/api/demo/sessions/{session_id}/repairs/apply")
+    assert applied.status_code == 200
+    state = applied.json()["state"]
+    assert state["order"]["status"] == "AT_RISK"
+    assert state["pickup_protection"] == {
+        "status": "SUGGESTED",
+        "original_pickup_at": "12:30",
+        "suggested_pickup_at": "12:35",
+    }
+
+    accepted = client.post(
+        f"/api/demo/sessions/{session_id}/pickup/reschedule",
+        json={"pickup_at": "12:35"},
+    )
+    assert accepted.status_code == 200
+    state = accepted.json()["state"]
+    assert state["order"]["status"] == "CONFIRMED"
+    assert state["order"]["pickup_at"] == "12:35"
+    assert state["pickup_protection"]["status"] == "RESCHEDULED"
+    assert any(event["event_type"] == "PickupRescheduled" for event in state["events"])
+    assert "confirmed_promise_exceeds_revised_capacity" not in {
+        item["code"] for item in state["reconciliation"]["anomalies"]
+    }
 
 
 def test_preset_load_populates_order_ledger_and_evidence():

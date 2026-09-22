@@ -72,6 +72,19 @@ def test_capacity_revision_marks_confirmed_promise_at_risk():
     assert "RESLOT_REVIEW" in result.repairs
 
 
+def test_pickup_reschedule_clears_capacity_risk():
+    result = reconcile(ReconcileRequest(events=[
+        ev("hold", "PickupSlotHeld", 0, 0, {"capacity_units": 2}),
+        ev("pay", "PaymentAuthorized", 1, 1),
+        ev("confirm", "CommitmentConfirmed", 2, 2, {"capacity_units": 2}),
+        ev("capacity", "CapacityRevised", 3, 3, {"revision": 2, "available_units": 1}),
+        ev("rescheduled", "PickupRescheduled", 4, 4, {"capacity_units": 2, "pickup_at": "12:35"}),
+    ]))
+    assert result.canonical_state.status == "CONFIRMED"
+    assert "confirmed_promise_exceeds_revised_capacity" not in result.anomalies
+    assert "RESLOT_REVIEW" not in result.repairs
+
+
 def test_receive_order_preserves_input_order_when_received_timestamps_tie():
     tied = BASE + timedelta(seconds=1)
     request = ReconcileRequest(events=[

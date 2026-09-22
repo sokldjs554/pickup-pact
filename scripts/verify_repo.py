@@ -120,12 +120,14 @@ assert "Customer smart-order experience" in demo_doc
 assert "Technical detail layer" in demo_doc
 assert "REVERSE_SETTLEMENT" in demo_doc and "REVERSE_REWARD" in demo_doc
 for marker in [
-    "커피, 미리 주문해요.",
+    "오늘 뭐 드실래요?",
     "근처 매장",
     "장바구니 보기",
     "내 주문",
     "체험 손님",
     "주문 취소",
+    "픽업 시간이 바뀌면 먼저 알려드려요.",
+    "괜찮아요",
     "제품 화면으로 돌아가기",
 ]:
     assert marker in demo_index, f"customer demo marker missing: {marker}"

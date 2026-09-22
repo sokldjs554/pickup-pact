@@ -78,6 +78,7 @@ EVENT_LABELS = {
     "SettlementPosted": "점주 정산 반영",
     "RewardGranted": "고객 포인트 적립",
     "CapacityRevised": "매장 처리량 변경",
+    "PickupRescheduled": "픽업 시간 변경",
     "SettlementReversed": "정산 취소 분개",
     "RewardReversed": "포인트 회수",
 }
@@ -534,6 +535,10 @@ class CapacityRequest(BaseModel):
     available_units: int = Field(ge=0, le=100)
 
 
+class PickupRescheduleRequest(BaseModel):
+    pickup_at: str | None = Field(default=None, pattern=r"^\d{2}:\d{2}$")
+
+
 class RedeliveryRequest(BaseModel):
     conflicting_amount: int | None = Field(default=None, gt=0, le=1_000_000)
 
@@ -644,6 +649,17 @@ def reward_demo_order(session_id: str, request: AmountRequest) -> dict[str, Any]
 def revise_demo_capacity(session_id: str, request: CapacityRequest) -> dict[str, Any]:
     try:
         return demo_store.revise_capacity(session_id, request.available_units)
+    except (KeyError, ValueError) as exc:
+        raise _demo_error(exc) from exc
+
+
+@app.post("/api/demo/sessions/{session_id}/pickup/reschedule")
+def accept_demo_pickup_reschedule(
+    session_id: str,
+    request: PickupRescheduleRequest,
+) -> dict[str, Any]:
+    try:
+        return demo_store.accept_pickup_reschedule(session_id, request.pickup_at)
     except (KeyError, ValueError) as exc:
         raise _demo_error(exc) from exc
 

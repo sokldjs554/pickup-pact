@@ -7,7 +7,7 @@ async function openPage(page, label) {
 test('virtual customer can browse, add to cart, order, track, and cancel', async ({ page }) => {
   await page.goto('/');
 
-  await expect(page.getByRole('heading', { name: '커피, 미리 주문해요.' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /오늘 뭐 드실래요/ })).toBeVisible();
   await expect(page.locator('#customerPill')).toHaveText('체험 손님 · 하늘');
   await expect(page.locator('.sidebar')).not.toBeVisible();
   await expect(page.getByRole('button', { name: '정합성 복구', exact: true })).not.toBeVisible();
@@ -36,6 +36,23 @@ test('virtual customer can browse, add to cart, order, track, and cancel', async
   await expect(page.getByRole('heading', { name: '내 주문', exact: true })).toBeVisible();
   await expect(page.locator('#customerOrderView')).toContainText('아메리카노 2개');
   await expect(page.locator('#customerOrderView')).toContainText('9,000원');
+
+  await expect(page.locator('#customerOrderView')).toHaveAttribute('data-stage', 'promise', { timeout: 10000 });
+  await expect(page.locator('#customerOrderView')).toContainText('픽업 시간이 조금 늦어져요.');
+  const promiseCard=page.locator('.pickup-promise-card.warning');
+  const originalPickup=await promiseCard.getAttribute('data-original-pickup');
+  const suggestedPickup=await promiseCard.getAttribute('data-suggested-pickup');
+  expect(originalPickup).toMatch(/^\d{2}:\d{2}$/);
+  expect(suggestedPickup).toMatch(/^\d{2}:\d{2}$/);
+  const toMinutes=value => {
+    const [h,m]=value.split(':').map(Number);
+    return h*60+m;
+  };
+  expect((toMinutes(suggestedPickup)-toMinutes(originalPickup)+1440)%1440).toBe(5);
+  await expect(page.getByRole('button', { name: /괜찮아요$/ })).toBeVisible();
+
+  await page.getByRole('button', { name: /괜찮아요$/ }).click();
+  await expect(page.locator('#customerOrderView')).toContainText(suggestedPickup+' 픽업');
   await expect(page.locator('#customerOrderView')).toHaveAttribute('data-stage', 'ready', { timeout: 8000 });
   await expect(page.locator('#customerOrderView')).toContainText('픽업 준비됐어요.');
 
@@ -47,8 +64,14 @@ test('virtual customer can browse, add to cart, order, track, and cancel', async
   await expect(page.locator('#customerOrderView')).toContainText('9,000원 결제 취소');
   await expect(page.getByRole('button', { name: '다시 주문하기', exact: true })).toBeVisible();
 
-  // Recovery happened behind the customer UI. The customer never had to operate it.
+  // Recovery stayed hidden from the customer, but the backend evidence is still inspectable.
   await expect(page.getByRole('button', { name: '정합성 복구', exact: true })).not.toBeVisible();
+
+  await page.goto('/?dev=1');
+  await expect(page.locator('#orderEvents')).toContainText('PickupRescheduled');
+  await openPage(page, '정산 · 감사');
+  await expect(page.locator('#auditList')).toContainText('PICKUP_RESLOT_SUGGESTED');
+  await expect(page.locator('#auditList')).toContainText('PICKUP_RESCHEDULE_ACCEPTED');
 });
 
 test('cart follows the selected store and clears when the customer changes stores', async ({ page }) => {
@@ -101,7 +124,7 @@ test('backend reviewer can enter through the hidden dev URL and operate the expe
 
   await page.getByRole('button', { name: /제품 화면으로 돌아가기/ }).click();
   await expect(page.locator('.sidebar')).not.toBeVisible();
-  await expect(page.getByRole('heading', { name: '커피, 미리 주문해요.' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /오늘 뭐 드실래요/ })).toBeVisible();
 });
 
 test('customer cancellation recovery remains inspectable only in dev mode', async ({ page }) => {
@@ -148,7 +171,7 @@ test('customer smart-order flow remains usable on a narrow mobile viewport', asy
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
 
-  await expect(page.getByRole('heading', { name: '커피, 미리 주문해요.' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /오늘 뭐 드실래요/ })).toBeVisible();
   await expect(page.locator('#menuList')).toContainText('아메리카노');
 
   const initialOverflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
