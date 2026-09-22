@@ -66,6 +66,8 @@ jobs:
           python scripts/consistency_benchmark.py --orders 20000 --seed 42 --output /tmp/pass1-benchmark.json
           python scripts/consistency_matrix.py --orders 20000 --seeds 11,22,33,44,55 --output /tmp/pass1-matrix.json
           python scripts/verify_evidence.py             --benchmark-actual /tmp/pass1-benchmark.json             --matrix-actual /tmp/pass1-matrix.json
+          python scripts/promise_admission_benchmark.py --orders 20000 --seed 42 --output /tmp/pass1-promise-admission.json
+          python scripts/verify_promise_admission_evidence.py --actual /tmp/pass1-promise-admission.json
 
       - name: Verification pass 2 — repeat tests from clean process
         env:
@@ -80,6 +82,8 @@ jobs:
           python scripts/consistency_benchmark.py --orders 20000 --seed 42 --output /tmp/pass2-benchmark.json
           python scripts/consistency_matrix.py --orders 20000 --seeds 11,22,33,44,55 --output /tmp/pass2-matrix.json
           python scripts/verify_evidence.py             --benchmark-actual /tmp/pass2-benchmark.json             --matrix-actual /tmp/pass2-matrix.json
+          python scripts/promise_admission_benchmark.py --orders 20000 --seed 42 --output /tmp/pass2-promise-admission.json
+          python scripts/verify_promise_admission_evidence.py --actual /tmp/pass2-promise-admission.json
 
       - name: Verification pass 3 — regression repeat
         env:
@@ -90,6 +94,8 @@ jobs:
           mvn -B -DskipTests=false test
           cmp <(python -c 'import json; d=json.load(open("/tmp/pass1-benchmark.json")); d["metrics"].pop("elapsed_ms",None); print(json.dumps(d,sort_keys=True))')               <(python -c 'import json; d=json.load(open("/tmp/pass2-benchmark.json")); d["metrics"].pop("elapsed_ms",None); print(json.dumps(d,sort_keys=True))')
           cmp <(python -c 'import json; print(json.dumps(json.load(open("/tmp/pass1-matrix.json")),sort_keys=True))')               <(python -c 'import json; print(json.dumps(json.load(open("/tmp/pass2-matrix.json")),sort_keys=True))')
+          cmp <(python -c 'import json; print(json.dumps(json.load(open("/tmp/pass1-promise-admission.json")),sort_keys=True))') \
+              <(python -c 'import json; print(json.dumps(json.load(open("/tmp/pass2-promise-admission.json")),sort_keys=True))')
 
       - name: Build and validate deployable artifacts
         run: |
@@ -139,5 +145,7 @@ jobs:
             /tmp/pass1-matrix.json
             /tmp/pass2-benchmark.json
             /tmp/pass2-matrix.json
+            /tmp/pass1-promise-admission.json
+            /tmp/pass2-promise-admission.json
             /tmp/postgres-plan-evidence.json
           retention-days: 14

@@ -26,13 +26,16 @@ test('virtual customer can order, protect pickup time, claim once, and read a tr
   await expect(page.getByRole('dialog', { name: '장바구니' })).toBeVisible();
   await expect(page.locator('#cartItems')).toContainText('아메리카노');
   await expect(page.locator('#cartTotal')).toHaveText('9,000원');
+  await expect(page.locator('#cartPromiseQuote')).toHaveClass(/accept/);
+  await expect(page.locator('#cartPromiseQuote')).toContainText('픽업 가능');
 
   await page.getByRole('button', { name: '아메리카노 수량 줄이기', exact: true }).click();
   await expect(page.locator('#cartTotal')).toHaveText('4,500원');
   await page.getByRole('button', { name: '아메리카노 수량 늘리기', exact: true }).click();
   await expect(page.locator('#cartTotal')).toHaveText('9,000원');
-
-  await page.getByRole('button', { name: '9,000원 주문하기', exact: true }).click();
+  const checkout=page.getByRole('button', { name: /9,000원 · .* 픽업 주문/ });
+  await expect(checkout).toBeEnabled();
+  await checkout.click();
   await expect(page.getByRole('heading', { name: '내 주문', exact: true })).toBeVisible();
   await expect(page.locator('#customerOrderView')).toContainText('아메리카노 2개');
   await expect(page.locator('#customerOrderView')).toContainText('9,000원');
@@ -87,6 +90,33 @@ test('virtual customer can order, protect pickup time, claim once, and read a tr
   await expect(page.locator('#auditList')).toContainText('PICKUP_RESLOT_SUGGESTED');
   await expect(page.locator('#auditList')).toContainText('PICKUP_RESCHEDULE_ACCEPTED');
   await expect(page.locator('#auditList')).toContainText('PICKUP_CLAIMED');
+});
+
+test('promise admission offers a later slot or pauses orders before checkout', async ({ page }) => {
+  await page.goto('/');
+
+  const stores=page.locator('#storeList');
+  await expect(stores).toContainText('지금 주문 가능');
+  await expect(stores).toContainText('11분 뒤 가능');
+  await expect(stores).toContainText('잠시 쉬는 중');
+
+  await page.getByRole('button', { name: /모닝빈 선릉점/ }).click();
+  await page.getByRole('button', { name: '햄치즈 샌드위치 담기', exact: true }).click();
+  await page.getByRole('button', { name: /장바구니 보기/ }).click();
+  await expect(page.locator('#cartPromiseQuote')).toHaveClass(/later/);
+  await expect(page.locator('#cartPromiseQuote')).toContainText('지금은 조금 붐벼요');
+  await expect(page.getByRole('button', { name: /6,800원 · .* 픽업 주문/ })).toBeEnabled();
+  await page.getByRole('button', { name: '장바구니 닫기', exact: true }).click();
+
+  await page.getByRole('button', { name: /커피온 역삼점/ }).click();
+  await page.getByRole('button', { name: '말차라떼 담기', exact: true }).click();
+  await page.getByRole('button', { name: /장바구니 보기/ }).click();
+  await expect(page.locator('#cartPromiseQuote')).toHaveClass(/pause/);
+  await expect(page.locator('#cartPromiseQuote')).toContainText('지금은 주문을 잠깐 쉬어요');
+  const pausedButton=page.locator('#checkoutButton');
+  await expect(pausedButton).toHaveText(/분 뒤 다시 확인/);
+  await expect(pausedButton).toBeDisabled();
+  await expect(page.getByRole('heading', { name: '내 주문', exact: true })).not.toBeVisible();
 });
 
 test('cart follows the selected store and clears when the customer changes stores', async ({ page }) => {
@@ -147,7 +177,7 @@ test('customer cancellation recovery remains inspectable only in dev mode', asyn
   await page.getByRole('button', { name: '아메리카노 담기', exact: true }).click();
   await page.getByRole('button', { name: '아메리카노 담기', exact: true }).click();
   await page.getByRole('button', { name: /장바구니 보기/ }).click();
-  await page.getByRole('button', { name: '9,000원 주문하기', exact: true }).click();
+  await page.getByRole('button', { name: /9,000원 · .* 픽업 주문/ }).click();
 
   await page.getByRole('button', { name: '주문 취소', exact: true }).click();
   await page.getByRole('button', { name: '주문 취소', exact: true }).last().click();
@@ -186,7 +216,7 @@ test('first customer action waits for a slow session bootstrap', async ({ page }
   await page.goto('/');
   await page.getByRole('button', { name: '아메리카노 담기', exact: true }).click();
   await page.getByRole('button', { name: /장바구니 보기/ }).click();
-  await page.getByRole('button', { name: '4,500원 주문하기', exact: true }).click();
+  await page.getByRole('button', { name: /4,500원 · .* 픽업 주문/ }).click();
 
   await expect(page.locator('#customerOrderView')).toHaveAttribute('data-stage', 'ready', { timeout: 20000 });
   await expect(page.locator('#customerOrderView')).toContainText('4,500원');
@@ -211,7 +241,7 @@ test('customer smart-order flow remains usable on a narrow mobile viewport', asy
   const cartOverflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   expect(cartOverflow).toBeLessThanOrEqual(1);
 
-  await page.getByRole('button', { name: '4,500원 주문하기', exact: true }).click();
+  await page.getByRole('button', { name: /4,500원 · .* 픽업 주문/ }).click();
   await expect(page.getByRole('heading', { name: '내 주문', exact: true })).toBeVisible();
   await expect(page.locator('#customerOrderView')).toHaveAttribute('data-stage', 'ready', { timeout: 10000 });
   await expect(page.locator('.pickup-code-value')).toHaveText(/^\d{4}$/);

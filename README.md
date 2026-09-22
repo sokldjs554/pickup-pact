@@ -1,9 +1,31 @@
 # Pickup Pact
 
-**스마트오더에서 늦은 취소·중복 메시지·매장 처리량 변화 때문에 주문/정산/적립 상태가 어긋났을 때, 실제 업무 발생 순서를 복원해 안전한 복구 계획을 만드는 백엔드 프로젝트입니다.**
+**주문을 무조건 받은 뒤 복구하는 대신, 주문 전에는 지킬 수 있는 픽업 약속만 만들고(Admission), 주문 후 상황이 바뀌면 재약속하며(Protection), 실패 시 정합성을 복구하고(Recovery), 마지막에는 고객이 이해할 수 있는 증거를 남기는(Proof) Promise Lifecycle 백엔드 프로젝트입니다.**
 
 **Live Demo:** <https://pickup-pact-demo.onrender.com>  
 **Public demo engine:** `services/reconciler/app/engine.py` · 합성 데이터만 사용
+
+## 이 프로젝트만의 중심 메커니즘: Promise Lifecycle
+
+```text
+주문 전 Promise Admission
+  → ACCEPT / OFFER_LATER / PAUSE
+  → 고객 도착시간 + 현재 backlog + 제조 처리량으로 지킬 수 있는 시간만 약속
+
+주문 후 Promise Protection
+  → 갑작스런 capacity drop
+  → PickupRescheduled
+
+실패 시 Temporal Recovery
+  → 늦은 취소 / 중복 / 순서 뒤바뀜
+  → deterministic compensation
+
+완료 후 Proof
+  → one-time PickupClaimed
+  → Trust Receipt / 주문·취소 내역
+```
+
+공개 주문/Kafka 포트폴리오에서 흔한 `order + payment + Saga/Outbox/CQRS` 조합을 그대로 반복하지 않고, **“언제 주문을 받아야 하는가”부터 “약속이 흔들렸을 때 어떻게 재약속하고 증명하는가”까지 픽업 약속의 전체 생명주기**를 하나의 도메인으로 다룹니다.
 
 ### 대표 시나리오
 
@@ -33,7 +55,7 @@ Pickup Pact는 서버가 받은 순서만 믿지 않고 `occurred_at`과 `receiv
 
 일반 사용자는 Kafka, CQRS, ledger, anomaly, repair command 같은 용어를 볼 필요가 없습니다. 해당 내용은 백엔드 검토용 **숨김 개발자 모드(`?dev=1`)** 에서만 확인합니다.
 
-이 프로젝트의 제품 차별점은 **Pickup Promise + Trust Receipt + One-time Pickup Code**입니다. 정상 주문뿐 아니라 매장 처리량·이벤트 지연·중복·취소·수령 확인 문제가 생겨도 고객에게는 필요한 다음 행동만 보여주고, 백엔드에는 정합성·ledger·audit 근거를 보존합니다.
+이 프로젝트의 차별점은 개별 기능이 아니라 **Promise Lifecycle**입니다. `Pickup Promise`, `Trust Receipt`, `One-time Pickup Code`는 그 lifecycle을 완성하는 하위 기능입니다. 핵심은 **주문 전부터 지킬 수 없는 약속을 만들지 않고, 주문 후에는 약속을 보호하고, 실패 시 복구하며, 마지막에는 근거를 남기는 것**입니다.
 
 ### 기술 상세
 
@@ -132,6 +154,21 @@ flowchart LR
 
 ## 검증된 합성 실험
 
+### Promise Admission stress
+
+고정 seed 42로 **20,000개의 합성 원격 픽업 주문**을 생성해 `accept-all + 역사적 8분 quote`와 Promise Admission을 비교했습니다.
+
+| policy | accepted | offered later | paused | avoidable overpromise | p95 lateness | max backlog |
+|---|---:|---:|---:|---:|---:|---:|
+| accept-all | 20,000 (100%) | 0 | 0 | 24.24% | 9.67분 | 39.60분 |
+| Promise Admission | 19,710 (98.55%) | 4,641 | 290 (1.45%) | **0%** | **0분** | **13.33분** |
+
+이 실험은 정확한 현재 backlog를 사용하는 deterministic policy stress model입니다. **운영 TPS/SLA나 실제 고객 개선율을 뜻하지 않습니다.** 대신 “모든 주문을 받는 것”과 “지킬 수 있는 약속만 만드는 것” 사이의 trade-off를 재현 가능하게 보여줍니다.
+
+원본 결과: [artifacts/promise-admission-benchmark.json](artifacts/promise-admission-benchmark.json)
+
+### Temporal consistency
+
 초기 로컬 구현에서 seed 42로 **20,000 orders / 101,588 events**를 생성해 단순 receive-order 처리와 정합성 모델을 비교했습니다.
 
 | correctness fault | naive | Pickup Pact model |
@@ -194,11 +231,11 @@ GitHub Actions는 Python reconciler, interviewer demo tests/live smoke, Docker b
 
 ## 왜 이 주제인가
 
-공개 주문 백엔드 포트폴리오는 `order/payment/restaurant + Kafka + Saga/Outbox/CQRS` 조합이 이미 매우 흔합니다. Pickup Pact는 패스오더를 복제하는 대신 **예약 픽업 약속이 이미 확정된 이후 발생하는 시간적 정합성 문제**를 중심에 둡니다.
+공개 주문 백엔드 포트폴리오는 `order/payment/restaurant + Kafka + Saga/Outbox/CQRS` 조합이 이미 매우 흔합니다. Pickup Pact는 패스오더를 복제하는 대신 **예약 픽업 약속의 전체 생명주기**를 중심에 둡니다. 주문이 생기기 전에는 현재 backlog·제조 처리량·고객 도착시간을 보고 원격 주문을 `ACCEPT / OFFER_LATER / PAUSE`하고, 주문이 확정된 뒤에는 capacity drift와 시간적 정합성 문제를 보호·복구합니다.
 
 특정 회사의 비공개 시스템을 추정하거나 복제하지 않았습니다. 공개 채용 요구와 일반적인 스마트오더 장애 조건에서 독립적으로 설계했습니다.
 
-자세한 선택 근거: [docs/topic-research.md](docs/topic-research.md)
+자세한 선택 근거: [docs/topic-research.md](docs/topic-research.md) · [Promise Lifecycle 설계](docs/promise-lifecycle.md)
 
 ## 범위와 한계
 

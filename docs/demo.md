@@ -13,15 +13,16 @@ Synthetic customer and catalog data come from real demo API endpoints:
 
 The visitor can:
 
-1. choose one of three synthetic nearby stores;
+1. choose one of three synthetic nearby stores and immediately see whether remote ordering is **available now, available later, or temporarily paused**;
 2. add menu items to a cart;
 3. increase or decrease item quantities and see totals recalculate;
-4. place an order, which calls the real session order/payment/confirm APIs;
-5. follow the order through received, preparing, and pickup-ready presentation states;
-6. see **pickup promise protection** when a multi-item demo order exceeds a revised synthetic capacity: the UI offers a new time such as `12:30 → 12:35`, and accepting it records `PickupRescheduled`;
-7. when pickup is ready, use a one-time four-digit Pickup Code; successful redemption emits `PickupClaimed`, posts settlement/reward and rejects code reuse;
-8. inspect completed/cancelled orders in customer history and open a mobile Trust Receipt;
-9. cancel the order through a customer-facing confirmation dialog; after compensation, the receipt shows final charge 0 and reward balance 0.
+4. before checkout, call the real Promise Admission policy. The cart becomes `ACCEPT / OFFER_LATER / PAUSE` based on synthetic backlog, service rate, customer travel time and order size;
+5. place an admitted order, which calls the real session order/payment/confirm APIs;
+6. follow the order through received, preparing, and pickup-ready presentation states;
+7. see **pickup promise protection** when a multi-item demo order exceeds a revised synthetic capacity: the UI offers a new time such as `12:30 → 12:35`, and accepting it records `PickupRescheduled`;
+8. when pickup is ready, use a one-time four-digit Pickup Code; successful redemption emits `PickupClaimed`, posts settlement/reward and rejects code reuse;
+9. inspect completed/cancelled orders in customer history and open a mobile Trust Receipt;
+10. cancel the order through a customer-facing confirmation dialog; after compensation, the receipt shows final charge 0 and reward balance 0.
 
 The multi-item capacity change is an intentional synthetic demo condition used to make the promise-protection behavior observable; it is not presented as random production traffic.
 

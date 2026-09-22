@@ -1,6 +1,6 @@
 # Topic and demo research
 
-Research dates: 2026-09-18, refreshed 2026-09-21.
+Research dates: 2026-09-18, refreshed 2026-09-21 and 2026-09-22.
 
 The goal is twofold:
 
@@ -52,20 +52,31 @@ These projects changed the demo requirement: a finished-looking portfolio should
 
 ## Selected technical gap
 
-**Scheduled pickup commitment integrity under temporal disorder.**
+**Promise Lifecycle for remote pickup ordering.**
 
-A promised pickup time crosses capacity, payment authorization, confirmation, settlement, rewards, and asynchronous events. The project asks what happens after a normal order flow has already succeeded but facts arrive late, twice, or with conflicting meaning.
+The project no longer starts after an order already exists. It asks two related questions:
 
-The differentiators remain:
+1. **Admission:** should the system accept this remote pickup order now, and what pickup time can it responsibly promise?
+2. **Integrity:** after a promise is confirmed, what happens when capacity, payment, settlement, rewards, or asynchronous facts change?
 
-- explicit `occurred_at` vs `received_at`;
+The central mechanisms are:
+
+- deterministic `ACCEPT / OFFER_LATER / PAUSE` admission before order creation;
+- customer-travel-aware pickup quoting;
+- explicit remote-order queue capping instead of accept-all behavior;
+- `occurred_at` vs `received_at` temporal reconciliation after confirmation;
 - atomic pickup-slot capacity protection;
 - idempotent financial posting semantics;
-- canonical replay;
-- late-cancellation compensation;
-- conflicting duplicate isolation;
-- operator-visible evidence;
+- canonical replay and late-cancellation compensation;
+- one-time pickup handoff and customer-facing Trust Receipt;
 - deterministic repair policy with AI kept advisory-only.
+
+A September 2026 GitHub keyword sweep for pickup-specific admission control did not readily surface a comparable public coffee/order portfolio implementation. That is **not proof of uniqueness**, but it reinforced the choice to avoid generic food-ordering/Saga topics.
+
+Public operations-research references also make the pre-order decision technically meaningful rather than decorative:
+
+- Ke Sun, Yunan Liu, Luyi Yang, *Order Ahead for Pickup: Promise or Peril?* (2026), which studies the unintended effects of accepting and locking in order-ahead demand and evaluates capping/cancellation mechanisms.
+- Mehdi H. Farahani, Milind Dawande, Ganesh Janakiraman, *Order Now, Pickup in 30 Minutes: Managing Queues with Static Delivery Guarantees* (2022), which studies promised pickup times and earliness/tardiness trade-offs.
 
 ## Demo redesign based on the research
 

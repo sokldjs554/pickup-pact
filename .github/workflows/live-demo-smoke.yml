@@ -75,7 +75,9 @@ jobs:
                       "ONE-TIME PICKUP CODE",
                       "TRUST RECEIPT",
                       "수령 완료 체험",
-                      "픽업 시간이 바뀌면 먼저 알려드려요.",
+                      "지킬 수 있는 시간만 약속해요.",
+                      "지금 주문 가능",
+                      "잠시 쉬는 중",
                       "괜찮아요",
                       "주문 흐름",
                       "장애 주입",
@@ -89,6 +91,22 @@ jobs:
                   assert len(catalog) >= 3
                   assert customer["label"] == "체험 손님"
                   assert any(item["name"] == "아메리카노" for item in catalog[0]["menu"])
+                  decisions = {
+                      item["id"]: item["promise_preview"]["decision"]
+                      for item in catalog
+                  }
+                  assert decisions == {
+                      "gangnam-pass-cafe": "ACCEPT",
+                      "seolleung-morning-bean": "OFFER_LATER",
+                      "yeoksam-coffee-on": "PAUSE",
+                  }
+                  paused = request(
+                      "POST",
+                      "/api/demo/promise/quote",
+                      {"store_id": "yeoksam-coffee-on", "order_units": 1},
+                  )
+                  assert paused["decision"] == "PAUSE"
+                  assert paused["retry_after_minutes"] == 3
 
                   session = request("POST", "/api/demo/sessions", {})
                   sid = session["session_id"]

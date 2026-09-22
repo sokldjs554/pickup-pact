@@ -65,12 +65,22 @@ jobs:
             --benchmark-actual /tmp/consistency-benchmark.json \
             --matrix-actual /tmp/consistency-matrix.json
 
+      - name: Reproduce promise admission stress evidence
+        run: |
+          python scripts/promise_admission_benchmark.py \
+            --orders 20000 \
+            --seed 42 \
+            --output /tmp/promise-admission-benchmark.json
+          python scripts/verify_promise_admission_evidence.py \
+            --actual /tmp/promise-admission-benchmark.json
+
       - uses: actions/upload-artifact@v4
         with:
           name: reproduced-consistency-evidence
           path: |
             /tmp/consistency-benchmark.json
             /tmp/consistency-matrix.json
+            /tmp/promise-admission-benchmark.json
           retention-days: 14
 
       - name: Docker configuration and images

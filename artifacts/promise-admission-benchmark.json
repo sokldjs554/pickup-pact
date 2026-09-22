@@ -1,0 +1,33 @@
+{
+  "scope": "Synthetic deterministic stress model. This is policy evidence, not production throughput, latency, or customer-impact evidence.",
+  "config": {
+    "orders": 20000,
+    "seed": 42,
+    "arrival_rate_per_minute": 0.65,
+    "service_rate_units_per_minute": 1.2,
+    "cap_minutes": 16,
+    "historical_quote_minutes": 8
+  },
+  "accept_all": {
+    "accepted_orders": 20000,
+    "accepted_rate": 1,
+    "paused_orders": 0,
+    "offered_later_orders": 0,
+    "arrival_aligned_orders": 0,
+    "avoidable_overpromise_rate": 0.2424,
+    "p95_lateness_minutes": 9.6690176203462,
+    "average_lateness_minutes": 1.449919029328706,
+    "max_backlog_minutes": 39.60473775690722
+  },
+  "promise_admission": {
+    "accepted_orders": 19710,
+    "accepted_rate": 0.9855,
+    "paused_orders": 290,
+    "offered_later_orders": 4641,
+    "arrival_aligned_orders": 15069,
+    "avoidable_overpromise_rate": 0,
+    "p95_lateness_minutes": 0,
+    "average_lateness_minutes": 0,
+    "max_backlog_minutes": 13.330071865766516
+  }
+}

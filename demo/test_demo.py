@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 from fastapi.testclient import TestClient
 
 from demo.main import app, run_scenario
+from demo.promise_admission import PromiseAdmissionInput, quote_promise
 
 client = TestClient(app)
 
@@ -40,6 +44,51 @@ def test_health_points_to_real_reconciliation_engine():
     assert payload["engine"] == "services/reconciler/app/engine.py"
     assert payload["release_commit"]
 
+def test_promise_admission_golden_cases_match_shared_contract():
+    cases = json.loads(
+        (Path(__file__).resolve().parents[1] / "contracts/promise-admission-cases.json").read_text()
+    )
+    for case in cases:
+        input_value = case["input"]
+        quote = quote_promise(
+            PromiseAdmissionInput(
+                backlog_units=input_value["backlog_units"],
+                order_units=input_value["order_units"],
+                service_rate_units_per_minute=input_value["service_rate_units_per_minute"],
+                travel_minutes=input_value["travel_minutes"],
+                max_promise_minutes=input_value["max_promise_minutes"],
+                safety_minutes=input_value["safety_minutes"],
+            )
+        ).to_dict()
+        assert quote == case["expected"], case["name"]
+
+
+def test_public_promise_quote_exposes_accept_later_and_pause_states():
+    catalog = client.get("/api/demo/catalog").json()
+    previews = {store["id"]: store["promise_preview"]["decision"] for store in catalog}
+    assert previews == {
+        "gangnam-pass-cafe": "ACCEPT",
+        "seolleung-morning-bean": "OFFER_LATER",
+        "yeoksam-coffee-on": "PAUSE",
+    }
+
+    later = client.post(
+        "/api/demo/promise/quote",
+        json={"store_id": "seolleung-morning-bean", "order_units": 1},
+    )
+    assert later.status_code == 200
+    assert later.json()["decision"] == "OFFER_LATER"
+    assert later.json()["quoted_minutes"] == 11
+
+    paused = client.post(
+        "/api/demo/promise/quote",
+        json={"store_id": "yeoksam-coffee-on", "order_units": 1},
+    )
+    assert paused.status_code == 200
+    assert paused.json()["decision"] == "PAUSE"
+    assert paused.json()["retry_after_minutes"] == 3
+
+
 def test_customer_catalog_is_real_demo_api_data():
     customer = client.get("/api/demo/customer")
     assert customer.status_code == 200
@@ -73,7 +122,9 @@ def test_landing_page_exposes_guided_and_expert_layers():
         "ONE-TIME PICKUP CODE",
         "TRUST RECEIPT",
         "수령 완료 체험",
-        "픽업 시간이 바뀌면 먼저 알려드려요.",
+        "지킬 수 있는 시간만 약속해요.",
+        "지금 주문 가능",
+        "잠시 쉬는 중",
         "괜찮아요",
         "주문 흐름",
         "매장 처리량",

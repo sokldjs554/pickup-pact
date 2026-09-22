@@ -1,0 +1,78 @@
+[
+  {
+    "name": "arrival_aligned",
+    "input": {
+      "backlog_units": 3,
+      "order_units": 1,
+      "service_rate_units_per_minute": 1.2,
+      "travel_minutes": 6,
+      "max_promise_minutes": 18,
+      "safety_minutes": 2
+    },
+    "expected": {
+      "decision": "ACCEPT",
+      "earliest_ready_minutes": 6,
+      "quoted_minutes": 6,
+      "retry_after_minutes": 0,
+      "queue_cap_units": 21,
+      "reason": "ARRIVAL_ALIGNED"
+    }
+  },
+  {
+    "name": "one_minute_tolerance",
+    "input": {
+      "backlog_units": 3,
+      "order_units": 2,
+      "service_rate_units_per_minute": 1.2,
+      "travel_minutes": 6,
+      "max_promise_minutes": 18,
+      "safety_minutes": 2
+    },
+    "expected": {
+      "decision": "ACCEPT",
+      "earliest_ready_minutes": 7,
+      "quoted_minutes": 7,
+      "retry_after_minutes": 0,
+      "queue_cap_units": 21,
+      "reason": "ARRIVAL_ALIGNED"
+    }
+  },
+  {
+    "name": "later_promise",
+    "input": {
+      "backlog_units": 6,
+      "order_units": 1,
+      "service_rate_units_per_minute": 0.8,
+      "travel_minutes": 5,
+      "max_promise_minutes": 18,
+      "safety_minutes": 2
+    },
+    "expected": {
+      "decision": "OFFER_LATER",
+      "earliest_ready_minutes": 11,
+      "quoted_minutes": 11,
+      "retry_after_minutes": 0,
+      "queue_cap_units": 14,
+      "reason": "LATER_PROMISE_REQUIRED"
+    }
+  },
+  {
+    "name": "remote_queue_cap",
+    "input": {
+      "backlog_units": 18,
+      "order_units": 1,
+      "service_rate_units_per_minute": 1,
+      "travel_minutes": 7,
+      "max_promise_minutes": 16,
+      "safety_minutes": 2
+    },
+    "expected": {
+      "decision": "PAUSE",
+      "earliest_ready_minutes": 21,
+      "quoted_minutes": null,
+      "retry_after_minutes": 3,
+      "queue_cap_units": 16,
+      "reason": "REMOTE_QUEUE_CAP"
+    }
+  }
+]
