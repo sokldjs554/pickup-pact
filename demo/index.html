@@ -1011,29 +1011,58 @@ function renderCustomerOrder(){
   const view=$("customerOrderView");
   if(!view)return;
   if(!state?.order){
+    delete view.dataset.stage;
     view.innerHTML='<div class="customer-empty"><div class="order-status-icon" style="margin:0 auto">☕</div><h3>아직 주문이 없어요.</h3><p>메뉴를 골라 주문하면 여기에서 준비 상태를 볼 수 있어요.</p><button class="customer-action primary" type="button" onclick="goProductPage(\'overview\')">메뉴 보러가기</button></div>';
     return;
   }
+
   const o=state.order;
+  const protection=state.pickup_protection||{status:"NONE"};
+  const promiseWaiting=protection.status==="SUGGESTED"||o.status==="AT_RISK";
+  const rescheduled=protection.status==="RESCHEDULED";
   const cancelled=o.status==="CANCELLED"||customerOrderStage==="cancelled";
-  const stage=cancelled?"cancelled":customerOrderStage==="ready"?"ready":customerOrderStage==="preparing"?"preparing":"received";
+  const stage=cancelled?"cancelled":promiseWaiting?"promise":customerOrderStage==="ready"?"ready":customerOrderStage==="preparing"?"preparing":"received";
   view.dataset.stage=stage;
-  const statusTitle=cancelled?"주문이 취소됐어요.":stage==="ready"?"픽업 준비됐어요.":stage==="preparing"?"음료를 만들고 있어요.":"주문됐어요.";
-  const statusText=cancelled?money(o.total)+"원 결제 취소와 포인트 정리가 끝났어요.":stage==="ready"?"매장에서 주문번호를 보여주고 받아가세요.":stage==="preparing"?"조금만 기다려주세요. 준비되면 바로 알려드릴게요.":"매장에서 주문을 확인했어요.";
-  const icon=cancelled?"✓":stage==="ready"?"✓":stage==="preparing"?"…":"✓";
+
+  const statusTitle=cancelled?"주문이 취소됐어요.":stage==="promise"?"픽업 시간이 조금 늦어져요.":stage==="ready"?"픽업 준비됐어요.":stage==="preparing"?"음료를 만들고 있어요.":"주문됐어요.";
+  const statusText=cancelled
+    ? money(o.total)+"원 결제 취소와 포인트 정리가 끝났어요."
+    : stage==="promise"
+    ? "매장이 조금 바빠졌어요. 새 시간을 확인해주세요."
+    : stage==="ready"
+    ? "매장에서 주문번호를 보여주고 받아가세요."
+    : stage==="preparing"
+    ? "조금만 기다려주세요. 준비되면 바로 알려드릴게요."
+    : "매장에서 주문을 확인했어요.";
+  const icon=cancelled||stage==="ready"?"✓":stage==="promise"?"!":stage==="preparing"?"…":"✓";
   const orderNo=(o.order_id||"PP-0000").split("-").slice(-1)[0];
+  const progress=cancelled?"":'<div class="order-progress"><div class="order-progress-step done">주문 접수</div><div class="order-progress-step '+(stage==="preparing"||stage==="promise"||stage==="ready"?"done":"current")+'">준비 중</div><div class="order-progress-step '+(stage==="ready"?"current":"")+'">픽업 준비</div></div>';
+
+  let promiseCard="";
+  if(!cancelled){
+    if(promiseWaiting){
+      const original=protection.original_pickup_at||o.pickup_at;
+      const suggested=protection.suggested_pickup_at||o.pickup_at;
+      promiseCard='<div class="pickup-promise-card warning"><div class="pickup-promise-head"><span>픽업 약속</span><b>시간 변경 제안</b></div><div class="pickup-promise-time">'+original+' → '+suggested+'</div><div class="pickup-promise-copy">매장이 갑자기 바빠졌어요. '+suggested+'쯤 픽업하면 기다리는 시간을 줄일 수 있어요.</div><div class="pickup-promise-actions"><button class="accept" type="button" onclick="acceptPickupSuggestion()">'+suggested+' 괜찮아요</button><button type="button" onclick="openCancelDialog()">주문 취소</button></div></div>';
+    }else if(rescheduled){
+      promiseCard='<div class="pickup-promise-card rescheduled"><div class="pickup-promise-head"><span>픽업 약속</span><b>변경 완료</b></div><div class="pickup-promise-time">'+o.pickup_at+' 픽업</div><div class="pickup-promise-copy">새 시간으로 바꿨어요. 준비되면 바로 알려드릴게요.</div></div>';
+    }else{
+      promiseCard='<div class="pickup-promise-card"><div class="pickup-promise-head"><span>픽업 약속</span><b>예정대로</b></div><div class="pickup-promise-time">'+o.pickup_at+' 픽업</div><div class="pickup-promise-copy">지금은 예정대로 준비 중이에요. 시간이 바뀌면 먼저 알려드릴게요.</div></div>';
+    }
+  }
+
   view.innerHTML=
-    '<div class="order-status-card '+(cancelled?"cancelled":"")+'"><div class="order-status-icon">'+icon+'</div><h3>'+statusTitle+'</h3><p>'+statusText+'</p>'+
-      (cancelled?'':'<div class="order-progress"><div class="order-progress-step done">주문 접수</div><div class="order-progress-step '+(stage==="preparing"||stage==="ready"?"done":"current")+'">준비 중</div><div class="order-progress-step '+(stage==="ready"?"current":"")+'">픽업 준비</div></div>')+
-    '</div>'+
+    '<div class="order-status-card '+(cancelled?"cancelled":stage==="promise"?"promise":"")+'"><div class="order-status-icon">'+icon+'</div><h3>'+statusTitle+'</h3><p>'+statusText+'</p>'+progress+'</div>'+
+    promiseCard+
     '<div class="order-detail-card"><h3>주문 정보</h3>'+
       '<div class="order-detail-row"><span>매장</span><b>'+o.store+'</b></div>'+
       '<div class="order-detail-row"><span>메뉴</span><b>'+o.items+'</b></div>'+
+      '<div class="order-detail-row"><span>픽업</span><b>'+o.pickup_at+'</b></div>'+
       '<div class="order-detail-row"><span>결제 금액</span><b>'+money(o.total)+'원</b></div>'+
       '<div class="order-detail-row"><span>주문번호</span><b>'+orderNo+'</b></div>'+
     '</div>'+
     '<div class="order-actions">'+
-      (cancelled?'<button class="customer-action primary" type="button" onclick="startNewCustomerOrder()">다시 주문하기</button>':'<button class="customer-action danger" type="button" onclick="openCancelDialog()">주문 취소</button>')+
+      (cancelled?'<button class="customer-action primary" type="button" onclick="startNewCustomerOrder()">다시 주문하기</button>':promiseWaiting?'':'<button class="customer-action danger" type="button" onclick="openCancelDialog()">주문 취소</button>')+
     '</div>';
 }
 
