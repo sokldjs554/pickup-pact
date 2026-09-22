@@ -97,3 +97,18 @@ Corrections:
 - the JD audit explicitly says a separate promotion/coupon campaign bounded context is **not** claimed.
 
 This iteration is useful evidence for the posting's “analyze AI output and repeatedly improve it” requirement: a previously green, polished result was not accepted until contract, trust, and evidence boundaries matched the implementation.
+
+
+## 9. Automatic compensation → deadline-enforced compensation
+
+A second domain audit found that the core `breach-pact` command could grant the 500P guarantee reward immediately after confirmation because the aggregate checked Pact status but not the guarantee deadline.
+
+Rejected result: treating “active Pact” as sufficient proof that compensation is due.
+
+Correction:
+- `PickupPact.breach(observedAt)` now rejects any breach before `latestAt`;
+- core service evaluates the invariant with server time;
+- unit tests distinguish early 409 from overdue compensation;
+- full-topology integration first proves early breach is rejected, then moves only the persisted test fixture deadline into the past and verifies the real outbox → Kafka → 500 PTS ledger path.
+
+The correction prevents callers from turning a future guarantee into an immediate reward while keeping the financial side effect deterministic and idempotent.
