@@ -42,6 +42,8 @@ required = [
     "artifacts/consistency-benchmark.json",
     "artifacts/consistency-matrix.json",
     "artifacts/reconciler-http-summary.json",
+    "artifacts/promise-admission-benchmark.json",
+    "scripts/verify_promise_admission_evidence.py",
     "scripts/integration_smoke.py",
     "scripts/capture_postgres_plan.py",
     "docs/ai-iteration-log.md",
@@ -136,6 +138,9 @@ promise_kotlin_cases = (ROOT / "services/commitment-service/src/test/resources/p
 assert promise_contract == promise_kotlin_cases, "Python/Kotlin promise admission golden cases drifted"
 assert "ACCEPT" in promise_contract and "OFFER_LATER" in promise_contract and "PAUSE" in promise_contract
 assert "Promise Lifecycle" in (ROOT / "docs/promise-lifecycle.md").read_text()
+promise_evidence = (ROOT / "artifacts/promise-admission-benchmark.json").read_text()
+assert '"avoidable_overpromise_rate": 0.0' in promise_evidence
+assert '"accepted_rate": 0.9855' in promise_evidence
 for marker in [
     "오늘 뭐 드실래요?",
     "근처 매장",
