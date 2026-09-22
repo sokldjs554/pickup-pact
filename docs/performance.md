@@ -23,6 +23,30 @@ A second matrix runs seeds `11,22,33,44,55` at 20,000 orders each. Across **100,
 
 These zero values are properties of the simulator and implemented atomic/idempotent model, not production incident-rate claims.
 
+## Scheduled pickup policy lab
+
+Command:
+
+`python3 scripts/pickup_policy_lab.py --orders 20000 --seed 20260922`
+
+This is a deterministic synthetic replay of the **same 20,000 requested orders** through two admission policies. It is not real PassOrder demand, production revenue, or an SLA claim.
+
+The baseline models four concurrent requests reading the same stale slot snapshot before writes become visible. Pickup Pact uses an atomic capacity ledger and, when the selected slot is full, may move an order to one of the next two customer-visible five-minute slots.
+
+| Policy metric | Stale-snapshot baseline | Pickup Pact |
+|---|---:|---:|
+| Accepted orders | 19,751 | 20,000 |
+| Rejected orders | 249 | 0 |
+| Orders kept in originally selected slot | — | 19,468 |
+| Orders deferred to a later slot | — | 532 |
+| Oversubscribed capacity units | 213 | 0 |
+| Overbooked slots | 96 | 0 |
+| Mean slot utilization | 77.03% | 78.59% |
+
+For this synthetic workload, Pickup Pact avoided overbooking by moving **532 / 20,000** requests to a later feasible slot; the mean deferral was one five-minute slot. The important point is the trade-off: correctness is not presented as free. Customers may need to choose a later slot when the original one no longer fits.
+
+Machine-readable evidence is committed at `artifacts/pickup-policy-lab.json` and is regenerated in CI and the repeated release gate.
+
 ## Loopback FastAPI baseline
 
 A prior local loopback run exercised the real `POST /api/v1/reconcile` route after warm-up. Each concurrency level ran **2,000 requests × 3 repetitions**. Persistence was disabled, so PostgreSQL, Redis, Kafka, MongoDB, and Elasticsearch were excluded.
