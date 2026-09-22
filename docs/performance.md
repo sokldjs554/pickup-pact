@@ -31,19 +31,19 @@ Command:
 
 This is a deterministic synthetic replay of the **same 20,000 requested orders** through two admission policies. It is not real PassOrder demand, production revenue, or an SLA claim.
 
-The baseline models four concurrent requests reading the same stale slot snapshot before writes become visible. Pickup Pact uses an atomic capacity ledger and, when the selected slot is full, may move an order to one of the next two customer-visible five-minute slots.
+The baseline models four concurrent requests reading the same stale slot snapshot before writes become visible. Pickup Pact uses an atomic capacity ledger and, when the selected slot is full, searches the next two customer-visible five-minute slots that could be offered back to the customer. The real product flow still requires the customer to choose that later time.
 
 | Policy metric | Stale-snapshot baseline | Pickup Pact |
 |---|---:|---:|
-| Accepted orders | 19,751 | 20,000 |
-| Rejected orders | 249 | 0 |
-| Orders kept in originally selected slot | — | 19,468 |
-| Orders deferred to a later slot | — | 532 |
+| Baseline admitted / Pickup Pact offerable within window | 19,751 | 20,000 |
+| Baseline rejected / no feasible slot in window | 249 | 0 |
+| Orders feasible in originally selected slot | — | 19,468 |
+| Orders requiring a later-slot re-offer | — | 532 |
 | Oversubscribed capacity units | 213 | 0 |
 | Overbooked slots | 96 | 0 |
 | Mean slot utilization | 77.03% | 78.59% |
 
-For this synthetic workload, Pickup Pact avoided overbooking by moving **532 / 20,000** requests to a later feasible slot; the mean deferral was one five-minute slot. The important point is the trade-off: correctness is not presented as free. Customers may need to choose a later slot when the original one no longer fits.
+For this synthetic workload, Pickup Pact avoided overbooking while **532 / 20,000** requests required a later feasible slot to be offered; the mean re-offer distance was one five-minute slot. The important point is the trade-off: correctness is not presented as free. Customers may need to choose a later slot when the original one no longer fits.
 
 Machine-readable evidence is committed at `artifacts/pickup-policy-lab.json` and is regenerated in CI and the repeated release gate.
 
