@@ -380,6 +380,12 @@ class DemoStore:
                 0,
                 session["capacity"]["reserved_units"] - order["units"],
             )
+            protection = session.get("pickup_protection") or {}
+            session["pickup_protection"] = {
+                "status": "CANCELLED",
+                "original_pickup_at": protection.get("original_pickup_at") or order["pickup_at"],
+                "suggested_pickup_at": protection.get("suggested_pickup_at"),
+            }
             event = self._append_event_locked(
                 session_id,
                 "CommitmentCancelled",
