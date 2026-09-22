@@ -154,6 +154,21 @@ flowchart LR
 
 ## 검증된 합성 실험
 
+### Promise Admission stress
+
+고정 seed 42로 **20,000개의 합성 원격 픽업 주문**을 생성해 `accept-all + 역사적 8분 quote`와 Promise Admission을 비교했습니다.
+
+| policy | accepted | offered later | paused | avoidable overpromise | p95 lateness | max backlog |
+|---|---:|---:|---:|---:|---:|---:|
+| accept-all | 20,000 (100%) | 0 | 0 | 24.24% | 9.67분 | 39.60분 |
+| Promise Admission | 19,710 (98.55%) | 4,641 | 290 (1.45%) | **0%** | **0분** | **13.33분** |
+
+이 실험은 정확한 현재 backlog를 사용하는 deterministic policy stress model입니다. **운영 TPS/SLA나 실제 고객 개선율을 뜻하지 않습니다.** 대신 “모든 주문을 받는 것”과 “지킬 수 있는 약속만 만드는 것” 사이의 trade-off를 재현 가능하게 보여줍니다.
+
+원본 결과: [artifacts/promise-admission-benchmark.json](artifacts/promise-admission-benchmark.json)
+
+### Temporal consistency
+
 초기 로컬 구현에서 seed 42로 **20,000 orders / 101,588 events**를 생성해 단순 receive-order 처리와 정합성 모델을 비교했습니다.
 
 | correctness fault | naive | Pickup Pact model |
