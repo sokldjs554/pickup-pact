@@ -10,6 +10,7 @@ data class PickupCommitment(
     val storeId: String,
     val pickupAt: Instant,
     val units: Int,
+    val totalAmount: Int = 0,
     val leaseToken: String,
     val paymentAuthorized: Boolean,
     val state: CommitmentState,
@@ -20,6 +21,7 @@ data class PickupCommitment(
 ) {
     init {
         require(units > 0) { "units must be positive" }
+        require(totalAmount >= 0) { "totalAmount must not be negative" }
     }
 
     fun authorizePayment(): PickupCommitment {
