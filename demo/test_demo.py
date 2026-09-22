@@ -53,6 +53,31 @@ def test_customer_catalog_is_real_demo_api_data():
     assert stores[0]["pickup_minutes"] > 0
     assert any(item["name"] == "아메리카노" for item in stores[0]["menu"])
     assert all(item["price"] > 0 for store in stores for item in store["menu"])
+    assert all(item["capacity_units"] > 0 for store in stores for item in store["menu"])
+
+
+def test_customer_can_query_capacity_aware_pickup_slots():
+    response = client.get(
+        "/api/demo/catalog/gangnam-pass-cafe/pickup-slots",
+        params={"units": 2},
+    )
+    assert response.status_code == 200
+    slots = response.json()
+    assert len(slots) == 6
+    assert all(slot["pickup_at"] and len(slot["pickup_at"]) == 5 for slot in slots)
+    assert all(slot["capacity_units"] == 12 for slot in slots)
+    assert all(
+        slot["available_units"] == slot["capacity_units"] - slot["reserved_units"]
+        for slot in slots
+    )
+    assert any(slot["can_fit"] for slot in slots)
+    assert any(not slot["can_fit"] for slot in slots)
+    assert {slot["status"] for slot in slots} <= {"AVAILABLE", "LIMITED", "FULL"}
+
+
+def test_pickup_slot_query_rejects_unknown_store():
+    response = client.get("/api/demo/catalog/not-a-store/pickup-slots")
+    assert response.status_code == 404
 
 
 
@@ -74,6 +99,7 @@ def test_landing_page_exposes_guided_and_expert_layers():
         "TRUST RECEIPT",
         "수령 완료 체험",
         "픽업 시간이 바뀌면 먼저 알려드려요.",
+        "픽업 시간 선택",
         "괜찮아요",
         "주문 흐름",
         "매장 처리량",
