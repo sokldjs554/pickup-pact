@@ -49,7 +49,9 @@ Relevant committed indexes are:
 - `ledger_entries(event_id)` for batch entry lookup;
 - `reconciliation_run(aggregate_id, created_at desc)` for incident history.
 
-A real PostgreSQL plan should be captured before claiming query latency improvement.
+The release gate now starts the real PostgreSQL 16 Compose service and runs `scripts/capture_postgres_plan.py`. The script seeds a target aggregate plus noise rows, executes `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)`, requires the planner to use `idx_outbox_aggregate_timeline`, and captures both the normal indexed plan and a forced-sequential baseline as `postgres-plan-evidence.json`.
+
+Execution times in that artifact are **CI-container measurements only**. They are useful for plan analysis and regression evidence, not production latency claims.
 
 ## Load tooling
 

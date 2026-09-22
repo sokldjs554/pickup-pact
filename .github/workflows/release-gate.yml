@@ -105,6 +105,12 @@ jobs:
           python scripts/integration_smoke.py --passes 2
           docker compose ps
 
+      - name: Capture PostgreSQL execution plan evidence
+        run: |
+          set -euo pipefail
+          python scripts/capture_postgres_plan.py --output /tmp/postgres-plan-evidence.json
+          test -s /tmp/postgres-plan-evidence.json
+
       - name: Dump Docker logs on runtime failure
         if: failure()
         run: docker compose logs --no-color --tail=300 || true
@@ -133,4 +139,5 @@ jobs:
             /tmp/pass1-matrix.json
             /tmp/pass2-benchmark.json
             /tmp/pass2-matrix.json
+            /tmp/postgres-plan-evidence.json
           retention-days: 14
