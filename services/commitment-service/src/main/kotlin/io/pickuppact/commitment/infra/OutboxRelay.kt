@@ -17,7 +17,7 @@ class OutboxRelay(
     private val kafka: KafkaTemplate<String, String>,
     private val objectMapper: ObjectMapper
 ) {
-    @Scheduled(fixedDelayString = "\${pickup.outbox.poll-ms:500}")
+    @Scheduled(fixedDelayString = "${pickup.outbox.poll-ms:500}")
     fun relay(): Mono<Void> =
         db.sql(
             """select id, aggregate_id, event_type, payload::text as payload, occurred_at
@@ -35,25 +35,60 @@ class OutboxRelay(
             }
             .all()
             .concatMap { row ->
-                val envelope = objectMapper.writeValueAsString(
-                    mapOf(
-                        "event_id" to row.id.toString(),
-                        "aggregate_id" to row.aggregateId.toString(),
-                        "event_type" to row.eventType,
-                        "occurred_at" to row.occurredAt.toInstant().toString(),
-                        "schema_version" to 1,
-                        "payload" to objectMapper.readTree(row.payload)
-                    )
-                )
-                Mono.fromFuture(kafka.send("pickup.commitment.events.v1", row.aggregateId.toString(), envelope))
-                    .then(
-                        db.sql("update outbox_events set published_at = now() where id = :id and published_at is null")
-                            .bind("id", row.id)
-                            .fetch()
-                            .rowsUpdated()
-                            .then()
-                    )
+                publishCommitment(row)
+                    .then(publishDerivedFinancialEffect(row))
+                    .then(markPublished(row.id))
             }
+            .then()
+
+    private fun publishCommitment(row: OutboxRow): Mono<Void> {
+        val envelope = objectMapper.writeValueAsString(
+            mapOf(
+                "event_id" to row.id.toString(),
+                "aggregate_id" to row.aggregateId.toString(),
+                "event_type" to row.eventType,
+                "occurred_at" to row.occurredAt.toInstant().toString(),
+                "schema_version" to 1,
+                "payload" to objectMapper.readTree(row.payload)
+            )
+        )
+        return Mono.fromFuture(
+            kafka.send("pickup.commitment.events.v1", row.aggregateId.toString(), envelope)
+        ).then()
+    }
+
+    /**
+     * A Pact breach has one deterministic financial side effect: grant the
+     * configured compensation points. Using the outbox row id keeps the ledger
+     * event id stable across relay retries.
+     */
+    private fun publishDerivedFinancialEffect(row: OutboxRow): Mono<Void> {
+        if (row.eventType != "PickupPactBreached") return Mono.empty()
+
+        val payload = objectMapper.readTree(row.payload)
+        val compensation = payload.path("compensation_points").asInt(0)
+        if (compensation <= 0) {
+            return Mono.error(IllegalStateException("PickupPactBreached requires positive compensation_points"))
+        }
+
+        val ledgerPosting = objectMapper.writeValueAsString(
+            mapOf(
+                "eventId" to "${row.id}-pact-reward",
+                "aggregateId" to row.aggregateId.toString(),
+                "type" to "REWARD",
+                "amount" to compensation
+            )
+        )
+        return Mono.fromFuture(
+            kafka.send("pickup.financial.events.v1", row.aggregateId.toString(), ledgerPosting)
+        ).then()
+    }
+
+    private fun markPublished(id: UUID): Mono<Void> =
+        db.sql("update outbox_events set published_at = now() where id = :id and published_at is null")
+            .bind("id", id)
+            .fetch()
+            .rowsUpdated()
             .then()
 
     private data class OutboxRow(
