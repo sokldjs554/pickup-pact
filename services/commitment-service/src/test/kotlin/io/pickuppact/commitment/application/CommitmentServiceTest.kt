@@ -93,8 +93,12 @@ class CommitmentServiceTest {
     private fun service(capacity: FakeCapacity = FakeCapacity(), repository: FakeRepository = FakeRepository()) =
         CommitmentService(capacity, repository, quoteTokens)
 
-    private fun quoteToken(storeId: String = "store-1", units: Int = 2): String =
-        quoteTokens.issue(storeId, units, Instant.now().plusSeconds(120))
+    private fun quoteToken(
+        storeId: String = "store-1",
+        units: Int = 2,
+        totalAmount: Int = 9000
+    ): String =
+        quoteTokens.issue(storeId, units, totalAmount, Instant.now().plusSeconds(120))
 
     @Test
     fun quoteComputesWorkloadOnServerFromMenuItems() {
@@ -109,9 +113,11 @@ class CommitmentServiceTest {
         ).block()!!
 
         assertEquals(4, quote.units)
+        assertEquals(14000, quote.totalAmount)
         assertEquals(2, quote.slots.size)
         assertEquals(listOf(4, 4), quote.slots.map { it.requestedUnits })
         assertEquals("store-1", quoteTokens.verify(quote.quoteToken).storeId)
+        assertEquals(14000, quoteTokens.verify(quote.quoteToken).totalAmount)
     }
 
     @Test
@@ -143,6 +149,7 @@ class CommitmentServiceTest {
 
         assertEquals(first.id, retry.id)
         assertEquals(3, first.units)
+        assertEquals(9000, first.totalAmount)
         assertEquals(listOf(3), capacity.acquiredUnits)
         assertEquals(1, repository.events.count { it == "PickupSlotHeld" })
     }
