@@ -282,6 +282,59 @@ def test_capacity_risk_can_offer_and_accept_a_new_pickup_time():
     }
 
 
+def test_pickup_pact_is_issued_renegotiated_and_auto_compensated():
+    session_id = create_session()
+    create_order(session_id, units=2, total=9000)
+    client.post(
+        f"/api/demo/sessions/{session_id}/payment",
+        json={"authorization_id": "auth-pact"},
+    )
+    confirmed = client.post(f"/api/demo/sessions/{session_id}/confirm")
+    assert confirmed.status_code == 200
+    state = confirmed.json()["state"]
+    pact = state["pickup_pact"]
+    assert pact["status"] == "ACTIVE"
+    assert pact["version"] == 1
+    assert pact["compensation_points"] == 500
+    assert any(event["event_type"] == "PickupPactIssued" for event in state["events"])
+
+    client.post(
+        f"/api/demo/sessions/{session_id}/capacity",
+        json={"available_units": 1},
+    )
+    client.post(f"/api/demo/sessions/{session_id}/reconcile")
+    client.post(f"/api/demo/sessions/{session_id}/repairs/apply")
+    state = get_state(session_id)
+    suggested = state["pickup_protection"]["suggested_pickup_at"]
+    accepted = client.post(
+        f"/api/demo/sessions/{session_id}/pickup/reschedule",
+        json={"pickup_at": suggested},
+    )
+    assert accepted.status_code == 200
+    state = accepted.json()["state"]
+    pact = state["pickup_pact"]
+    assert pact["status"] == "ACTIVE"
+    assert pact["version"] == 2
+    assert pact["promised_at"] == suggested
+    assert any(event["event_type"] == "PickupPactRenegotiated" for event in state["events"])
+
+    breached = client.post(f"/api/demo/sessions/{session_id}/pickup/pact/breach")
+    assert breached.status_code == 200
+    state = breached.json()["state"]
+    assert state["pickup_pact"]["status"] == "COMPENSATED"
+    assert state["pickup_pact"]["compensation_granted"] is True
+    assert state["metrics"]["reward_balance"] == 500
+    assert any(event["event_type"] == "PickupPactBreached" for event in state["events"])
+    assert any(
+        event["event_type"] == "RewardGranted"
+        and event["payload"].get("source") == "pickup_pact_breach"
+        for event in state["events"]
+    )
+
+    duplicate = client.post(f"/api/demo/sessions/{session_id}/pickup/pact/breach")
+    assert duplicate.status_code == 409
+
+
 def test_pickup_code_is_one_time_and_creates_trust_receipt_history():
     session_id = create_session()
     create_order(session_id, units=1, total=4500)
