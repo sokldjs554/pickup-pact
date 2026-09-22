@@ -46,7 +46,7 @@ pipeline {
     stage('Container build') {
       steps {
         sh 'docker compose config >/dev/null'
-        sh 'docker compose build commitment ledger reconciler ops-console'
+        sh 'docker compose build commitment merchant-fulfillment ledger reconciler ops-console'
         sh 'docker build -f Dockerfile.demo -t pickup-pact-demo:jenkins .'
       }
     }
