@@ -260,6 +260,26 @@ def commitment_flow(pass_no: int) -> None:
         label="commitment and Pact outbox delivery to Kafka",
     )
 
+    with postgres_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                select event_type
+                from outbox_events
+                where aggregate_id = %s::uuid
+                order by event_sequence
+                """,
+                (commitment_id,),
+            )
+            ordered_types = [row[0] for row in cursor.fetchall()]
+    assert ordered_types == [
+        "PickupSlotHeld",
+        "PaymentAuthorized",
+        "CommitmentConfirmed",
+        "PickupPactIssued",
+        "CommitmentCancelled",
+    ], ordered_types
+
 
 def capacity_concurrency_flow(pass_no: int) -> None:
     store_id = f"concurrency-store-{pass_no}"
