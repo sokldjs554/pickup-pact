@@ -36,6 +36,14 @@ test('virtual customer can browse, add to cart, order, track, and cancel', async
   await expect(page.getByRole('heading', { name: '내 주문', exact: true })).toBeVisible();
   await expect(page.locator('#customerOrderView')).toContainText('아메리카노 2개');
   await expect(page.locator('#customerOrderView')).toContainText('9,000원');
+
+  await expect(page.locator('#customerOrderView')).toHaveAttribute('data-stage', 'promise', { timeout: 10000 });
+  await expect(page.locator('#customerOrderView')).toContainText('픽업 시간이 조금 늦어져요.');
+  await expect(page.locator('#customerOrderView')).toContainText('12:30 → 12:35');
+  await expect(page.getByRole('button', { name: '12:35 괜찮아요', exact: true })).toBeVisible();
+
+  await page.getByRole('button', { name: '12:35 괜찮아요', exact: true }).click();
+  await expect(page.locator('#customerOrderView')).toContainText('12:35 픽업');
   await expect(page.locator('#customerOrderView')).toHaveAttribute('data-stage', 'ready', { timeout: 8000 });
   await expect(page.locator('#customerOrderView')).toContainText('픽업 준비됐어요.');
 
