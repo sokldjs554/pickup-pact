@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: merchant-fulfillment
+  namespace: pickup-pact
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: merchant-fulfillment}}
+  template:
+    metadata:
+      labels:
+        app: merchant-fulfillment
+        tags.datadoghq.com/service: pickup-pact-merchant-fulfillment
+        tags.datadoghq.com/env: staging
+    spec:
+      containers:
+        - name: merchant-fulfillment
+          image: pickup-pact/merchant-fulfillment-service:0.1.0
+          ports: [{containerPort: 8082}]
+          envFrom:
+            - {configMapRef: {name: pickup-pact-config}}
+            - {secretRef: {name: pickup-pact-secrets}}
+          env:
+            - {name: DD_SERVICE, value: pickup-pact-merchant-fulfillment}
+            - {name: ELASTIC_APM_SERVICE_NAME, value: pickup-pact-merchant-fulfillment}
+          readinessProbe:
+            httpGet: {path: /actuator/health/readiness, port: 8082}
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: {path: /actuator/health/liveness, port: 8082}
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          resources:
+            requests: {cpu: 200m, memory: 384Mi}
+            limits: {cpu: "1", memory: 768Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: merchant-fulfillment
+  namespace: pickup-pact
+spec:
+  selector: {app: merchant-fulfillment}
+  ports: [{port: 8082, targetPort: 8082}]
