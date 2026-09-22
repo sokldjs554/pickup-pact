@@ -17,6 +17,7 @@ EVENT_LABELS = {
     "SettlementPosted": "점주 정산 반영",
     "RewardGranted": "고객 포인트 적립",
     "CapacityRevised": "매장 처리량 변경",
+    "PickupRescheduled": "픽업 시간 변경",
     "SettlementReversed": "정산 취소 분개",
     "RewardReversed": "포인트 회수",
 }
@@ -94,6 +95,12 @@ def _money(value: Any) -> int:
     return int(str(value).replace(",", "").replace("원", "").strip())
 
 
+def _shift_hhmm(value: str, minutes: int) -> str:
+    hour, minute = (int(part) for part in value.split(":", 1))
+    total = (hour * 60 + minute + minutes) % (24 * 60)
+    return f"{total // 60:02d}:{total % 60:02d}"
+
+
 class DemoStore:
     """Thread-safe, session-isolated in-memory sandbox for the public portfolio demo.
 
@@ -139,6 +146,11 @@ class DemoStore:
                 "applied_repairs": [],
                 "manual_review": False,
                 "projection_rebuilds": 0,
+                "pickup_protection": {
+                    "status": "NONE",
+                    "original_pickup_at": None,
+                    "suggested_pickup_at": None,
+                },
             }
             self._audit_locked(session_id, "SESSION_CREATED", "새 데모 세션을 만들었습니다.")
             return self.snapshot(session_id)
@@ -170,6 +182,11 @@ class DemoStore:
                 "applied_repairs": [],
                 "manual_review": False,
                 "projection_rebuilds": 0,
+                "pickup_protection": {
+                    "status": "NONE",
+                    "original_pickup_at": None,
+                    "suggested_pickup_at": None,
+                },
             }
             self._audit_locked(session_id, "SESSION_RESET", "데모 상태를 초기화했습니다.")
             return self.snapshot(session_id)
@@ -286,6 +303,11 @@ class DemoStore:
             }
             session["capacity"]["slot"] = pickup_at
             session["capacity"]["reserved_units"] += units
+            session["pickup_protection"] = {
+                "status": "ON_TIME",
+                "original_pickup_at": pickup_at,
+                "suggested_pickup_at": None,
+            }
             event = self._append_event_locked(
                 session_id,
                 "PickupSlotHeld",
@@ -607,6 +629,18 @@ class DemoStore:
                     applied.append(code)
                 elif code == "RESLOT_REVIEW":
                     order["status"] = "AT_RISK"
+                    original_pickup_at = order["pickup_at"]
+                    suggested_pickup_at = _shift_hhmm(original_pickup_at, 5)
+                    session["pickup_protection"] = {
+                        "status": "SUGGESTED",
+                        "original_pickup_at": original_pickup_at,
+                        "suggested_pickup_at": suggested_pickup_at,
+                    }
+                    self._audit_locked(
+                        session_id,
+                        "PICKUP_RESLOT_SUGGESTED",
+                        f"{original_pickup_at} → {suggested_pickup_at}",
+                    )
                     applied.append(code)
                 elif code == "NO_OP_DUPLICATE":
                     applied.append(code)
@@ -629,6 +663,47 @@ class DemoStore:
                 "reconciliation": deepcopy(after),
                 "state": self.snapshot(session_id),
             }
+
+    def accept_pickup_reschedule(self, session_id: str, pickup_at: str | None = None) -> dict[str, Any]:
+        with self._lock:
+            session = self.require(session_id)
+            order = session.get("order")
+            if not order:
+                raise ValueError("order not found")
+            protection = session.get("pickup_protection") or {}
+            suggested = pickup_at or protection.get("suggested_pickup_at")
+            if protection.get("status") != "SUGGESTED" or not suggested:
+                raise ValueError("no pickup reschedule is waiting for acceptance")
+
+            previous = order["pickup_at"]
+            event = self._append_event_locked(
+                session_id,
+                "PickupRescheduled",
+                {
+                    "from_pickup_at": previous,
+                    "pickup_at": suggested,
+                    "capacity_units": order["units"],
+                },
+                detail=f"픽업 시간 변경 {previous} → {suggested}",
+            )
+            order["pickup_at"] = suggested
+            order["status"] = "CONFIRMED"
+            session["capacity"]["slot"] = suggested
+            session["capacity"]["available_units"] = max(
+                session["capacity"]["available_units"],
+                order["units"],
+            )
+            session["pickup_protection"] = {
+                "status": "RESCHEDULED",
+                "original_pickup_at": protection.get("original_pickup_at") or previous,
+                "suggested_pickup_at": suggested,
+            }
+            self._audit_locked(
+                session_id,
+                "PICKUP_RESCHEDULE_ACCEPTED",
+                f"{previous} → {suggested}",
+            )
+            return {"event": deepcopy(event), "state": self.snapshot(session_id)}
 
     def seed_from_scenario(
         self,
@@ -665,6 +740,11 @@ class DemoStore:
                 "payment_authorized": True,
                 "settled": False,
                 "rewarded": False,
+            }
+            session["pickup_protection"] = {
+                "status": "ON_TIME",
+                "original_pickup_at": order_meta["pickup_at"],
+                "suggested_pickup_at": None,
             }
             session["events"] = deepcopy(scenario["events"])
             session["capacity"]["slot"] = order_meta["pickup_at"]
@@ -751,6 +831,7 @@ class DemoStore:
                 "applied_repairs": list(session["applied_repairs"]),
                 "manual_review": session["manual_review"],
                 "projection_rebuilds": session["projection_rebuilds"],
+                "pickup_protection": deepcopy(session["pickup_protection"]),
                 "reconciliation": reconciliation,
                 "metrics": {
                     "event_count": len(events),
