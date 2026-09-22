@@ -21,8 +21,9 @@ def walk_plan(node: dict):
 
 
 def run_explain(cursor, aggregate_id: str, *, force_seq: bool) -> dict:
-    cursor.execute("set enable_indexscan = %s", ("off" if force_seq else "on",))
-    cursor.execute("set enable_bitmapscan = %s", ("off" if force_seq else "on",))
+    mode = "off" if force_seq else "on"
+    cursor.execute(f"set enable_indexscan = {mode}")
+    cursor.execute(f"set enable_bitmapscan = {mode}")
     cursor.execute("set enable_seqscan = on")
     cursor.execute(
         """
