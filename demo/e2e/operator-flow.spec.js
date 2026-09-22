@@ -4,7 +4,7 @@ async function openPage(page, label) {
   await page.getByRole('button', { name: label, exact: true }).click();
 }
 
-test('virtual customer can browse, add to cart, order, track, and cancel', async ({ page }) => {
+test('virtual customer can order, protect pickup time, claim once, and read a trust receipt', async ({ page }) => {
   await page.goto('/');
 
   await expect(page.getByRole('heading', { name: /오늘 뭐 드실래요/ })).toBeVisible();
@@ -56,22 +56,37 @@ test('virtual customer can browse, add to cart, order, track, and cancel', async
   await expect(page.locator('#customerOrderView')).toHaveAttribute('data-stage', 'ready', { timeout: 8000 });
   await expect(page.locator('#customerOrderView')).toContainText('픽업 준비됐어요.');
 
-  await page.getByRole('button', { name: '주문 취소', exact: true }).click();
-  await expect(page.getByRole('dialog', { name: '주문 취소 확인' })).toBeVisible();
-  await page.getByRole('button', { name: '주문 취소', exact: true }).last().click();
+  const pickupCode=page.locator('.pickup-code-value');
+  await expect(pickupCode).toHaveText(/^\d{4}$/);
+  await page.getByRole('button', { name: '수령 완료 체험', exact: true }).click();
 
-  await expect(page.locator('#customerOrderView')).toContainText('주문이 취소됐어요.', { timeout: 12000 });
-  await expect(page.locator('#customerOrderView')).toContainText('9,000원 결제 취소');
-  await expect(page.getByRole('button', { name: '다시 주문하기', exact: true })).toBeVisible();
+  await expect(page.locator('#customerOrderView')).toHaveAttribute('data-stage', 'pickedup', { timeout: 8000 });
+  await expect(page.locator('#customerOrderView')).toContainText('픽업 완료됐어요.');
+  await expect(page.getByRole('button', { name: '영수증 보기', exact: true })).toBeVisible();
 
-  // Recovery stayed hidden from the customer, but the backend evidence is still inspectable.
+  await page.getByRole('button', { name: '영수증 보기', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: '모바일 영수증' })).toBeVisible();
+  await expect(page.locator('#receiptContent')).toContainText('TRUST RECEIPT');
+  await expect(page.locator('#receiptContent')).toContainText('최종 청구');
+  await expect(page.locator('#receiptContent')).toContainText('9,000원');
+  await expect(page.locator('#receiptContent')).toContainText('90P');
+  await expect(page.locator('#receiptContent')).toContainText('픽업 시간 변경');
+  await expect(page.locator('#receiptContent')).toContainText('픽업 완료');
+  await page.getByRole('button', { name: '영수증 닫기', exact: true }).click();
+
+  await page.getByRole('button', { name: '주문 내역', exact: true }).click();
+  await expect(page.locator('#customerHistoryList')).toContainText('픽업 완료');
+  await expect(page.locator('#customerHistoryList')).toContainText('아메리카노 2개');
+
+  // Customer-facing complexity stays hidden, while the backend evidence remains inspectable.
   await expect(page.getByRole('button', { name: '정합성 복구', exact: true })).not.toBeVisible();
-
   await page.goto('/?dev=1');
   await expect(page.locator('#orderEvents')).toContainText('PickupRescheduled');
+  await expect(page.locator('#orderEvents')).toContainText('PickupClaimed');
   await openPage(page, '정산 · 감사');
   await expect(page.locator('#auditList')).toContainText('PICKUP_RESLOT_SUGGESTED');
   await expect(page.locator('#auditList')).toContainText('PICKUP_RESCHEDULE_ACCEPTED');
+  await expect(page.locator('#auditList')).toContainText('PICKUP_CLAIMED');
 });
 
 test('cart follows the selected store and clears when the customer changes stores', async ({ page }) => {
@@ -137,6 +152,17 @@ test('customer cancellation recovery remains inspectable only in dev mode', asyn
   await page.getByRole('button', { name: '주문 취소', exact: true }).click();
   await page.getByRole('button', { name: '주문 취소', exact: true }).last().click();
   await expect(page.locator('#customerOrderView')).toContainText('주문이 취소됐어요.', { timeout: 12000 });
+  await page.getByRole('button', { name: '영수증 보기', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: '모바일 영수증' })).toBeVisible();
+  await expect(page.locator('#receiptContent')).toContainText('취소 완료');
+  await expect(page.locator('#receiptContent')).toContainText('최종 청구');
+  await expect(page.locator('#receiptContent')).toContainText('0원');
+  await expect(page.locator('#receiptContent')).toContainText('결제 취소 완료');
+  await expect(page.locator('#receiptContent')).toContainText('포인트 조정 완료');
+  await page.getByRole('button', { name: '영수증 닫기', exact: true }).click();
+
+  await page.getByRole('button', { name: '주문 내역', exact: true }).click();
+  await expect(page.locator('#customerHistoryList')).toContainText('취소');
 
   await page.goto('/?dev=1');
   await openPage(page, '정산 · 감사');
