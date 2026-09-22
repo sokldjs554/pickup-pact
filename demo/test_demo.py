@@ -229,6 +229,52 @@ def test_capacity_drop_marks_confirmed_promise_at_risk():
     assert applied["state"]["order"]["status"] == "AT_RISK"
 
 
+def test_capacity_risk_can_offer_and_accept_a_new_pickup_time():
+    session_id = create_session()
+    create_order(session_id, units=2, total=9000)
+    assert client.post(
+        f"/api/demo/sessions/{session_id}/payment",
+        json={"authorization_id": "auth-promise"},
+    ).status_code == 200
+    assert client.post(f"/api/demo/sessions/{session_id}/confirm").status_code == 200
+
+    revised = client.post(
+        f"/api/demo/sessions/{session_id}/capacity",
+        json={"available_units": 1},
+    )
+    assert revised.status_code == 200
+
+    reconciled = client.post(f"/api/demo/sessions/{session_id}/reconcile")
+    assert reconciled.status_code == 200
+    assert "RESLOT_REVIEW" in {
+        item["code"] for item in reconciled.json()["reconciliation"]["repairs"]
+    }
+
+    applied = client.post(f"/api/demo/sessions/{session_id}/repairs/apply")
+    assert applied.status_code == 200
+    state = applied.json()["state"]
+    assert state["order"]["status"] == "AT_RISK"
+    assert state["pickup_protection"] == {
+        "status": "SUGGESTED",
+        "original_pickup_at": "12:30",
+        "suggested_pickup_at": "12:35",
+    }
+
+    accepted = client.post(
+        f"/api/demo/sessions/{session_id}/pickup/reschedule",
+        json={"pickup_at": "12:35"},
+    )
+    assert accepted.status_code == 200
+    state = accepted.json()["state"]
+    assert state["order"]["status"] == "CONFIRMED"
+    assert state["order"]["pickup_at"] == "12:35"
+    assert state["pickup_protection"]["status"] == "RESCHEDULED"
+    assert any(event["event_type"] == "PickupRescheduled" for event in state["events"])
+    assert "confirmed_promise_exceeds_revised_capacity" not in {
+        item["code"] for item in state["reconciliation"]["anomalies"]
+    }
+
+
 def test_preset_load_populates_order_ledger_and_evidence():
     session_id = create_session()
     response = client.post(f"/api/demo/sessions/{session_id}/presets/late-cancel")
