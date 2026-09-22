@@ -14,7 +14,7 @@ This document makes the job-description mapping auditable instead of listing tec
 | Flask | operator replay console |
 | PostgreSQL | commitment state, outbox, append-only ledger, reconciliation-run audit |
 | MongoDB | distinct event-delivery evidence archive; conflicting copies of one event ID are preserved |
-| Redis | Lua-protected atomic pickup-slot capacity counter + Celery broker topology |
+| Redis | customer-visible 5-minute slot availability, Lua-protected atomic reservation, per-lease idempotent release + Celery broker topology |
 | Elasticsearch | searchable incident/reconciliation index adapter |
 | Kafka | transactional-outbox relay + financial-event consumer contract |
 | Celery | asynchronous replay worker and retry/backoff policy |
@@ -22,11 +22,11 @@ This document makes the job-description mapping auditable instead of listing tec
 | EDA | versioned domain envelopes and AsyncAPI contract |
 | CQRS | command-owned invariants + explicit PostgreSQL projection rebuild/query API from canonical event-time replay |
 | Distributed consistency | outbox, at-least-once delivery, event-level idempotency, conflict quarantine, compensation |
-| Customer requirements → product | public virtual-customer flow: store selection, menu/cart quantity changes, order/payment/confirmation, pickup status and cancellation; Chromium E2E verifies the journey |
-| Pickup promise protection | capacity revision → `RESLOT_REVIEW` → customer-friendly new-time proposal → `PickupRescheduled`; preserves backend evidence while minimizing customer friction |
+| Customer requirements → product | public virtual-customer flow: store/menu/cart → workload-aware pickup-slot query → customer time selection → order/payment/confirmation → pickup/cancellation/receipt; Chromium E2E verifies the journey |
+| Scheduled pickup + promise protection | customer chooses a feasible capacity-backed slot before payment; later capacity revision → `RESLOT_REVIEW` → customer-friendly new-time proposal → `PickupRescheduled` |
 | Customer trust layer | customer adapter validates a one-time pickup code; core Kotlin commitment enforces `CONFIRMED → PICKED_UP`, emits `PickupClaimed`, releases capacity exactly once; mobile Trust Receipt and order history keep backend terminology hidden |
 | Order/payment/settlement/reward domains | customer checkout exercises order/payment/confirmation; hidden cancellation race exercises settlement/reward reconciliation and compensation |
-| REST/OpenAPI | explicit OpenAPI 3.1 contract for hold → payment authorization → confirm/cancel + tracking, ledger posting/history/conflicts, reconciliation |
+| REST/OpenAPI | OpenAPI 3.1 contract for capacity-aware slot query → hold → payment authorization → confirm/cancel/claim + tracking, ledger posting/history/conflicts, reconciliation |
 | SQL tuning | PR CI and release-gate both capture PostgreSQL 16 `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)` and require `idx_outbox_aggregate_timeline`; indexed and forced-sequential plans are uploaded as evidence |
 | Performance troubleshooting | deterministic race benchmark + loopback HTTP baseline + runbook |
 | Docker | commitment, ledger, reconciler, ops-console, and interviewer-demo images |
