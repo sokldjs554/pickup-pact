@@ -7,7 +7,7 @@ For a release candidate, all of the following automated paths must pass on the s
 - `demo-ci`: FastAPI demo unit/API tests and Docker image build.
 - `ui-e2e`: local Chromium verification of the virtual-customer browse/cart/order/pickup-promise/pickup-code/receipt/history/cancel journey, the full expert operator flow, capacity/conflict labs, and a narrow mobile viewport.
 - `live-demo-smoke`: waits until the public `/health` reports the exact `RENDER_GIT_COMMIT` equal to the GitHub Actions SHA, checks the smart-order customer markers and catalog APIs, verifies fixed scenarios and the complete API operator flow twice, then runs the same Chromium suite against that deployed public URL.
-- `ci`: repository guardrails, Python/JVM tests, contracts, evidence reproduction, Docker builds, and Terraform validation.
+- `ci`: repository guardrails, Python/JVM tests, contracts, evidence reproduction, Docker builds, PostgreSQL execution-plan capture, and Terraform validation. The Kotlin commitment `CONFIRMED → PICKED_UP` transition and `PickupClaimed` event must stay aligned with the customer pickup-code flow.
 - `release-gate`: three repeated test passes, deterministic evidence reproduction, full Docker topology integration twice, PostgreSQL EXPLAIN plan capture, and Terraform validation.
 
 Before calling a demo release complete, re-check the current release commit in this exact order:

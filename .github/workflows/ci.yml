@@ -79,6 +79,30 @@ jobs:
           docker compose build commitment ledger reconciler ops-console
           docker build -f Dockerfile.demo -t pickup-pact-demo:ci .
 
+      - name: PostgreSQL execution-plan verification
+        run: |
+          docker compose up -d postgres
+          for attempt in $(seq 1 30); do
+            if docker compose exec -T postgres pg_isready -U pickuppact -d pickuppact >/dev/null 2>&1; then
+              break
+            fi
+            if [ "$attempt" -eq 30 ]; then
+              echo "postgres did not become ready" >&2
+              docker compose logs --no-color postgres
+              exit 1
+            fi
+            sleep 1
+          done
+          python scripts/capture_postgres_plan.py --output /tmp/postgres-plan-evidence.json
+          test -s /tmp/postgres-plan-evidence.json
+          docker compose down -v --remove-orphans
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: postgres-plan-evidence
+          path: /tmp/postgres-plan-evidence.json
+          retention-days: 14
+
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: '1.13.3'

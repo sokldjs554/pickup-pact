@@ -92,6 +92,7 @@ demo_dockerfile = (ROOT / "Dockerfile.demo").read_text()
 
 assert "paymentAuthorized" not in openapi, "hold contract must not let a caller self-authorize payment"
 assert "/api/v1/commitments/{id}/authorize-payment" in openapi
+assert "/api/v1/commitments/{id}/claim-pickup" in openapi
 assert "/api/v1/ledger/postings" in openapi
 assert "/api/v1/commitments/{id}:" in openapi
 assert "/api/v1/ledger/orders/{aggregateId}" in openapi

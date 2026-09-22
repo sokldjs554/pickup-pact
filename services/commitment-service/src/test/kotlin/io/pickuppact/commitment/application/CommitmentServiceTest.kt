@@ -122,6 +122,30 @@ class CommitmentServiceTest {
     }
 
     @Test
+    fun claimPickupEmitsEventAndReleasesCapacityExactlyOnce() {
+        val capacity = FakeCapacity()
+        val repository = FakeRepository()
+        val service = CommitmentService(capacity, repository)
+        val held = service.hold(
+            HoldCommand("store-1", Instant.now().plusSeconds(600), 1)
+        ).block()!!
+
+        service.authorizePayment(held.id, "auth-pickup").block()
+        service.confirm(held.id).block()
+
+        val pickedUp = service.claimPickup(held.id).block()!!
+
+        assertEquals("PICKED_UP", pickedUp.state.name)
+        assertEquals("PickupClaimed", repository.events.last())
+        assertEquals(listOf("lease-test"), capacity.released)
+
+        StepVerifier.create(service.claimPickup(held.id))
+            .expectError(IllegalArgumentException::class.java)
+            .verify()
+        assertEquals(listOf("lease-test"), capacity.released)
+    }
+
+    @Test
     fun pastPickupIsRejectedBeforeCapacityIsTouched() {
         val capacity = FakeCapacity()
         val service = CommitmentService(capacity, FakeRepository())
