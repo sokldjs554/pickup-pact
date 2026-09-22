@@ -20,13 +20,14 @@ class OutboxRelay(
     @Scheduled(fixedDelayString = "\${pickup.outbox.poll-ms:500}")
     fun relay(): Mono<Void> =
         db.sql(
-            """select id, aggregate_id, event_type, payload::text as payload, occurred_at
+            """select id, event_sequence, aggregate_id, event_type, payload::text as payload, occurred_at
                from outbox_events where published_at is null
-               order by occurred_at, id limit 100"""
+               order by event_sequence limit 100"""
         )
             .map { row, _ ->
                 OutboxRow(
                     row.get("id", UUID::class.java)!!,
+                    row.get("event_sequence", java.lang.Long::class.java)!!.toLong(),
                     row.get("aggregate_id", UUID::class.java)!!,
                     row.get("event_type", String::class.java)!!,
                     row.get("payload", String::class.java)!!,
@@ -107,6 +108,7 @@ class OutboxRelay(
 
     private data class OutboxRow(
         val id: UUID,
+        val eventSequence: Long,
         val aggregateId: UUID,
         val eventType: String,
         val payload: String,
