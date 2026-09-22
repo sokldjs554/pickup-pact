@@ -480,6 +480,8 @@ def pact_financial_flow(pass_no: int) -> None:
             response.status_code == 200
             and len(response.json()) == 1
             and response.json()[0]["reason"] == "REWARD"
+            and response.json()[0]["amount"] == 500
+            and response.json()[0]["unit"] == "PTS"
             and response.json()[0]["eventId"].endswith("-pact-reward")
         )
 
@@ -508,8 +510,18 @@ def pact_financial_flow(pass_no: int) -> None:
         return (
             len(rows) == 2
             and reasons == ["REWARD", "SETTLEMENT"]
-            and any(item["eventId"].endswith("-settlement") for item in rows)
-            and any(item["eventId"].endswith("-pact-reward") for item in rows)
+            and any(
+                item["eventId"].endswith("-settlement")
+                and item["amount"] == 4500
+                and item["unit"] == "KRW"
+                for item in rows
+            )
+            and any(
+                item["eventId"].endswith("-pact-reward")
+                and item["amount"] == 500
+                and item["unit"] == "PTS"
+                for item in rows
+            )
         )
 
     wait_until(
@@ -559,6 +571,8 @@ def ledger_flow(pass_no: int) -> None:
     )
     assert len(history) == 1, history
     assert history[0]["eventId"] == event_id, history
+    assert history[0]["amount"] == 12000, history
+    assert history[0]["unit"] == "KRW", history
 
     conflicts = expect(
         httpx.get(f"{LEDGER}/api/v1/ledger/conflicts?limit=20", timeout=15),
