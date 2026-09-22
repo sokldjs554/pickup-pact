@@ -78,16 +78,22 @@ public class LedgerRepository {
     public List<LedgerBatchSummary> history(String aggregateId, int limit) {
         return jdbc.query(
                 """
-                select event_id, aggregate_id, reason, created_at
-                from ledger_batches
-                where aggregate_id = ?
-                order by created_at desc, event_id desc
+                select b.event_id, b.aggregate_id, b.reason, b.created_at,
+                       min(e.amount) as amount,
+                       min(e.currency) as unit
+                from ledger_batches b
+                join ledger_entries e on e.event_id = b.event_id
+                where b.aggregate_id = ?
+                group by b.event_id, b.aggregate_id, b.reason, b.created_at
+                order by b.created_at desc, b.event_id desc
                 limit ?
                 """,
                 (rs, rowNum) -> new LedgerBatchSummary(
                         rs.getString("event_id"),
                         rs.getString("aggregate_id"),
                         rs.getString("reason"),
+                        rs.getBigDecimal("amount"),
+                        rs.getString("unit"),
                         rs.getTimestamp("created_at").toInstant()
                 ),
                 aggregateId,
