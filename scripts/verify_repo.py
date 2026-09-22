@@ -113,6 +113,11 @@ assert "financial_event_receipt" not in architecture
 assert "financial_event_receipt" not in domain_model
 assert "OutboxPublisher" not in architecture
 assert "services.reconciler.app.engine" in demo
+reconciler_main = (ROOT / "services/reconciler/app/main.py").read_text()
+reconciler_k8s = (ROOT / "infra/k8s/reconciler.yaml").read_text()
+assert '@app.get("/ready")' in reconciler_main
+assert "persistence_readiness" in reconciler_main
+assert "path: /ready" in reconciler_k8s
 assert "RENDER_GIT_COMMIT" in demo and "release_commit" in demo
 assert "EXPECTED_COMMIT" in live_demo_workflow and 'health["release_commit"] == EXPECTED_COMMIT' in live_demo_workflow
 assert "COPY services /app/services" in demo_dockerfile
