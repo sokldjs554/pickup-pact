@@ -2,6 +2,9 @@ package io.pickuppact.commitment.application
 
 import io.pickuppact.commitment.domain.CommitmentState
 import io.pickuppact.commitment.domain.PickupCommitment
+import io.pickuppact.commitment.domain.PromiseAdmissionInput
+import io.pickuppact.commitment.domain.PromiseAdmissionPolicy
+import io.pickuppact.commitment.domain.PromiseAdmissionQuote
 import org.springframework.stereotype.Service
 import reactor.core.publisher.Mono
 import java.time.Duration
@@ -49,6 +52,9 @@ class CommitmentService(
     }
 
     fun get(id: UUID): Mono<PickupCommitment> = repository.find(id)
+    fun quotePromise(input: PromiseAdmissionInput): PromiseAdmissionQuote =
+        PromiseAdmissionPolicy.quote(input)
+
 
     fun authorizePayment(id: UUID, authorizationId: String): Mono<PickupCommitment> =
         repository.find(id)
