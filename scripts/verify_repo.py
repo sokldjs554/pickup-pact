@@ -38,6 +38,7 @@ required = [
     "artifacts/consistency-matrix.json",
     "artifacts/reconciler-http-summary.json",
     "scripts/integration_smoke.py",
+    "scripts/verify_postgres_plan.sh",
     ".github/workflows/release-gate.yml",
 ]
 missing = [path for path in required if not (ROOT / path).exists()]
