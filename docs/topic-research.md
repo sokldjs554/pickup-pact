@@ -56,7 +56,7 @@ These projects changed the demo requirement: a finished-looking portfolio should
 
 A promised pickup time crosses capacity, payment authorization, confirmation, settlement, rewards, and asynchronous events. The project asks what happens after a normal order flow has already succeeded but facts arrive late, twice, or with conflicting meaning.
 
-The differentiators remain:
+The architecture-level mechanisms remain important, but they are **not the headline differentiator**:
 
 - explicit `occurred_at` vs `received_at`;
 - atomic pickup-slot capacity protection;
@@ -66,6 +66,23 @@ The differentiators remain:
 - conflicting duplicate isolation;
 - operator-visible evidence;
 - deterministic repair policy with AI kept advisory-only.
+
+## Selected product differentiator — Pickup Pact Guarantee
+
+Public portfolio projects reviewed above mostly differentiate with Saga, CQRS, Kafka, Outbox, DLQ or chaos tooling. Those are useful implementation patterns but are common enough that they do not create a memorable product story by themselves.
+
+Pickup Pact instead turns the pickup promise into a **versioned customer contract**:
+
+1. `PickupPactIssued` — checkout issues a promised pickup time, a latest guaranteed time, and automatic compensation terms;
+2. `PickupPactRenegotiated` — capacity changes do not silently overwrite the promise; customer acceptance creates a new version;
+3. `PickupPactBreached` — crossing the guaranteed window is explicit evidence;
+4. automatic `RewardGranted` — compensation is applied without requiring a support request;
+5. Trust Receipt — the issued pact, renegotiation and compensation remain visible to the customer.
+
+A public on-time compensation example exists for food delivery (Foodpanda On-Time Promise), but its public terms explicitly exclude pickup orders. Pickup Pact applies the concept specifically to scheduled pickup and connects it to store-capacity commitments and event-time consistency.
+
+Reference checked 2026-09-22:
+https://www.foodpanda.hk/contents/on-time-promise
 
 ## Demo redesign based on the research
 
