@@ -8,7 +8,6 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
 @Component
 public class FulfillmentOutboxRelay {
@@ -48,8 +47,7 @@ public class FulfillmentOutboxRelay {
         for (var row : rows) publish(row);
     }
 
-    @Transactional
-    protected void publish(OutboxRow row) {
+    private void publish(OutboxRow row) {
         try {
             String envelope = objectMapper.writeValueAsString(Map.of(
                     "event_id", row.id().toString(),
