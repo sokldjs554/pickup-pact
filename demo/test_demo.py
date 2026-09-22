@@ -152,6 +152,114 @@ def test_customer_order_api_rechecks_selected_slot_capacity():
 
 
 
+def test_merchant_delivery_reconnect_and_jit_early_ready_flow():
+    session_id = create_session()
+    create_order(session_id, units=2, total=9000)
+    client.post(
+        f"/api/demo/sessions/{session_id}/payment",
+        json={"authorization_id": "merchant-demo"},
+    )
+    client.post(f"/api/demo/sessions/{session_id}/confirm")
+
+    merchant = client.get(f"/api/demo/sessions/{session_id}/merchant")
+    assert merchant.status_code == 200
+    assert merchant.json()["status"] == "RECEIVED"
+    assert merchant.json()["delivery_acknowledged"] is False
+    assert merchant.json()["effects"] == ["NEW_ORDER_NOTIFICATION", "POS_PRINT"]
+
+    redelivered = client.post(f"/api/demo/sessions/{session_id}/merchant/redeliver")
+    assert redelivered.status_code == 200
+    merchant = redelivered.json()["merchant_fulfillment"]
+    assert merchant["redelivery_count"] == 1
+    assert merchant["effects"] == ["NEW_ORDER_NOTIFICATION", "POS_PRINT"]
+
+    acked = client.post(f"/api/demo/sessions/{session_id}/merchant/ack")
+    assert acked.status_code == 200
+    assert acked.json()["merchant_fulfillment"]["delivery_acknowledged"] is True
+
+    accepted = client.post(f"/api/demo/sessions/{session_id}/merchant/accept")
+    assert accepted.status_code == 200
+    assert accepted.json()["merchant_fulfillment"]["status"] == "ACCEPTED"
+
+    too_early = client.post(
+        f"/api/demo/sessions/{session_id}/merchant/start",
+        json={"timing": "TOO_EARLY"},
+    )
+    assert too_early.status_code == 409
+
+    started = client.post(
+        f"/api/demo/sessions/{session_id}/merchant/start",
+        json={"timing": "ON_TIME"},
+    )
+    assert started.status_code == 200
+    assert started.json()["merchant_fulfillment"]["status"] == "PREPARING"
+
+    ready = client.post(
+        f"/api/demo/sessions/{session_id}/merchant/ready",
+        json={"timing": "EARLY"},
+    )
+    assert ready.status_code == 200
+    merchant = ready.json()["merchant_fulfillment"]
+    assert merchant["status"] == "READY"
+    assert merchant["ready_quality"] == "EARLY"
+    assert "READY_TOO_EARLY" in merchant["anomalies"]
+
+
+def test_merchant_late_ready_auto_compensates_pickup_pact_in_points():
+    session_id = create_session()
+    create_order(session_id, units=1, total=4500)
+    client.post(
+        f"/api/demo/sessions/{session_id}/payment",
+        json={"authorization_id": "merchant-late"},
+    )
+    client.post(f"/api/demo/sessions/{session_id}/confirm")
+    client.post(f"/api/demo/sessions/{session_id}/merchant/accept")
+    client.post(
+        f"/api/demo/sessions/{session_id}/merchant/start",
+        json={"timing": "ON_TIME"},
+    )
+
+    ready = client.post(
+        f"/api/demo/sessions/{session_id}/merchant/ready",
+        json={"timing": "LATE"},
+    )
+    assert ready.status_code == 200
+    state = ready.json()
+    assert state["merchant_fulfillment"]["ready_quality"] == "LATE"
+    assert "READY_LATE" in state["merchant_fulfillment"]["anomalies"]
+    assert state["pickup_pact"]["status"] == "COMPENSATED"
+    reward_batches = [
+        row for row in state["ledger_batches"]
+        if row["posting_type"] == "REWARD"
+    ]
+    assert reward_batches[-1]["amount"] == 500
+    assert reward_batches[-1]["currency"] == "PTS"
+
+
+def test_customer_cancel_after_merchant_preparation_requires_review():
+    session_id = create_session()
+    create_order(session_id, units=2, total=9000)
+    client.post(
+        f"/api/demo/sessions/{session_id}/payment",
+        json={"authorization_id": "merchant-cancel"},
+    )
+    client.post(f"/api/demo/sessions/{session_id}/confirm")
+    client.post(f"/api/demo/sessions/{session_id}/merchant/accept")
+    client.post(
+        f"/api/demo/sessions/{session_id}/merchant/start",
+        json={"timing": "ON_TIME"},
+    )
+
+    cancelled = client.post(
+        f"/api/demo/sessions/{session_id}/cancel",
+        json={"delay_seconds": 0},
+    )
+    assert cancelled.status_code == 200
+    merchant = cancelled.json()["state"]["merchant_fulfillment"]
+    assert merchant["status"] == "CANCELLATION_REVIEW"
+    assert "CANCEL_AFTER_PREPARATION" in merchant["anomalies"]
+
+
 def test_landing_page_exposes_guided_and_expert_layers():
     response = client.get("/")
     assert response.status_code == 200
