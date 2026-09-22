@@ -15,21 +15,25 @@ The implemented aggregate stores:
 
 Implemented command flow:
 
-0. `GET /api/v1/commitments/slots` reads 5-minute slot availability for a requested workload so the customer can choose a feasible pickup time.
-1. `HoldCommand` leases pickup capacity and creates a `HELD` commitment with `paymentAuthorized=false`.
-2. `authorizePayment` records an external payment-authorization result and emits `PaymentAuthorized`.
-3. `confirm` is rejected unless payment authorization exists and pickup time is still in the future.
-4. `claimPickup` appends `PickupClaimed`, moves the aggregate to `PICKED_UP`, and releases the lease.
-5. `cancel` appends `CommitmentCancelled` and releases the capacity lease.
-6. Reconciliation can mark a previously confirmed promise `AT_RISK` when later capacity evidence invalidates the promise.
+0. `POST /api/v1/commitments/quotes` accepts store + menu SKU/quantity, computes preparation workload **on the server**, signs a short-lived quote token, and returns feasible 5-minute slots.
+1. `POST /api/v1/commitments/hold` accepts only `quoteToken + pickupAt` plus `Idempotency-Key`; it never trusts a client-supplied capacity number.
+2. `HoldCommand` verifies the quote, atomically leases capacity, and creates one `HELD` commitment. Retrying the same idempotency key and fingerprint returns the same commitment without reserving capacity again.
+3. `authorizePayment` records an external payment-authorization result and emits `PaymentAuthorized`.
+4. `confirm` is rejected unless payment authorization exists and pickup time is still in the future; confirmation persists both `CommitmentConfirmed` and `PickupPactIssued` in one database transaction.
+5. `reschedule` reserves the replacement slot first, persists `PickupRescheduled + PickupPactRenegotiated`, then releases the old lease. A failed old-lease release is conservative under-admission until TTL, never overbooking.
+6. `breach-pact` persists `PickupPactBreached`; the outbox relay derives a deterministic REWARD posting to the financial Kafka topic.
+7. `claimPickup` appends `PickupClaimed`, moves the aggregate to `PICKED_UP`, and releases the lease.
+8. `cancel` appends `CommitmentCancelled`, marks an active Pact cancelled, and releases capacity.
+9. Reconciliation can mark a previously confirmed promise `AT_RISK` when later capacity evidence invalidates the promise.
 
-The public API deliberately does **not** let the caller set `paymentAuthorized=true` while creating a hold.
+State-transition violations use HTTP 409 semantics. Malformed/expired quote inputs use HTTP 400.
 
 ## Redis capacity model
 
 The Redis adapter treats future preparation capacity as a **5-minute reservable resource per store**.
 
-- `GET /api/v1/commitments/slots` reports configured, reserved, and available units for each future bucket.
+- Customer admission starts from `POST /api/v1/commitments/quotes`; the server maps menu SKU + quantity to capacity units before exposing feasible slots.
+- `GET /api/v1/commitments/slots` remains a low-level diagnostic endpoint rather than the trusted customer admission contract.
 - Menu/order workload is expressed as capacity units rather than assuming every item costs the same preparation effort.
 - Admission runs in Lua: read the current slot usage, reject `used + requested > capacity`, otherwise `INCRBY` atomically.
 - A successful admission creates both the slot counter and a unique `pickup:lease:<uuid>` key containing the leased units.
@@ -43,7 +47,9 @@ This matters when a request crosses storage boundaries. If the database transiti
 
 The financial model is append-only. Each settlement, reward, or reversal becomes a balanced debit/credit `LedgerBatch`.
 
-`ledger_batches.event_id` is the idempotency identity and `semantic_fingerprint` is a SHA-256 digest of aggregate, posting type, normalized amount, and currency.
+Settlement batches are denominated in `KRW`; reward/reward-reversal batches are denominated in `PTS`. A batch cannot mix accounting units, so “500 reward points” is never silently represented as 500 KRW.
+
+`ledger_batches.event_id` is the idempotency identity and `semantic_fingerprint` is a SHA-256 digest of aggregate, posting type, normalized amount, and accounting unit.
 
 - same event ID + same fingerprint → `DUPLICATE_NOOP`;
 - same event ID + different fingerprint → `CONFLICTING_EVENT_ID`, with the existing/incoming fingerprints quarantined in `ledger_conflicts`;

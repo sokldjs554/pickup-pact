@@ -18,6 +18,8 @@ spring:
 pickup:
   capacity:
     default-units: ${PICKUP_SLOT_CAPACITY:40}
+    store-units: ${PICKUP_STORE_CAPACITIES:gangnam-pass-cafe=48,seolleung-morning-bean=36,yeoksam-coffee-on=32}
+  quote-secret: ${PICKUP_QUOTE_SECRET:local-dev-quote-secret-change-me}
 
 server:
   port: ${PORT:8080}

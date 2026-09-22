@@ -37,12 +37,36 @@ class PickupPactTest {
     }
 
     @Test
-    fun breachGrantsCompensationOnlyOnce() {
-        val breached = PickupPactPolicy.issue(Instant.now().plusSeconds(600)).breach()
+    fun breachBeforeGuaranteeDeadlineIsRejected() {
+        val now = Instant.now()
+        val pact = PickupPactPolicy.issue(now.plusSeconds(600))
+
+        assertThrows(IllegalStateException::class.java) {
+            pact.breach(now)
+        }
+        assertEquals(PickupPactStatus.ACTIVE, pact.status)
+        assertFalse(pact.compensationGranted)
+    }
+
+    @Test
+    fun breachAfterDeadlineGrantsCompensationOnlyOnce() {
+        val now = Instant.now()
+        val pact = PickupPactPolicy.issue(now.minusSeconds(600))
+
+        val breached = pact.breach(now)
 
         assertEquals(PickupPactStatus.COMPENSATED, breached.status)
         assertTrue(breached.compensationGranted)
-        assertThrows(IllegalArgumentException::class.java) { breached.breach() }
+        assertThrows(IllegalStateException::class.java) { breached.breach(now.plusSeconds(1)) }
         assertEquals(PickupPactStatus.COMPENSATED, breached.fulfill().status)
+    }
+
+    @Test
+    fun cancellationIsExplicitAndCannotCancelFulfilledPact() {
+        val cancelled = PickupPactPolicy.issue(Instant.now().plusSeconds(600)).cancel()
+        assertEquals(PickupPactStatus.CANCELLED, cancelled.status)
+
+        val fulfilled = PickupPactPolicy.issue(Instant.now().plusSeconds(600)).fulfill()
+        assertThrows(IllegalStateException::class.java) { fulfilled.cancel() }
     }
 }

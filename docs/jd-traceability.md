@@ -22,12 +22,12 @@ This document makes the job-description mapping auditable instead of listing tec
 | EDA | versioned domain envelopes and AsyncAPI contract |
 | CQRS | command-owned invariants + explicit PostgreSQL projection rebuild/query API from canonical event-time replay |
 | Distributed consistency | outbox, at-least-once delivery, event-level idempotency, conflict quarantine, compensation |
-| Customer requirements → product | public virtual-customer flow: store/menu/cart → workload-aware pickup-slot query → customer time selection → order/payment/confirmation → pickup/cancellation/receipt; Chromium E2E verifies the journey |
+| Customer requirements → product | customer flow is store/menu/cart → server-authoritative workload quote → signed feasible slots → customer time selection → idempotent hold → payment/confirmation → pickup/cancellation/receipt; Chromium E2E verifies the journey |
 | Scheduled pickup + promise protection | customer chooses a feasible capacity-backed slot before payment; later capacity revision → `RESLOT_REVIEW` → customer-friendly new-time proposal → `PickupRescheduled` |
-| Pickup Pact Guarantee | versioned `PickupPactIssued → PickupPactRenegotiated → PickupPactBreached` lifecycle, 3-minute guarantee window, automatic 500P compensation, Kotlin domain policy + browser/API evidence |
+| Pickup Pact Guarantee | versioned `PickupPactIssued → PickupPactRenegotiated → PickupPactBreached` lifecycle is persisted in the Kotlin aggregate/PostgreSQL/outbox; breach derives a deterministic 500P Kafka ledger posting; browser/API evidence covers the customer view |
 | Customer trust layer | customer adapter validates a one-time pickup code; core Kotlin commitment enforces `CONFIRMED → PICKED_UP`, emits `PickupClaimed`, releases capacity exactly once; mobile Trust Receipt and order history keep backend terminology hidden |
-| Order/payment/settlement/reward domains | customer checkout exercises order/payment/confirmation; hidden cancellation race exercises settlement/reward reconciliation and compensation |
-| REST/OpenAPI | OpenAPI 3.1 contract for capacity-aware slot query → hold → payment authorization → confirm/cancel/claim + tracking, ledger posting/history/conflicts, reconciliation |
+| Order/payment/settlement/reward domains | core order/pickup + payment authorization + settlement/reward ledger are implemented; Pact breach traverses outbox/Kafka into the reward ledger. A separate promotion/coupon campaign domain is not claimed. |
+| REST/OpenAPI | OpenAPI 3.1 contract for signed quote → Idempotency-Key hold → payment → confirm/reschedule/breach/cancel/claim; runtime topology tests assert 400 vs 409 state semantics |
 | SQL tuning | CI/release-gate capture PostgreSQL 16 `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)` for both event history and the merchant active-pickup schedule, requiring the outbox timeline index and a partial `(store_id, pickup_at, id)` schedule index; forced-sequential baselines are kept as evidence |
 | Performance troubleshooting | deterministic race benchmark + loopback HTTP baseline + runbook |
 | Docker | commitment, ledger, reconciler, ops-console, and interviewer-demo images |

@@ -3,12 +3,41 @@ create table if not exists pickup_commitments (
   store_id text not null,
   pickup_at timestamptz not null,
   units integer not null check (units > 0),
+  order_amount integer not null default 0 check (order_amount >= 0),
   lease_token text not null,
   payment_authorized boolean not null,
   state text not null,
   version bigint not null default 0,
+  idempotency_key text,
+  request_fingerprint text,
+  pact_promised_at timestamptz,
+  pact_latest_at timestamptz,
+  pact_compensation_points integer,
+  pact_version integer,
+  pact_status text,
+  pact_compensation_granted boolean not null default false,
   updated_at timestamptz not null default now()
 );
+
+alter table pickup_commitments add column if not exists order_amount integer not null default 0;
+alter table pickup_commitments add column if not exists idempotency_key text;
+alter table pickup_commitments add column if not exists request_fingerprint text;
+alter table pickup_commitments add column if not exists pact_promised_at timestamptz;
+alter table pickup_commitments add column if not exists pact_latest_at timestamptz;
+alter table pickup_commitments add column if not exists pact_compensation_points integer;
+alter table pickup_commitments add column if not exists pact_version integer;
+alter table pickup_commitments add column if not exists pact_status text;
+alter table pickup_commitments add column if not exists pact_compensation_granted boolean not null default false;
+
+update pickup_commitments
+set idempotency_key = coalesce(idempotency_key, 'legacy-' || id::text),
+    request_fingerprint = coalesce(request_fingerprint, 'legacy-' || id::text)
+where idempotency_key is null or request_fingerprint is null;
+
+alter table pickup_commitments alter column idempotency_key set not null;
+alter table pickup_commitments alter column request_fingerprint set not null;
+create unique index if not exists uq_pickup_commitments_idempotency
+  on pickup_commitments(idempotency_key);
 
 create index if not exists idx_pickup_commitments_store_schedule
   on pickup_commitments(store_id, pickup_at, id)
@@ -16,14 +45,18 @@ create index if not exists idx_pickup_commitments_store_schedule
 
 create table if not exists outbox_events (
   id uuid primary key,
+  event_sequence bigserial,
   aggregate_id uuid not null,
   event_type text not null,
   payload jsonb not null,
   occurred_at timestamptz not null,
   published_at timestamptz
 );
+alter table outbox_events add column if not exists event_sequence bigserial;
+create unique index if not exists uq_outbox_event_sequence
+  on outbox_events(event_sequence);
 create index if not exists idx_outbox_unpublished
-  on outbox_events(occurred_at, id)
+  on outbox_events(event_sequence)
   where published_at is null;
 create index if not exists idx_outbox_aggregate_timeline
   on outbox_events(aggregate_id, occurred_at, id);

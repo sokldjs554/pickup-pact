@@ -109,6 +109,8 @@ def main() -> None:
             f"plan-target-{i}",
             True,
             "CONFIRMED",
+            f"plan-idem-target-{i}",
+            f"plan-fingerprint-target-{i}",
         ))
     for i in range(args.noise_rows):
         commitment_rows.append((
@@ -119,6 +121,8 @@ def main() -> None:
             f"plan-noise-{i}",
             bool(i % 2),
             "CANCELLED" if i % 5 == 0 else "CONFIRMED",
+            f"plan-idem-noise-{i}",
+            f"plan-fingerprint-noise-{i}",
         ))
 
     with psycopg.connect(DSN) as connection:
@@ -134,9 +138,10 @@ def main() -> None:
                 """
                 insert into pickup_commitments(
                     id, store_id, pickup_at, units, lease_token,
-                    payment_authorized, state, version, updated_at
+                    payment_authorized, state, idempotency_key, request_fingerprint,
+                    version, updated_at
                 )
-                values (%s::uuid, %s, %s, %s, %s, %s, %s, 0, now())
+                values (%s::uuid, %s, %s, %s, %s, %s, %s, %s, %s, 0, now())
                 """,
                 commitment_rows,
             )

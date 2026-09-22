@@ -80,6 +80,53 @@ def test_pickup_slot_query_rejects_unknown_store():
     assert response.status_code == 404
 
 
+def test_customer_pickup_quote_calculates_units_and_price_on_server():
+    response = client.post(
+        "/api/demo/catalog/gangnam-pass-cafe/pickup-quote",
+        json={
+            "line_items": [
+                {"sku": "americano", "quantity": 2},
+                {"sku": "cafe-latte", "quantity": 1},
+            ]
+        },
+    )
+
+    assert response.status_code == 200
+    quote = response.json()
+    assert quote["units"] == 4
+    assert quote["total"] == 14000
+    assert quote["items"] == "아메리카노 2개, 카페라떼"
+    assert len(quote["slots"]) == 6
+
+
+def test_customer_order_ignores_tampered_client_totals_when_line_items_exist():
+    quote = client.post(
+        "/api/demo/catalog/gangnam-pass-cafe/pickup-quote",
+        json={"line_items": [{"sku": "americano", "quantity": 2}]},
+    ).json()
+    pickup_at = next(slot["pickup_at"] for slot in quote["slots"] if slot["can_fit"])
+    session_id = client.post("/api/demo/sessions").json()["session_id"]
+
+    response = client.post(
+        f"/api/demo/sessions/{session_id}/orders",
+        json={
+            "store": "패스카페 강남역점",
+            "store_id": "gangnam-pass-cafe",
+            "line_items": [{"sku": "americano", "quantity": 2}],
+            "items": "조작된 메뉴",
+            "total": 1,
+            "units": 1,
+            "pickup_at": pickup_at,
+        },
+    )
+
+    assert response.status_code == 200
+    order = response.json()["state"]["order"]
+    assert order["items"] == "아메리카노 2개"
+    assert order["total"] == 9000
+    assert order["units"] == 2
+
+
 def test_customer_order_api_rechecks_selected_slot_capacity():
     slots = client.get(
         "/api/demo/catalog/gangnam-pass-cafe/pickup-slots",

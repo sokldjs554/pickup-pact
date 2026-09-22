@@ -2,6 +2,7 @@ package io.pickuppact.ledger.domain;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.Set;
 
 public record LedgerEntry(
         String account,
@@ -10,8 +11,12 @@ public record LedgerEntry(
         String currency,
         Instant occurredAt
 ) {
+    private static final Set<String> SUPPORTED_UNITS = Set.of("KRW", "PTS");
+
     public LedgerEntry {
         if (amount.signum() <= 0) throw new IllegalArgumentException("amount must be positive");
-        if (!"KRW".equals(currency)) throw new IllegalArgumentException("demo supports KRW only");
+        if (!SUPPORTED_UNITS.contains(currency)) {
+            throw new IllegalArgumentException("unsupported ledger unit: " + currency);
+        }
     }
 }

@@ -3,7 +3,7 @@ package io.pickuppact.commitment.domain
 import java.time.Duration
 import java.time.Instant
 
-enum class PickupPactStatus { ACTIVE, COMPENSATED, FULFILLED }
+enum class PickupPactStatus { ACTIVE, COMPENSATED, FULFILLED, CANCELLED }
 
 data class PickupPact(
     val promisedAt: Instant,
@@ -20,7 +20,7 @@ data class PickupPact(
     }
 
     fun renegotiate(newPromisedAt: Instant): PickupPact {
-        require(status == PickupPactStatus.ACTIVE) { "only an active pact can be renegotiated" }
+        check(status == PickupPactStatus.ACTIVE) { "only an active pact can be renegotiated" }
         return copy(
             promisedAt = newPromisedAt,
             latestAt = newPromisedAt.plus(PickupPactPolicy.guaranteeWindow),
@@ -29,9 +29,12 @@ data class PickupPact(
         )
     }
 
-    fun breach(): PickupPact {
-        require(status == PickupPactStatus.ACTIVE) { "only an active pact can be breached" }
-        require(!compensationGranted) { "compensation already granted" }
+    fun breach(observedAt: Instant): PickupPact {
+        check(status == PickupPactStatus.ACTIVE) { "only an active pact can be breached" }
+        check(!compensationGranted) { "compensation already granted" }
+        check(!observedAt.isBefore(latestAt)) {
+            "pickup pact cannot be breached before its guarantee deadline"
+        }
         return copy(
             status = PickupPactStatus.COMPENSATED,
             compensationGranted = true
@@ -39,11 +42,16 @@ data class PickupPact(
     }
 
     fun fulfill(): PickupPact {
-        require(status in setOf(PickupPactStatus.ACTIVE, PickupPactStatus.COMPENSATED)) {
+        check(status in setOf(PickupPactStatus.ACTIVE, PickupPactStatus.COMPENSATED)) {
             "only an active or compensated pact can be fulfilled"
         }
         return if (status == PickupPactStatus.COMPENSATED) this
         else copy(status = PickupPactStatus.FULFILLED)
+    }
+
+    fun cancel(): PickupPact {
+        check(status != PickupPactStatus.FULFILLED) { "fulfilled pact cannot be cancelled" }
+        return copy(status = PickupPactStatus.CANCELLED)
     }
 }
 

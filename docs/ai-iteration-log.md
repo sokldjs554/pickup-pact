@@ -75,3 +75,40 @@ Accepted approach:
 - add bounded Elasticsearch timeout retries with deterministic document IDs.
 
 This iteration is deliberately kept in the history because the full-system failure was only visible after running the actual service topology, not from isolated tests.
+
+
+## 8. Green release → second-pass contract and trust-boundary audit
+
+A full green release was deliberately re-audited against the target Backend Developer posting instead of treating CI success as proof that the design story matched the core implementation.
+
+Findings:
+- OpenAPI described state conflicts as 409 while core `require()` paths returned 400.
+- the public demo and a Kotlin `PickupPact` policy existed, but core confirmation did not persist `PickupPactIssued`;
+- capacity units were caller-supplied at the core HOLD boundary;
+- the topology tested the financial Kafka consumer with directly injected events instead of proving that a real commitment transition produced the financial message;
+- the JD audit grouped promotional “event” logic together with implemented order/payment/settlement/reward domains.
+
+Corrections:
+- state invariants now throw state conflicts and full-topology HTTP tests assert 409;
+- confirmation/reschedule/breach persist the Pact lifecycle in the aggregate and outbox;
+- server-side SKU policy computes workload and amount, a signed short-lived quote crosses the client boundary, and HOLD requires an idempotency key;
+- Pact breach and pickup claim derive REWARD/SETTLEMENT messages through the real outbox → Kafka → ledger path;
+- concurrent same-key HOLD requests are replayed in the full topology;
+- the JD audit explicitly says a separate promotion/coupon campaign bounded context is **not** claimed.
+
+This iteration is useful evidence for the posting's “analyze AI output and repeatedly improve it” requirement: a previously green, polished result was not accepted until contract, trust, and evidence boundaries matched the implementation.
+
+
+## 9. Automatic compensation → deadline-enforced compensation
+
+A second domain audit found that the core `breach-pact` command could grant the 500P guarantee reward immediately after confirmation because the aggregate checked Pact status but not the guarantee deadline.
+
+Rejected result: treating “active Pact” as sufficient proof that compensation is due.
+
+Correction:
+- `PickupPact.breach(observedAt)` now rejects any breach before `latestAt`;
+- core service evaluates the invariant with server time;
+- unit tests distinguish early 409 from overdue compensation;
+- full-topology integration first proves early breach is rejected, then moves only the persisted test fixture deadline into the past and verifies the real outbox → Kafka → 500 PTS ledger path.
+
+The correction prevents callers from turning a future guarantee into an immediate reward while keeping the financial side effect deterministic and idempotent.

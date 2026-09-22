@@ -26,25 +26,25 @@ public final class LedgerPostingPolicy {
     }
 
     public static LedgerBatch settlement(String eventId, String orderId, BigDecimal amount) {
-        return batch(eventId, orderId, LedgerPostingType.SETTLEMENT, amount,
+        return batch(eventId, orderId, LedgerPostingType.SETTLEMENT, amount, "KRW",
                 "platform-clearing", LedgerDirection.DEBIT,
                 "merchant-payable", LedgerDirection.CREDIT);
     }
 
     public static LedgerBatch reverseSettlement(String eventId, String orderId, BigDecimal amount) {
-        return batch(eventId, orderId, LedgerPostingType.REVERSE_SETTLEMENT, amount,
+        return batch(eventId, orderId, LedgerPostingType.REVERSE_SETTLEMENT, amount, "KRW",
                 "merchant-payable", LedgerDirection.DEBIT,
                 "platform-clearing", LedgerDirection.CREDIT);
     }
 
     public static LedgerBatch reward(String eventId, String orderId, BigDecimal amount) {
-        return batch(eventId, orderId, LedgerPostingType.REWARD, amount,
+        return batch(eventId, orderId, LedgerPostingType.REWARD, amount, "PTS",
                 "reward-expense", LedgerDirection.DEBIT,
                 "customer-reward-liability", LedgerDirection.CREDIT);
     }
 
     public static LedgerBatch reverseReward(String eventId, String orderId, BigDecimal amount) {
-        return batch(eventId, orderId, LedgerPostingType.REVERSE_REWARD, amount,
+        return batch(eventId, orderId, LedgerPostingType.REVERSE_REWARD, amount, "PTS",
                 "customer-reward-liability", LedgerDirection.DEBIT,
                 "reward-expense", LedgerDirection.CREDIT);
     }
@@ -54,6 +54,7 @@ public final class LedgerPostingPolicy {
             String aggregateId,
             LedgerPostingType type,
             BigDecimal amount,
+            String unit,
             String debitAccount,
             LedgerDirection debitDirection,
             String creditAccount,
@@ -62,7 +63,7 @@ public final class LedgerPostingPolicy {
         BigDecimal normalized = amount.stripTrailingZeros();
         if (normalized.signum() <= 0) throw new IllegalArgumentException("amount must be positive");
         String reason = type.name();
-        String fingerprint = fingerprint(aggregateId, reason, normalized);
+        String fingerprint = fingerprint(aggregateId, reason, normalized, unit);
         Instant occurredAt = Instant.now();
         return new LedgerBatch(
                 eventId,
@@ -70,14 +71,19 @@ public final class LedgerPostingPolicy {
                 aggregateId,
                 reason,
                 List.of(
-                        new LedgerEntry(debitAccount, debitDirection, normalized, "KRW", occurredAt),
-                        new LedgerEntry(creditAccount, creditDirection, normalized, "KRW", occurredAt)
+                        new LedgerEntry(debitAccount, debitDirection, normalized, unit, occurredAt),
+                        new LedgerEntry(creditAccount, creditDirection, normalized, unit, occurredAt)
                 )
         );
     }
 
-    private static String fingerprint(String aggregateId, String reason, BigDecimal amount) {
-        String canonical = aggregateId + "|" + reason + "|" + amount.toPlainString() + "|KRW";
+    private static String fingerprint(
+            String aggregateId,
+            String reason,
+            BigDecimal amount,
+            String unit
+    ) {
+        String canonical = aggregateId + "|" + reason + "|" + amount.toPlainString() + "|" + unit;
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256")
                     .digest(canonical.getBytes(StandardCharsets.UTF_8));

@@ -1,13 +1,40 @@
 openapi: 3.1.0
 info:
   title: Pickup Pact API
-  version: 0.3.0
+  version: 0.4.0
   description: API contracts for pickup commitments, financial postings, and deterministic reconciliation.
 
 paths:
+  /api/v1/commitments/quotes:
+    post:
+      summary: Compute preparation workload on the server and return signed pickup-slot choices
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [storeId, items]
+              properties:
+                storeId: {type: string, minLength: 1}
+                items:
+                  type: array
+                  minItems: 1
+                  maxItems: 20
+                  items: {$ref: "#/components/schemas/PickupItem"}
+                from: {type: [string, "null"], format: date-time}
+                count: {type: integer, minimum: 1, maximum: 12, default: 6}
+      responses:
+        "200":
+          description: Signed quote and feasible pickup slots
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/PickupQuote"}
+        "400": {description: Invalid or unknown menu item}
+
   /api/v1/commitments/slots:
     get:
-      summary: List five-minute pickup slots from the live capacity ledger before a customer places an order
+      summary: Diagnostic low-level slot availability query; customer admission uses POST /quotes
       parameters:
         - in: query
           name: storeId
@@ -39,17 +66,21 @@ paths:
   /api/v1/commitments/hold:
     post:
       summary: Lease preparation capacity and create a HELD pickup commitment
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema: {type: string, minLength: 1}
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [storeId, pickupAt, units]
+              required: [quoteToken, pickupAt]
               properties:
-                storeId: {type: string, minLength: 1}
+                quoteToken: {type: string, minLength: 1}
                 pickupAt: {type: string, format: date-time}
-                units: {type: integer, minimum: 1}
       responses:
         "200": {description: Held commitment}
         "400": {description: Invalid request}
@@ -92,6 +123,36 @@ paths:
         "200": {description: Confirmed commitment}
         "404": {description: Commitment not found}
         "409": {description: Missing payment authorization or invalid state}
+
+  /api/v1/commitments/{id}/reschedule:
+    post:
+      summary: Reserve a new feasible slot and version the existing Pickup Pact after customer acceptance
+      parameters:
+        - $ref: "#/components/parameters/CommitmentId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [pickupAt]
+              properties:
+                pickupAt: {type: string, format: date-time}
+      responses:
+        "200": {description: Pickup slot and Pact version updated}
+        "400": {description: Invalid pickup time}
+        "404": {description: Commitment not found}
+        "409": {description: Invalid commitment or Pact state}
+
+  /api/v1/commitments/{id}/breach-pact:
+    post:
+      summary: Record a Pickup Pact breach; outbox relay derives the idempotent reward posting
+      parameters:
+        - $ref: "#/components/parameters/CommitmentId"
+      responses:
+        "200": {description: Pact breach persisted and compensation scheduled}
+        "404": {description: Commitment not found}
+        "409": {description: No active Pact, guarantee deadline not reached, or compensation already granted}
 
   /api/v1/commitments/{id}/claim-pickup:
     post:
@@ -142,7 +203,14 @@ paths:
           name: limit
           schema: {type: integer, minimum: 1, maximum: 100, default: 50}
       responses:
-        "200": {description: Ledger batch history}
+        "200":
+          description: Ledger batch history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LedgerBatchSummary"
 
   /api/v1/ledger/conflicts:
     get:
@@ -200,6 +268,26 @@ components:
       schema: {type: string, format: uuid}
 
   schemas:
+    PickupItem:
+      type: object
+      required: [sku, quantity]
+      properties:
+        sku: {type: string, minLength: 1}
+        quantity: {type: integer, minimum: 1, maximum: 20}
+
+    PickupQuote:
+      type: object
+      required: [quoteToken, storeId, units, totalAmount, expiresAt, slots]
+      properties:
+        quoteToken: {type: string}
+        storeId: {type: string}
+        units: {type: integer, minimum: 1}
+        totalAmount: {type: integer, minimum: 1}
+        expiresAt: {type: string, format: date-time}
+        slots:
+          type: array
+          items: {$ref: "#/components/schemas/PickupSlotOption"}
+
     PickupSlotOption:
       type: object
       required: [pickupAt, capacityUnits, reservedUnits, availableUnits, requestedUnits, canFit]
@@ -210,6 +298,21 @@ components:
         availableUnits: {type: integer, minimum: 0}
         requestedUnits: {type: integer, minimum: 1}
         canFit: {type: boolean}
+
+    LedgerBatchSummary:
+      type: object
+      required: [eventId, aggregateId, reason, amount, unit, createdAt]
+      properties:
+        eventId: {type: string}
+        aggregateId: {type: string}
+        reason:
+          type: string
+          enum: [SETTLEMENT, REVERSE_SETTLEMENT, REWARD, REVERSE_REWARD]
+        amount: {type: number, exclusiveMinimum: 0}
+        unit:
+          type: string
+          enum: [KRW, PTS]
+        createdAt: {type: string, format: date-time}
 
     LedgerPostingRequest:
       type: object

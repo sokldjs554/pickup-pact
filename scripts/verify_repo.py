@@ -21,6 +21,9 @@ required = [
     "contracts/asyncapi.yaml",
     "services/commitment-service/src/main/kotlin/io/pickuppact/commitment/domain/PickupCommitment.kt",
     "services/commitment-service/src/main/kotlin/io/pickuppact/commitment/domain/PickupPact.kt",
+    "services/commitment-service/src/main/kotlin/io/pickuppact/commitment/domain/MenuWorkloadPolicy.kt",
+    "services/commitment-service/src/main/kotlin/io/pickuppact/commitment/application/QuoteTokenService.kt",
+    "services/commitment-service/src/main/kotlin/io/pickuppact/commitment/application/StoreCapacityPolicy.kt",
     "services/ledger-service/src/main/java/io/pickuppact/ledger/domain/LedgerBatch.java",
     "services/reconciler/app/main.py",
     "services/reconciler/app/engine.py",
@@ -96,6 +99,9 @@ demo_dockerfile = (ROOT / "Dockerfile.demo").read_text()
 
 assert "paymentAuthorized" not in openapi, "hold contract must not let a caller self-authorize payment"
 assert "/api/v1/commitments/{id}/authorize-payment" in openapi
+assert "/api/v1/commitments/quotes" in openapi
+assert "Idempotency-Key" in openapi
+assert "quoteToken" in openapi
 assert "/api/v1/commitments/slots" in openapi
 assert "/api/v1/commitments/{id}/claim-pickup" in openapi
 assert "/api/v1/ledger/postings" in openapi
@@ -107,16 +113,27 @@ assert "/api/v1/projections/{aggregateId}" in openapi
 assert "commitment_projection" in schema and "commitment_projection" in persistence
 assert "ledger_conflicts" in schema
 assert "idx_pickup_commitments_store_schedule" in schema
+assert "uq_pickup_commitments_idempotency" in schema
+assert "pact_promised_at" in schema and "pact_status" in schema
+assert "order_amount" in schema
 assert "required: [eventId, aggregateId, type, amount]" in asyncapi
 assert "PickupPactIssued" in openapi and "PickupPactIssued" in asyncapi
 assert "PickupPactRenegotiated" in openapi and "PickupPactRenegotiated" in asyncapi
 assert "PickupPactBreached" in openapi and "PickupPactBreached" in asyncapi
+assert "/api/v1/commitments/{id}/reschedule" in openapi
+assert "/api/v1/commitments/{id}/breach-pact" in openapi
 assert "reconciliation_run" in schema and "reconciliation_run" in persistence
 assert "outbox_events" in explain and "outbox_event\n" not in explain
+assert "event_sequence" in schema
+outbox_relay = (ROOT / "services/commitment-service/src/main/kotlin/io/pickuppact/commitment/infra/OutboxRelay.kt").read_text()
+assert "pickup.financial.events.v1" in outbox_relay
+assert "PickupPactBreached" in outbox_relay
+assert "order by event_sequence" in outbox_relay
 assert "financial_event_receipt" not in architecture
 assert "financial_event_receipt" not in domain_model
 assert "OutboxPublisher" not in architecture
 assert "services.reconciler.app.engine" in demo
+assert "/pickup-quote" in demo and "line_items" in demo
 reconciler_main = (ROOT / "services/reconciler/app/main.py").read_text()
 reconciler_k8s = (ROOT / "infra/k8s/reconciler.yaml").read_text()
 assert '@app.get("/ready")' in reconciler_main

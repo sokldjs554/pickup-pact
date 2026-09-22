@@ -13,6 +13,11 @@ data class CapacityAvailability(
         get() = (capacityUnits - reservedUnits).coerceAtLeast(0)
 }
 
+data class PendingDomainEvent(
+    val eventType: String,
+    val payload: Map<String, Any>
+)
+
 interface CapacityLeasePort {
     fun acquire(storeId: String, pickupAt: Instant, units: Int, ttlSeconds: Long): Mono<String>
 
@@ -28,10 +33,17 @@ interface CapacityLeasePort {
 interface CommitmentRepository {
     fun save(commitment: PickupCommitment): Mono<PickupCommitment>
     fun find(id: UUID): Mono<PickupCommitment>
+    fun findByIdempotencyKey(idempotencyKey: String): Mono<PickupCommitment>
+
+    fun saveWithEvents(
+        commitment: PickupCommitment,
+        events: List<PendingDomainEvent>
+    ): Mono<PickupCommitment>
 
     fun saveWithEvent(
         commitment: PickupCommitment,
         eventType: String,
         payload: Map<String, Any>
-    ): Mono<PickupCommitment> = save(commitment)
+    ): Mono<PickupCommitment> =
+        saveWithEvents(commitment, listOf(PendingDomainEvent(eventType, payload)))
 }

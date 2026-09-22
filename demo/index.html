@@ -604,6 +604,10 @@ function cartItemSummary(){
   return cart.map(item=>item.name+(item.qty>1?" "+item.qty+"개":"")).join(", ");
 }
 
+function cartLineItems(){
+  return cart.map(item=>({sku:item.id,quantity:item.qty}));
+}
+
 function cartCapacityUnits(){
   return cart.reduce((sum,item)=>sum+(Number(item.capacityUnits||1)*item.qty),0);
 }
@@ -648,12 +652,13 @@ async function refreshPickupSlots(){
     return;
   }
   const requestSeq=++pickupSlotRequestSeq;
-  const units=cartCapacityUnits();
   pickupSlots=[];
   renderPickupSlots();
-  const slots=await api("/api/demo/catalog/"+store.id+"/pickup-slots?units="+units);
+  const quote=await api("/api/demo/catalog/"+store.id+"/pickup-quote","POST",{
+    line_items:cartLineItems()
+  });
   if(requestSeq!==pickupSlotRequestSeq)return;
-  pickupSlots=slots;
+  pickupSlots=quote.slots;
   if(selectedPickupAt && !slots.some(slot=>slot.pickup_at===selectedPickupAt && slot.can_fit)){
     selectedPickupAt=null;
   }
@@ -816,12 +821,13 @@ async function placeCustomerOrder(){
     await waitForSession();
     state=await api("/api/demo/sessions/"+sessionId+"/reset","POST",{});
     if(!selectedPickupAt)throw new Error("원하는 픽업 시간을 선택해주세요.");
-    const items=cartItemSummary();
-    const total=cartTotalValue();
-    const units=cartCapacityUnits();
+    const lineItems=cartLineItems();
     const pickupAt=selectedPickupAt;
     let result=await api("/api/demo/sessions/"+sessionId+"/orders","POST",{
-      store:store.name,store_id:store.id,items,total,pickup_at:pickupAt,units
+      store:store.name,
+      store_id:store.id,
+      line_items:lineItems,
+      pickup_at:pickupAt
     });
     state=result.state;
     result=await api("/api/demo/sessions/"+sessionId+"/payment","POST",{authorization_id:"customer-demo"});
@@ -841,7 +847,8 @@ async function placeCustomerOrder(){
     if(promiseTimer)clearTimeout(promiseTimer);
     if(pactTimer)clearTimeout(pactTimer);
     setTimeout(()=>{if(state?.order?.status==="CONFIRMED"){customerOrderStage="preparing";renderCustomerOrder();}},450);
-    if(units>=2){
+    const orderUnits=Number(state?.order?.units||1);
+    if(orderUnits>=2){
       promiseTimer=setTimeout(()=>triggerPickupPromiseProtection(),900);
     }else{
       orderReadyTimer=setTimeout(()=>{if(state?.order?.status==="CONFIRMED"){customerOrderStage="ready";renderCustomerOrder();}},1400);
