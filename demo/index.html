@@ -197,6 +197,9 @@ body:not(.expert-mode) .health{display:none}
 .promise-benefit{display:flex;align-items:center;gap:14px;background:linear-gradient(135deg,#fff7ed,#fff);border:1px solid #fed7aa;border-radius:18px;padding:18px 20px}.promise-benefit-icon{width:42px;height:42px;border-radius:14px;background:#fff;border:1px solid #fed7aa;display:grid;place-items:center;font-size:18px;flex:0 0 auto}.promise-benefit b{display:block;font-size:13px;margin-bottom:4px}.promise-benefit span{font-size:10px;line-height:1.5;color:#667085}
 .pickup-promise-card{background:#fff;border:1px solid #d1fadf;border-radius:18px;padding:18px;display:grid;gap:10px}.pickup-promise-card.warning{background:#fffaeb;border-color:#fedf89}.pickup-promise-card.rescheduled{background:#f0fdf4;border-color:#abefc6}.pickup-promise-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}.pickup-promise-head span{font-size:9px;font-weight:900;color:#667085;letter-spacing:.06em}.pickup-promise-head b{font-size:12px}.pickup-promise-time{font-size:21px;font-weight:950;letter-spacing:-.03em}.pickup-promise-copy{font-size:11px;color:#667085;line-height:1.55}.pickup-promise-actions{display:flex;gap:8px;flex-wrap:wrap}.pickup-promise-actions button{border:1px solid #d0d5dd;background:#fff;border-radius:10px;padding:9px 11px;font-size:10px;font-weight:850;cursor:pointer}.pickup-promise-actions .accept{background:#101828;border-color:#101828;color:#fff}
 .order-status-card.promise{border-color:#fedf89;background:#fffcf5}.order-status-card.promise .order-status-icon{background:#fffaeb;color:#b54708}
+.history-list{display:grid;gap:10px}.history-card{background:#fff;border:1px solid #eaecf0;border-radius:18px;padding:17px;display:grid;grid-template-columns:1fr auto;gap:14px;align-items:center}.history-card h3{font-size:13px;margin:0 0 5px}.history-card p{font-size:10px;color:#667085;margin:0 0 7px}.history-meta{display:flex;gap:7px;flex-wrap:wrap;font-size:9px;color:#98a2b3}.history-status{font-size:9px;font-weight:900;padding:5px 8px;border-radius:999px;background:#ecfdf3;color:#067647}.history-status.cancelled{background:#f2f4f7;color:#475467}.history-actions{display:flex;gap:7px;align-items:center}.history-actions button{border:1px solid #d0d5dd;background:#fff;border-radius:10px;padding:9px 10px;font-size:10px;font-weight:850;cursor:pointer}
+.pickup-code-card{background:#101828;color:#fff;border-radius:18px;padding:19px;display:grid;gap:9px}.pickup-code-card .micro{color:#98a2b3}.pickup-code-value{font-size:34px;font-weight:950;letter-spacing:.18em}.pickup-code-card p{font-size:10px;color:#d0d5dd;line-height:1.5;margin:0}.pickup-code-card button{justify-self:start;border:1px solid #475467;background:#fff;color:#101828;border-radius:10px;padding:9px 11px;font-size:10px;font-weight:900;cursor:pointer}
+.receipt-sheet{width:min(430px,100%);max-height:88vh;overflow:auto}.receipt-brand{text-align:center;padding:5px 0 15px}.receipt-brand b{display:block;font-size:16px}.receipt-brand span{font-size:9px;color:#98a2b3;letter-spacing:.08em}.receipt-status{text-align:center;border-radius:14px;padding:13px;background:#f0fdf4;color:#067647;font-size:12px;font-weight:900}.receipt-status.cancelled{background:#f2f4f7;color:#475467}.receipt-kv{display:grid;margin-top:14px}.receipt-row{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid #f2f4f7;font-size:10px}.receipt-row span{color:#667085}.receipt-row b{text-align:right}.receipt-total{font-size:14px!important;font-weight:950}.receipt-timeline{display:grid;gap:0;margin-top:16px}.receipt-event{display:grid;grid-template-columns:56px 1fr;gap:10px;padding:9px 0;border-bottom:1px solid #f2f4f7}.receipt-event time{font-size:9px;color:#98a2b3}.receipt-event b{display:block;font-size:10px;margin-bottom:2px}.receipt-event span{font-size:9px;color:#667085;line-height:1.4}.receipt-privacy{margin-top:14px;padding:11px;border-radius:12px;background:#f8fafc;font-size:9px;line-height:1.5;color:#667085}
 .dev-entry-note{display:none}
 body.expert-mode .customer-pill{display:none}
 @media(max-width:900px){.store-grid{grid-template-columns:1fr}.menu-grid{grid-template-columns:1fr}.customer-note{display:none}}
@@ -241,6 +244,7 @@ body.expert-mode .app{display:block}body.expert-mode .sidebar{position:relative;
         <nav class="product-tabs" aria-label="제품 메뉴">
           <button class="active" data-product-page="overview" type="button" onclick="goProductPage('overview')">홈</button>
           <button data-product-page="guided" type="button" onclick="goProductPage('guided')">내 주문</button>
+          <button data-product-page="history" type="button" onclick="goProductPage('history')">주문 내역</button>
         </nav>
       </div>
       <h1 class="expert-page-title" id="pageTitle">주문 흐름</h1>
@@ -290,7 +294,7 @@ body.expert-mode .app{display:block}body.expert-mode .sidebar{position:relative;
             <div class="promise-benefit-icon">⏱</div>
             <div><b>픽업 시간이 바뀌면 먼저 알려드려요.</b><span>매장이 갑자기 바빠져도 그냥 기다리게 두지 않고, 새 픽업 시간을 바로 보여드려요.</span></div>
           </div>
-          <div class="product-footnote">실제 결제는 일어나지 않아요. 메뉴 담기부터 주문·취소까지 직접 눌러볼 수 있어요.</div>
+          <div class="product-footnote">실제 결제는 일어나지 않아요. 메뉴 담기부터 픽업 코드·주문 내역·취소 영수증까지 직접 눌러볼 수 있어요.</div>
         </div>
 
         <button class="cart-bar" id="cartBar" type="button" onclick="openCart()">
@@ -333,6 +337,22 @@ body.expert-mode .app{display:block}body.expert-mode .sidebar{position:relative;
               <button type="button" onclick="closeCancelDialog()">계속 주문하기</button>
               <button class="confirm-cancel" type="button" onclick="cancelCustomerOrder()">주문 취소</button>
             </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="page" id="page-history">
+        <div class="order-page">
+          <div class="order-page-head">
+            <div><h2>주문 내역</h2><p>완료한 주문과 취소한 주문을 다시 볼 수 있어요.</p></div>
+            <button class="customer-action" type="button" onclick="goProductPage('overview')">메뉴 보기</button>
+          </div>
+          <div class="history-list" id="customerHistoryList"></div>
+        </div>
+        <div class="sheet-backdrop" id="receiptBackdrop" onclick="closeReceiptFromBackdrop(event)">
+          <div class="cart-sheet receipt-sheet" role="dialog" aria-modal="true" aria-label="모바일 영수증">
+            <div class="cart-sheet-head"><h3>모바일 영수증</h3><button class="sheet-close" type="button" onclick="closeReceipt()" aria-label="영수증 닫기">×</button></div>
+            <div id="receiptContent"></div>
           </div>
         </div>
       </section>
@@ -471,7 +491,7 @@ let promiseTimer=null;
 const $=id=>document.getElementById(id);
 
 const pageNames={
-  overview:"홈",guided:"내 주문",orders:"주문 흐름",capacity:"매장 처리량",
+  overview:"홈",guided:"내 주문",history:"주문 내역",orders:"주문 흐름",capacity:"매장 처리량",
   faults:"장애 주입",reconcile:"정합성 복구",ledger:"정산 · 감사"
 };
 
@@ -809,7 +829,7 @@ async function cancelCustomerOrder(){
 async function startNewCustomerOrder(){
   try{
     await waitForSession();
-    state=await api("/api/demo/sessions/"+sessionId+"/reset","POST",{});
+    state=await api("/api/demo/sessions/"+sessionId+"/customer/next-order","POST",{});
     customerOrderStage="none";
     cart=[];
     if(orderReadyTimer)clearTimeout(orderReadyTimer);
@@ -1016,6 +1036,61 @@ function humanStatus(status){
   return ({HELD:"주문 접수",CONFIRMED:"픽업 확정",CANCELLED:"주문 취소",AT_RISK:"확인 필요"})[status]||status;
 }
 
+function renderCustomerHistory(){
+  const el=$("customerHistoryList");
+  if(!el)return;
+  const history=state?.customer_history||[];
+  if(!history.length){
+    el.innerHTML='<div class="customer-empty"><div class="order-status-icon" style="margin:0 auto">🧾</div><h3>아직 지난 주문이 없어요.</h3><p>픽업을 완료하거나 주문을 취소하면 여기에 남아요.</p></div>';
+    return;
+  }
+  el.innerHTML=history.map(item=>{
+    const cancelled=item.status==="CANCELLED";
+    return '<div class="history-card"><div><h3>'+item.store+'</h3><p>'+item.items+'</p><div class="history-meta"><span>'+item.pickup_at+' 픽업</span><span>'+money(item.total)+'원</span><span>'+item.order_id+'</span></div></div><div class="history-actions"><span class="history-status '+(cancelled?"cancelled":"")+'">'+(cancelled?"취소":"픽업 완료")+'</span><button type="button" onclick="openReceipt(\''+item.order_id+'\')">영수증 보기</button></div></div>';
+  }).join("");
+}
+
+async function openReceipt(orderId){
+  try{
+    await waitForSession();
+    const receipt=await api("/api/demo/sessions/"+sessionId+"/customer/receipts/"+encodeURIComponent(orderId));
+    const cancelled=receipt.status==="CANCELLED";
+    const timeline=(receipt.timeline||[]).map(item=>
+      '<div class="receipt-event"><time>'+String(item.at||"").slice(11,16)+'</time><div><b>'+item.label+'</b><span>'+item.detail+'</span></div></div>'
+    ).join("");
+    $("receiptContent").innerHTML=
+      '<div class="receipt-brand"><b>Pickup Pact</b><span>TRUST RECEIPT</span></div>'+
+      '<div class="receipt-status '+(cancelled?"cancelled":"")+'">'+(cancelled?"취소 완료":"픽업 완료")+'</div>'+
+      '<div class="receipt-kv">'+
+        '<div class="receipt-row"><span>매장</span><b>'+receipt.store+'</b></div>'+
+        '<div class="receipt-row"><span>메뉴</span><b>'+receipt.items+'</b></div>'+
+        '<div class="receipt-row"><span>주문번호</span><b>'+receipt.order_id+'</b></div>'+
+        '<div class="receipt-row"><span>픽업 시간</span><b>'+receipt.pickup_at+'</b></div>'+
+        '<div class="receipt-row"><span>주문 금액</span><b>'+money(receipt.total)+'원</b></div>'+
+        '<div class="receipt-row receipt-total"><span>최종 청구</span><b>'+money(receipt.final_charge)+'원</b></div>'+
+        '<div class="receipt-row"><span>포인트</span><b>'+money(receipt.reward_balance)+'P</b></div>'+
+      '</div>'+
+      '<div class="receipt-timeline">'+timeline+'</div>'+
+      '<div class="receipt-privacy">이 영수증에는 이름·전화번호를 표시하지 않아요. 수령 확인은 주문별 1회용 픽업 코드로 처리해요.</div>';
+    $("receiptBackdrop").classList.add("show");
+  }catch(e){toast(e.message,true)}
+}
+function closeReceipt(){$("receiptBackdrop")?.classList.remove("show")}
+function closeReceiptFromBackdrop(event){if(event.target===$("receiptBackdrop"))closeReceipt()}
+
+async function claimCustomerPickup(){
+  try{
+    const code=state?.order?.pickup_code;
+    if(!code)throw new Error("픽업 코드가 아직 없어요.");
+    const result=await api("/api/demo/sessions/"+sessionId+"/pickup/claim","POST",{pickup_code:code});
+    state=result.state;
+    customerOrderStage="pickedup";
+    if(orderReadyTimer)clearTimeout(orderReadyTimer);
+    renderAll();
+    toast("픽업 완료됐어요.");
+  }catch(e){toast(e.message,true)}
+}
+
 function renderCustomerOrder(){
   const view=$("customerOrderView");
   if(!view)return;
@@ -1024,31 +1099,23 @@ function renderCustomerOrder(){
     view.innerHTML='<div class="customer-empty"><div class="order-status-icon" style="margin:0 auto">☕</div><h3>아직 주문이 없어요.</h3><p>메뉴를 골라 주문하면 여기에서 준비 상태를 볼 수 있어요.</p><button class="customer-action primary" type="button" onclick="goProductPage(\'overview\')">메뉴 보러가기</button></div>';
     return;
   }
-
   const o=state.order;
   const protection=state.pickup_protection||{status:"NONE"};
+  const pickedUp=o.status==="PICKED_UP"||customerOrderStage==="pickedup";
   const promiseWaiting=protection.status==="SUGGESTED"||o.status==="AT_RISK";
   const rescheduled=protection.status==="RESCHEDULED";
   const cancelled=o.status==="CANCELLED"||customerOrderStage==="cancelled";
-  const stage=cancelled?"cancelled":promiseWaiting?"promise":customerOrderStage==="ready"?"ready":customerOrderStage==="preparing"?"preparing":"received";
+  const stage=cancelled?"cancelled":pickedUp?"pickedup":promiseWaiting?"promise":customerOrderStage==="ready"?"ready":customerOrderStage==="preparing"?"preparing":"received";
   view.dataset.stage=stage;
 
-  const statusTitle=cancelled?"주문이 취소됐어요.":stage==="promise"?"픽업 시간이 조금 늦어져요.":stage==="ready"?"픽업 준비됐어요.":stage==="preparing"?"음료를 만들고 있어요.":"주문됐어요.";
-  const statusText=cancelled
-    ? money(o.total)+"원 결제 취소와 포인트 정리가 끝났어요."
-    : stage==="promise"
-    ? "매장이 조금 바빠졌어요. 새 시간을 확인해주세요."
-    : stage==="ready"
-    ? "매장에서 주문번호를 보여주고 받아가세요."
-    : stage==="preparing"
-    ? "조금만 기다려주세요. 준비되면 바로 알려드릴게요."
-    : "매장에서 주문을 확인했어요.";
-  const icon=cancelled||stage==="ready"?"✓":stage==="promise"?"!":stage==="preparing"?"…":"✓";
+  const statusTitle=cancelled?"주문이 취소됐어요.":pickedUp?"픽업 완료됐어요.":stage==="promise"?"픽업 시간이 조금 늦어져요.":stage==="ready"?"픽업 준비됐어요.":stage==="preparing"?"음료를 만들고 있어요.":"주문됐어요.";
+  const statusText=cancelled?money(o.total)+"원 결제 취소와 포인트 정리가 끝났어요.":pickedUp?"수령 확인이 끝났어요. 모바일 영수증도 확인할 수 있어요.":stage==="promise"?"매장이 조금 바빠졌어요. 새 시간을 확인해주세요.":stage==="ready"?"아래 픽업 코드를 매장 직원에게 보여주세요.":stage==="preparing"?"조금만 기다려주세요. 준비되면 바로 알려드릴게요.":"매장에서 주문을 확인했어요.";
+  const icon=cancelled||stage==="ready"||pickedUp?"✓":stage==="promise"?"!":stage==="preparing"?"…":"✓";
   const orderNo=(o.order_id||"PP-0000").split("-").slice(-1)[0];
-  const progress=cancelled?"":'<div class="order-progress"><div class="order-progress-step done">주문 접수</div><div class="order-progress-step '+(stage==="preparing"||stage==="promise"||stage==="ready"?"done":"current")+'">준비 중</div><div class="order-progress-step '+(stage==="ready"?"current":"")+'">픽업 준비</div></div>';
+  const progress=cancelled||pickedUp?"":'<div class="order-progress"><div class="order-progress-step done">주문 접수</div><div class="order-progress-step '+(stage==="preparing"||stage==="promise"||stage==="ready"?"done":"current")+'">준비 중</div><div class="order-progress-step '+(stage==="ready"?"current":"")+'">픽업 준비</div></div>';
 
   let promiseCard="";
-  if(!cancelled){
+  if(!cancelled&&!pickedUp){
     if(promiseWaiting){
       const original=protection.original_pickup_at||o.pickup_at;
       const suggested=protection.suggested_pickup_at||o.pickup_at;
@@ -1059,10 +1126,11 @@ function renderCustomerOrder(){
       promiseCard='<div class="pickup-promise-card"><div class="pickup-promise-head"><span>픽업 약속</span><b>예정대로</b></div><div class="pickup-promise-time">'+o.pickup_at+' 픽업</div><div class="pickup-promise-copy">지금은 예정대로 준비 중이에요. 시간이 바뀌면 먼저 알려드릴게요.</div></div>';
     }
   }
+  const pickupCodeCard=stage==="ready"?'<div class="pickup-code-card"><div class="micro">ONE-TIME PICKUP CODE</div><div class="pickup-code-value">'+(o.pickup_code||"----")+'</div><p>전화번호나 이름 대신 이 번호로 확인해요. 한 번 수령하면 다시 쓸 수 없어요.</p><button type="button" onclick="claimCustomerPickup()">수령 완료 체험</button></div>':"";
 
   view.innerHTML=
     '<div class="order-status-card '+(cancelled?"cancelled":stage==="promise"?"promise":"")+'"><div class="order-status-icon">'+icon+'</div><h3>'+statusTitle+'</h3><p>'+statusText+'</p>'+progress+'</div>'+
-    promiseCard+
+    promiseCard+pickupCodeCard+
     '<div class="order-detail-card"><h3>주문 정보</h3>'+
       '<div class="order-detail-row"><span>매장</span><b>'+o.store+'</b></div>'+
       '<div class="order-detail-row"><span>메뉴</span><b>'+o.items+'</b></div>'+
@@ -1071,7 +1139,7 @@ function renderCustomerOrder(){
       '<div class="order-detail-row"><span>주문번호</span><b>'+orderNo+'</b></div>'+
     '</div>'+
     '<div class="order-actions">'+
-      (cancelled?'<button class="customer-action primary" type="button" onclick="startNewCustomerOrder()">다시 주문하기</button>':promiseWaiting?'':'<button class="customer-action danger" type="button" onclick="openCancelDialog()">주문 취소</button>')+
+      (cancelled||pickedUp?'<button class="customer-action primary" type="button" onclick="openReceipt(\''+o.order_id+'\')">영수증 보기</button><button class="customer-action" type="button" onclick="goProductPage(\'history\')">주문 내역</button><button class="customer-action" type="button" onclick="startNewCustomerOrder()">다시 주문하기</button>':promiseWaiting?'':'<button class="customer-action danger" type="button" onclick="openCancelDialog()">주문 취소</button>')+
     '</div>';
 }
 
@@ -1079,6 +1147,7 @@ function renderAll(){
   if(!state)return;
   renderCustomerHome();
   renderCustomerOrder();
+  renderCustomerHistory();
   renderCart();
   $("mOrder").textContent=state.order?humanStatus(state.order.status):"-";
   $("mOrderSub").textContent=state.order?state.order.order_id:"주문 없음";
