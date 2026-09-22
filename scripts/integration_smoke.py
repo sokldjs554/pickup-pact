@@ -458,6 +458,25 @@ def pact_financial_flow(pass_no: int) -> None:
     )
     assert confirmed["pact"]["status"] == "ACTIVE", confirmed
 
+    early_breach = httpx.post(
+        f"{COMMITMENT}/api/v1/commitments/{commitment_id}/breach-pact",
+        timeout=15,
+    )
+    assert early_breach.status_code == 409, early_breach.text
+
+    with postgres_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                update pickup_commitments
+                set pact_promised_at = now() - interval '10 minutes',
+                    pact_latest_at = now() - interval '5 minutes'
+                where id = %s::uuid
+                """,
+                (commitment_id,),
+            )
+        connection.commit()
+
     breached = expect(
         httpx.post(f"{COMMITMENT}/api/v1/commitments/{commitment_id}/breach-pact", timeout=15),
         200,
