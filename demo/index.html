@@ -659,7 +659,7 @@ async function refreshPickupSlots(){
   });
   if(requestSeq!==pickupSlotRequestSeq)return;
   pickupSlots=quote.slots;
-  if(selectedPickupAt && !slots.some(slot=>slot.pickup_at===selectedPickupAt && slot.can_fit)){
+  if(selectedPickupAt && !pickupSlots.some(slot=>slot.pickup_at===selectedPickupAt && slot.can_fit)){
     selectedPickupAt=null;
   }
   renderPickupSlots();
