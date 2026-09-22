@@ -79,6 +79,9 @@ EVENT_LABELS = {
     "RewardGranted": "고객 포인트 적립",
     "CapacityRevised": "매장 처리량 변경",
     "PickupRescheduled": "픽업 시간 변경",
+    "PickupPactIssued": "픽업 보장 발급",
+    "PickupPactRenegotiated": "픽업 보장 재합의",
+    "PickupPactBreached": "픽업 보장 위반",
     "PickupClaimed": "픽업 완료",
     "SettlementReversed": "정산 취소 분개",
     "RewardReversed": "포인트 회수",
@@ -665,6 +668,14 @@ def accept_demo_pickup_reschedule(
 ) -> dict[str, Any]:
     try:
         return demo_store.accept_pickup_reschedule(session_id, request.pickup_at)
+    except (KeyError, ValueError) as exc:
+        raise _demo_error(exc) from exc
+
+
+@app.post("/api/demo/sessions/{session_id}/pickup/pact/breach")
+def breach_demo_pickup_pact(session_id: str) -> dict[str, Any]:
+    try:
+        return demo_store.breach_pickup_pact(session_id)
     except (KeyError, ValueError) as exc:
         raise _demo_error(exc) from exc
 
