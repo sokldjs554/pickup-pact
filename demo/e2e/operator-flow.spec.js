@@ -39,11 +39,20 @@ test('virtual customer can browse, add to cart, order, track, and cancel', async
 
   await expect(page.locator('#customerOrderView')).toHaveAttribute('data-stage', 'promise', { timeout: 10000 });
   await expect(page.locator('#customerOrderView')).toContainText('픽업 시간이 조금 늦어져요.');
-  await expect(page.locator('#customerOrderView')).toContainText('12:30 → 12:35');
-  await expect(page.getByRole('button', { name: '12:35 괜찮아요', exact: true })).toBeVisible();
+  const promiseCard=page.locator('.pickup-promise-card.warning');
+  const originalPickup=await promiseCard.getAttribute('data-original-pickup');
+  const suggestedPickup=await promiseCard.getAttribute('data-suggested-pickup');
+  expect(originalPickup).toMatch(/^\\d{2}:\\d{2}$/);
+  expect(suggestedPickup).toMatch(/^\\d{2}:\\d{2}$/);
+  const toMinutes=value => {
+    const [h,m]=value.split(':').map(Number);
+    return h*60+m;
+  };
+  expect((toMinutes(suggestedPickup)-toMinutes(originalPickup)+1440)%1440).toBe(5);
+  await expect(page.getByRole('button', { name: /괜찮아요$/ })).toBeVisible();
 
-  await page.getByRole('button', { name: '12:35 괜찮아요', exact: true }).click();
-  await expect(page.locator('#customerOrderView')).toContainText('12:35 픽업');
+  await page.getByRole('button', { name: /괜찮아요$/ }).click();
+  await expect(page.locator('#customerOrderView')).toContainText(suggestedPickup+' 픽업');
   await expect(page.locator('#customerOrderView')).toHaveAttribute('data-stage', 'ready', { timeout: 8000 });
   await expect(page.locator('#customerOrderView')).toContainText('픽업 준비됐어요.');
 
