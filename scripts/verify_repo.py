@@ -21,6 +21,9 @@ required = [
     "contracts/asyncapi.yaml",
     "services/commitment-service/src/main/kotlin/io/pickuppact/commitment/domain/PickupCommitment.kt",
     "services/commitment-service/src/main/kotlin/io/pickuppact/commitment/domain/PickupPact.kt",
+    "services/commitment-service/src/main/kotlin/io/pickuppact/commitment/domain/MenuWorkloadPolicy.kt",
+    "services/commitment-service/src/main/kotlin/io/pickuppact/commitment/application/QuoteTokenService.kt",
+    "services/commitment-service/src/main/kotlin/io/pickuppact/commitment/application/StoreCapacityPolicy.kt",
     "services/ledger-service/src/main/java/io/pickuppact/ledger/domain/LedgerBatch.java",
     "services/reconciler/app/main.py",
     "services/reconciler/app/engine.py",
@@ -112,6 +115,7 @@ assert "ledger_conflicts" in schema
 assert "idx_pickup_commitments_store_schedule" in schema
 assert "uq_pickup_commitments_idempotency" in schema
 assert "pact_promised_at" in schema and "pact_status" in schema
+assert "order_amount" in schema
 assert "required: [eventId, aggregateId, type, amount]" in asyncapi
 assert "PickupPactIssued" in openapi and "PickupPactIssued" in asyncapi
 assert "PickupPactRenegotiated" in openapi and "PickupPactRenegotiated" in asyncapi
@@ -127,6 +131,7 @@ assert "financial_event_receipt" not in architecture
 assert "financial_event_receipt" not in domain_model
 assert "OutboxPublisher" not in architecture
 assert "services.reconciler.app.engine" in demo
+assert "/pickup-quote" in demo and "line_items" in demo
 reconciler_main = (ROOT / "services/reconciler/app/main.py").read_text()
 reconciler_k8s = (ROOT / "infra/k8s/reconciler.yaml").read_text()
 assert '@app.get("/ready")' in reconciler_main
