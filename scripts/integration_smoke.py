@@ -69,14 +69,21 @@ def expect(response: httpx.Response, status: int | set[int]) -> dict:
 
 def commitment_flow(pass_no: int) -> None:
     store_id = f"integration-store-{pass_no}"
-    slot_options = expect(
-        httpx.get(
-            f"{COMMITMENT}/api/v1/commitments/slots",
-            params={"storeId": store_id, "count": 3, "units": 2},
+    quote = expect(
+        httpx.post(
+            f"{COMMITMENT}/api/v1/commitments/quotes",
+            json={
+                "storeId": store_id,
+                "items": [{"sku": "cafe-latte", "quantity": 1}],
+                "count": 3,
+            },
             timeout=15,
         ),
         200,
     )
+    assert quote["storeId"] == store_id, quote
+    assert quote["units"] == 2, quote
+    slot_options = quote["slots"]
     assert len(slot_options) == 3, slot_options
     assert all(option["pickupAt"] for option in slot_options), slot_options
     assert all(option["canFit"] is True for option in slot_options), slot_options
@@ -85,20 +92,33 @@ def commitment_flow(pass_no: int) -> None:
     assert slot_options[0]["availableUnits"] == 40, slot_options
 
     pickup_at = slot_options[0]["pickupAt"]
+    idempotency_key = f"integration-hold-{pass_no}-{uuid.uuid4().hex[:8]}"
+    hold_payload = {
+        "quoteToken": quote["quoteToken"],
+        "pickupAt": pickup_at,
+    }
     held = expect(
         httpx.post(
             f"{COMMITMENT}/api/v1/commitments/hold",
-            json={
-                "storeId": store_id,
-                "pickupAt": pickup_at,
-                "units": 2,
-            },
+            headers={"Idempotency-Key": idempotency_key},
+            json=hold_payload,
             timeout=15,
         ),
         200,
     )
+    retry_hold = expect(
+        httpx.post(
+            f"{COMMITMENT}/api/v1/commitments/hold",
+            headers={"Idempotency-Key": idempotency_key},
+            json=hold_payload,
+            timeout=15,
+        ),
+        200,
+    )
+    assert retry_hold["id"] == held["id"], (held, retry_hold)
     assert held["state"] == "HELD", held
     assert held["paymentAuthorized"] is False, held
+    assert held["units"] == 2, held
     commitment_id = held["id"]
 
     token_parts = held["leaseToken"].split("|")
@@ -146,6 +166,9 @@ def commitment_flow(pass_no: int) -> None:
         200,
     )
     assert confirmed["state"] == "CONFIRMED", confirmed
+    assert confirmed["pact"]["status"] == "ACTIVE", confirmed
+    assert confirmed["pact"]["version"] == 1, confirmed
+    assert confirmed["pact"]["compensationPoints"] == 500, confirmed
 
     tracked = expect(
         httpx.get(
@@ -156,6 +179,7 @@ def commitment_flow(pass_no: int) -> None:
     )
     assert tracked["id"] == commitment_id, tracked
     assert tracked["state"] == "CONFIRMED", tracked
+    assert tracked["pact"]["status"] == "ACTIVE", tracked
 
     cancelled = expect(
         httpx.post(
@@ -165,6 +189,7 @@ def commitment_flow(pass_no: int) -> None:
         200,
     )
     assert cancelled["state"] == "CANCELLED", cancelled
+    assert cancelled["pact"]["status"] == "CANCELLED", cancelled
     assert redis_client.exists(slot_key) == 0, {
         "slot_key": slot_key,
         "cancelled": cancelled,
@@ -213,35 +238,40 @@ def commitment_flow(pass_no: int) -> None:
                     (commitment_id,),
                 )
                 published, total = cursor.fetchone()
-                return total == 4 and published == total
+                return total == 5 and published == total
 
     wait_until(
         outbox_published,
         timeout_s=30,
-        label="commitment outbox delivery to Kafka",
+        label="commitment and Pact outbox delivery to Kafka",
     )
-
 
 
 def capacity_concurrency_flow(pass_no: int) -> None:
     store_id = f"concurrency-store-{pass_no}"
-    slots = expect(
-        httpx.get(
-            f"{COMMITMENT}/api/v1/commitments/slots",
-            params={"storeId": store_id, "count": 1, "units": 2},
+    quote = expect(
+        httpx.post(
+            f"{COMMITMENT}/api/v1/commitments/quotes",
+            json={
+                "storeId": store_id,
+                "items": [{"sku": "cafe-latte", "quantity": 1}],
+                "count": 1,
+            },
             timeout=15,
         ),
         200,
     )
-    pickup_at = slots[0]["pickupAt"]
+    assert quote["units"] == 2, quote
+    pickup_at = quote["slots"][0]["pickupAt"]
+    quote_token = quote["quoteToken"]
 
     def hold_one(index: int) -> httpx.Response:
         return httpx.post(
             f"{COMMITMENT}/api/v1/commitments/hold",
+            headers={"Idempotency-Key": f"capacity-{pass_no}-{index}-{uuid.uuid4().hex[:8]}"},
             json={
-                "storeId": store_id,
+                "quoteToken": quote_token,
                 "pickupAt": pickup_at,
-                "units": 2,
             },
             timeout=20,
         )
@@ -298,6 +328,83 @@ def capacity_concurrency_flow(pass_no: int) -> None:
     assert released_slot["reservedUnits"] == 0, released_slot
     assert released_slot["availableUnits"] == 40, released_slot
 
+
+def pact_financial_flow(pass_no: int) -> None:
+    store_id = f"pact-financial-store-{pass_no}"
+    quote = expect(
+        httpx.post(
+            f"{COMMITMENT}/api/v1/commitments/quotes",
+            json={
+                "storeId": store_id,
+                "items": [{"sku": "americano", "quantity": 1}],
+                "count": 1,
+            },
+            timeout=15,
+        ),
+        200,
+    )
+    pickup_at = quote["slots"][0]["pickupAt"]
+    held = expect(
+        httpx.post(
+            f"{COMMITMENT}/api/v1/commitments/hold",
+            headers={"Idempotency-Key": f"pact-financial-{pass_no}-{uuid.uuid4().hex[:8]}"},
+            json={"quoteToken": quote["quoteToken"], "pickupAt": pickup_at},
+            timeout=15,
+        ),
+        200,
+    )
+    commitment_id = held["id"]
+    expect(
+        httpx.post(
+            f"{COMMITMENT}/api/v1/commitments/{commitment_id}/authorize-payment",
+            json={"authorizationId": f"auth-pact-{pass_no}"},
+            timeout=15,
+        ),
+        200,
+    )
+    confirmed = expect(
+        httpx.post(f"{COMMITMENT}/api/v1/commitments/{commitment_id}/confirm", timeout=15),
+        200,
+    )
+    assert confirmed["pact"]["status"] == "ACTIVE", confirmed
+
+    breached = expect(
+        httpx.post(f"{COMMITMENT}/api/v1/commitments/{commitment_id}/breach-pact", timeout=15),
+        200,
+    )
+    assert breached["pact"]["status"] == "COMPENSATED", breached
+    assert breached["pact"]["compensationGranted"] is True, breached
+
+    duplicate_breach = httpx.post(
+        f"{COMMITMENT}/api/v1/commitments/{commitment_id}/breach-pact",
+        timeout=15,
+    )
+    assert duplicate_breach.status_code == 409, duplicate_breach.text
+
+    def compensation_reaches_ledger():
+        response = httpx.get(
+            f"{LEDGER}/api/v1/ledger/orders/{commitment_id}?limit=10",
+            timeout=10,
+        )
+        return (
+            response.status_code == 200
+            and len(response.json()) == 1
+            and response.json()[0]["reason"] == "REWARD"
+            and response.json()[0]["eventId"].endswith("-pact-reward")
+        )
+
+    wait_until(
+        compensation_reaches_ledger,
+        timeout_s=30,
+        label="Pickup Pact breach compensation through outbox Kafka ledger",
+    )
+
+    claimed = expect(
+        httpx.post(f"{COMMITMENT}/api/v1/commitments/{commitment_id}/claim-pickup", timeout=15),
+        200,
+    )
+    assert claimed["state"] == "PICKED_UP", claimed
+    assert claimed["pact"]["status"] == "COMPENSATED", claimed
 
 
 def ledger_flow(pass_no: int) -> None:
@@ -597,6 +704,7 @@ def celery_flow(pass_no: int) -> None:
 def one_pass(pass_no: int) -> None:
     commitment_flow(pass_no)
     capacity_concurrency_flow(pass_no)
+    pact_financial_flow(pass_no)
     ledger_flow(pass_no)
     kafka_ledger_flow(pass_no)
     reconciler_flow(pass_no)
