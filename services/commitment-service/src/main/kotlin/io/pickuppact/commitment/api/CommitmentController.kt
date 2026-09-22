@@ -44,6 +44,9 @@ class CommitmentController(private val service: CommitmentService) {
     @PostMapping("/{id}/confirm")
     fun confirm(@PathVariable id: UUID): Mono<PickupCommitment> = service.confirm(id)
 
+    @PostMapping("/{id}/claim-pickup")
+    fun claimPickup(@PathVariable id: UUID): Mono<PickupCommitment> = service.claimPickup(id)
+
     @PostMapping("/{id}/cancel")
     fun cancel(@PathVariable id: UUID): Mono<PickupCommitment> = service.cancel(id)
 }
