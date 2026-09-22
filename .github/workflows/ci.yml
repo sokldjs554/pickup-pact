@@ -79,6 +79,11 @@ jobs:
           docker compose build commitment ledger reconciler ops-console
           docker build -f Dockerfile.demo -t pickup-pact-demo:ci .
 
+      - name: PostgreSQL execution-plan verification
+        run: |
+          bash scripts/verify_postgres_plan.sh /tmp/commitment-timeline-explain.json
+          docker compose down -v --remove-orphans
+
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: '1.13.3'
