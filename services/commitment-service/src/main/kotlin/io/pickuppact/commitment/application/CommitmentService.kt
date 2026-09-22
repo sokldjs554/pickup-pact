@@ -72,6 +72,18 @@ class CommitmentService(
                 )
             }
 
+    fun claimPickup(id: UUID): Mono<PickupCommitment> =
+        repository.find(id)
+            .map { it.claimPickup() }
+            .flatMap { saved ->
+                repository.saveWithEvent(
+                    saved,
+                    "PickupClaimed",
+                    mapOf("pickup_at" to saved.pickupAt.toString())
+                )
+            }
+            .flatMap { saved -> capacity.release(saved.leaseToken).thenReturn(saved) }
+
     fun cancel(id: UUID): Mono<PickupCommitment> =
         repository.find(id)
             .map { it.cancel() }
