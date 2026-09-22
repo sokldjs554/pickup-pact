@@ -819,7 +819,7 @@ async function placeCustomerOrder(){
     const units=cartCapacityUnits();
     const pickupAt=selectedPickupAt;
     let result=await api("/api/demo/sessions/"+sessionId+"/orders","POST",{
-      store:store.name,items,total,pickup_at:pickupAt,units
+      store:store.name,store_id:store.id,items,total,pickup_at:pickupAt,units
     });
     state=result.state;
     result=await api("/api/demo/sessions/"+sessionId+"/payment","POST",{authorization_id:"customer-demo"});
