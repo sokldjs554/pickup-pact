@@ -125,6 +125,7 @@ def _empty_merchant_fulfillment() -> dict[str, Any]:
         "status": "NONE",
         "delivery_sequence": 0,
         "delivery_acknowledged": False,
+        "redelivery_count": 0,
         "effects": [],
         "anomalies": [],
         "window": None,
@@ -563,6 +564,7 @@ class DemoStore:
                 "status": "RECEIVED",
                 "delivery_sequence": 1,
                 "delivery_acknowledged": False,
+                "redelivery_count": 0,
                 "effects": ["NEW_ORDER_NOTIFICATION", "POS_PRINT"],
                 "anomalies": [],
                 "window": _merchant_window(order["pickup_at"], order["units"]),
@@ -1131,6 +1133,103 @@ class DemoStore:
                 f"{previous} → {suggested}",
             )
             return {"event": deepcopy(event), "state": self.snapshot(session_id)}
+
+    def merchant_snapshot(self, session_id: str) -> dict[str, Any]:
+        with self._lock:
+            session = self.require(session_id)
+            return deepcopy(session.get("merchant_fulfillment") or _empty_merchant_fulfillment())
+
+    def merchant_ack(self, session_id: str) -> dict[str, Any]:
+        with self._lock:
+            session = self.require(session_id)
+            merchant = session.get("merchant_fulfillment") or _empty_merchant_fulfillment()
+            if merchant.get("status") == "NONE":
+                raise ValueError("merchant order not found")
+            merchant["delivery_acknowledged"] = True
+            session["merchant_fulfillment"] = merchant
+            self._audit_locked(session_id, "MERCHANT_DELIVERY_ACK", "점주 앱이 주문 delivery를 ACK 했습니다.")
+            return self.snapshot(session_id)
+
+    def merchant_redeliver(self, session_id: str) -> dict[str, Any]:
+        with self._lock:
+            session = self.require(session_id)
+            merchant = session.get("merchant_fulfillment") or _empty_merchant_fulfillment()
+            if merchant.get("status") == "NONE":
+                raise ValueError("merchant order not found")
+            merchant["redelivery_count"] = int(merchant.get("redelivery_count") or 0) + 1
+            session["merchant_fulfillment"] = merchant
+            self._audit_locked(
+                session_id,
+                "MERCHANT_DELIVERY_REDELIVERED",
+                "동일 주문을 다시 전달했지만 POS/알림 effect는 추가 생성하지 않았습니다.",
+            )
+            return self.snapshot(session_id)
+
+    def merchant_accept(self, session_id: str) -> dict[str, Any]:
+        with self._lock:
+            session = self.require(session_id)
+            merchant = session.get("merchant_fulfillment") or _empty_merchant_fulfillment()
+            if merchant.get("status") == "ACCEPTED":
+                return self.snapshot(session_id)
+            if merchant.get("status") != "RECEIVED":
+                raise ValueError("merchant order can be accepted only from RECEIVED")
+            merchant["status"] = "ACCEPTED"
+            session["merchant_fulfillment"] = merchant
+            self._audit_locked(session_id, "MERCHANT_ORDER_ACCEPTED", "점주가 주문을 접수했습니다.")
+            return self.snapshot(session_id)
+
+    def merchant_start(self, session_id: str, timing: str = "ON_TIME") -> dict[str, Any]:
+        with self._lock:
+            session = self.require(session_id)
+            merchant = session.get("merchant_fulfillment") or _empty_merchant_fulfillment()
+            if merchant.get("status") != "ACCEPTED":
+                raise ValueError("preparation can start only from ACCEPTED")
+            timing = timing.upper()
+            if timing == "TOO_EARLY":
+                raise ValueError("preparation window has not opened")
+            if timing not in {"ON_TIME", "LATE"}:
+                raise ValueError("unknown preparation timing")
+            merchant["status"] = "PREPARING"
+            if timing == "LATE" and "STARTED_LATE" not in merchant["anomalies"]:
+                merchant["anomalies"].append("STARTED_LATE")
+            session["merchant_fulfillment"] = merchant
+            self._audit_locked(
+                session_id,
+                "MERCHANT_PREPARATION_STARTED",
+                f"제조 시작 · timing={timing}",
+            )
+            return self.snapshot(session_id)
+
+    def merchant_ready(self, session_id: str, timing: str = "ON_TIME") -> dict[str, Any]:
+        with self._lock:
+            session = self.require(session_id)
+            merchant = session.get("merchant_fulfillment") or _empty_merchant_fulfillment()
+            if merchant.get("status") != "PREPARING":
+                raise ValueError("order can become READY only from PREPARING")
+            timing = timing.upper()
+            if timing not in {"EARLY", "ON_TIME", "LATE"}:
+                raise ValueError("unknown ready timing")
+
+            merchant["status"] = "READY"
+            merchant["ready_quality"] = timing
+            anomaly = None
+            if timing == "EARLY":
+                anomaly = "READY_TOO_EARLY"
+            elif timing == "LATE":
+                anomaly = "READY_LATE"
+            if anomaly and anomaly not in merchant["anomalies"]:
+                merchant["anomalies"].append(anomaly)
+            session["merchant_fulfillment"] = merchant
+            self._audit_locked(
+                session_id,
+                "MERCHANT_ORDER_READY",
+                f"조리 완료 · quality={timing}",
+            )
+
+            if timing == "LATE" and session["pickup_pact"].get("status") == "ACTIVE":
+                self.breach_pickup_pact(session_id)
+
+            return self.snapshot(session_id)
 
     def seed_from_scenario(
         self,
