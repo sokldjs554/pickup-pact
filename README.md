@@ -1,9 +1,31 @@
 # Pickup Pact
 
-**스마트오더에서 늦은 취소·중복 메시지·매장 처리량 변화 때문에 주문/정산/적립 상태가 어긋났을 때, 실제 업무 발생 순서를 복원해 안전한 복구 계획을 만드는 백엔드 프로젝트입니다.**
+**주문을 무조건 받은 뒤 복구하는 대신, 주문 전에는 지킬 수 있는 픽업 약속만 만들고(Admission), 주문 후 상황이 바뀌면 재약속하며(Protection), 실패 시 정합성을 복구하고(Recovery), 마지막에는 고객이 이해할 수 있는 증거를 남기는(Proof) Promise Lifecycle 백엔드 프로젝트입니다.**
 
 **Live Demo:** <https://pickup-pact-demo.onrender.com>  
 **Public demo engine:** `services/reconciler/app/engine.py` · 합성 데이터만 사용
+
+## 이 프로젝트만의 중심 메커니즘: Promise Lifecycle
+
+```text
+주문 전 Promise Admission
+  → ACCEPT / OFFER_LATER / PAUSE
+  → 고객 도착시간 + 현재 backlog + 제조 처리량으로 지킬 수 있는 시간만 약속
+
+주문 후 Promise Protection
+  → 갑작스런 capacity drop
+  → PickupRescheduled
+
+실패 시 Temporal Recovery
+  → 늦은 취소 / 중복 / 순서 뒤바뀜
+  → deterministic compensation
+
+완료 후 Proof
+  → one-time PickupClaimed
+  → Trust Receipt / 주문·취소 내역
+```
+
+공개 주문/Kafka 포트폴리오에서 흔한 `order + payment + Saga/Outbox/CQRS` 조합을 그대로 반복하지 않고, **“언제 주문을 받아야 하는가”부터 “약속이 흔들렸을 때 어떻게 재약속하고 증명하는가”까지 픽업 약속의 전체 생명주기**를 하나의 도메인으로 다룹니다.
 
 ### 대표 시나리오
 
