@@ -6,24 +6,28 @@ This document makes the job-description mapping auditable instead of listing tec
 |---|---|
 | AI-driven PRD → design → code → docs | `ai/prompts/`, `ai/evals/cases.json`, `docs/ai-first-workflow.md`, n8n/Make templates |
 | Kotlin | `commitment-service` aggregate/application/API/adapters |
-| Java | `ledger-service` balanced financial posting, idempotency, conflict quarantine and history query domain |
+| Java | `merchant-fulfillment-service` durable intake/JIT workflow + `ledger-service` balanced financial posting and idempotency |
 | Python | FastAPI reconciliation, Celery tasks, benchmark and verification scripts |
-| Spring | both JVM services |
+| Spring | commitment, merchant fulfillment and ledger JVM services |
 | WebFlux | reactive commitment command edge and R2DBC/Redis adapters |
 | FastAPI | canonical replay/reconciliation API plus the public synthetic customer/catalog/order demo API |
 | Flask | operator replay console |
-| PostgreSQL | commitment state, outbox, append-only ledger, reconciliation-run audit |
+| PostgreSQL | commitment/outbox, merchant inbox/delivery/effects/JIT state, append-only ledger, reconciliation audit |
 | MongoDB | distinct event-delivery evidence archive; conflicting copies of one event ID are preserved |
 | Redis | customer-visible 5-minute slot availability, Lua-protected atomic reservation, per-lease idempotent release + Celery broker topology |
 | Elasticsearch | searchable incident/reconciliation index adapter |
-| Kafka | transactional-outbox relay + financial-event consumer contract |
+| Kafka | commitment outbox → merchant intake, fulfillment feedback → Pickup Pact, financial event consumers |
 | Celery | asynchronous replay worker and retry/backoff policy |
-| DDD | Pickup Commitment + Financial Ledger bounded contexts and invariants |
+| DDD | Pickup Commitment + Merchant Fulfillment + Financial Ledger bounded contexts and invariants |
 | EDA | versioned domain envelopes and AsyncAPI contract |
 | CQRS | command-owned invariants + explicit PostgreSQL projection rebuild/query API from canonical event-time replay |
-| Distributed consistency | outbox, at-least-once delivery, event-level idempotency, conflict quarantine, compensation |
+| Distributed consistency | outbox, merchant inbox dedupe, durable ACK delivery, exactly-once business effects, event idempotency, conflict quarantine, compensation |
 | Customer requirements → product | customer flow is store/menu/cart → server-authoritative workload quote → signed feasible slots → customer time selection → idempotent hold → payment/confirmation → pickup/cancellation/receipt; Chromium E2E verifies the journey |
 | Scheduled pickup + promise protection | customer chooses a feasible capacity-backed slot before payment; later capacity revision → `RESLOT_REVIEW` → customer-friendly new-time proposal → `PickupRescheduled` |
+| Merchant order intake | `CommitmentConfirmed` → DB inbox dedupe → durable `ORDER_AVAILABLE` delivery; ACK-before/after reconnect behavior is exercised in full-topology integration |
+| JIT preparation | pickup time + workload → earliest start / target ready / latest ready; too-early start is rejected; EARLY/LATE READY and post-preparation cancellation/reschedule races are explicit evidence |
+| Exactly-once business effects | duplicate Kafka event ID does not create a second POS print or new-order notification because effects are unique by order + effect type |
+| Fulfillment → promise feedback | `READY_LATE → FulfillmentAnomalyDetected → PickupPactBreached → REWARD 500 PTS`, duplicate late signals do not double-compensate |
 | Pickup Pact Guarantee | versioned `PickupPactIssued → PickupPactRenegotiated → PickupPactBreached` lifecycle is persisted in the Kotlin aggregate/PostgreSQL/outbox; breach derives a deterministic 500P Kafka ledger posting; browser/API evidence covers the customer view |
 | Customer trust layer | customer adapter validates a one-time pickup code; core Kotlin commitment enforces `CONFIRMED → PICKED_UP`, emits `PickupClaimed`, releases capacity exactly once; mobile Trust Receipt and order history keep backend terminology hidden |
 | Order/payment/settlement/reward domains | core order/pickup + payment authorization + settlement/reward ledger are implemented; Pact breach traverses outbox/Kafka into the reward ledger. A separate promotion/coupon campaign domain is not claimed. |
@@ -43,7 +47,7 @@ This document makes the job-description mapping auditable instead of listing tec
 
 ## Interview story
 
-The project is not presented as “I used many tools.” The primary story is one production-shaped failure mode: **a pickup promise crosses capacity, payment, settlement and rewards while events may be delayed, duplicated or reordered**.
+The project is not presented as “I used many tools.” The primary story is a merchant-fulfillment problem: **a paid pickup order must reach the store reliably, survive reconnect/redelivery, be prepared in the right time window, and feed late execution back into the customer promise and financial ledger without duplicate effects**.
 
 The public URL behaves as a customer smart-order product first. Backend recovery and operator controls are not exposed to the customer route; reviewers enter them separately through `/?dev=1`. Technical evidence remains traceable to code, contracts, tests, measured artifacts, or clearly labeled blueprints.
 
