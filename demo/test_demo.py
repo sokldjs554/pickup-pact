@@ -80,6 +80,30 @@ def test_pickup_slot_query_rejects_unknown_store():
     assert response.status_code == 404
 
 
+def test_customer_order_api_rechecks_selected_slot_capacity():
+    slots = client.get(
+        "/api/demo/catalog/gangnam-pass-cafe/pickup-slots",
+        params={"units": 3},
+    ).json()
+    blocked = next(slot for slot in slots if not slot["can_fit"])
+    session_id = client.post("/api/demo/sessions").json()["session_id"]
+
+    response = client.post(
+        f"/api/demo/sessions/{session_id}/orders",
+        json={
+            "store": "패스카페 강남역점",
+            "store_id": "gangnam-pass-cafe",
+            "items": "아메리카노 3개",
+            "total": 13500,
+            "pickup_at": blocked["pickup_at"],
+            "units": 3,
+        },
+    )
+
+    assert response.status_code == 409
+    assert "no longer has enough capacity" in response.json()["detail"]
+
+
 
 def test_landing_page_exposes_guided_and_expert_layers():
     response = client.get("/")
