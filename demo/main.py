@@ -104,38 +104,50 @@ def _ceil_to_five_minutes(value: datetime) -> datetime:
     return rounded
 
 
-def _pickup_slot_options(store_id: str, units: int) -> list[dict[str, Any]]:
-    store = _catalog_store(store_id)
+def _pickup_slot_state(store_id: str, pickup_at: datetime, units: int) -> dict[str, Any]:
+    _catalog_store(store_id)
     profile = STORE_CAPACITY_PROFILES[store_id]
     capacity_units = int(profile["capacity_units"])
     reserved_pattern = list(profile["reserved_pattern"])
+    bucket = int(pickup_at.timestamp()) // 300
+    reserved_units = int(reserved_pattern[bucket % len(reserved_pattern)])
+    available_units = max(0, capacity_units - reserved_units)
+    can_fit = available_units >= units
+    if not can_fit:
+        status = "FULL"
+    elif available_units <= max(units, 2):
+        status = "LIMITED"
+    else:
+        status = "AVAILABLE"
+    return {
+        "pickup_at": pickup_at.strftime("%H:%M"),
+        "capacity_units": capacity_units,
+        "reserved_units": reserved_units,
+        "available_units": available_units,
+        "requested_units": units,
+        "can_fit": can_fit,
+        "status": status,
+    }
+
+
+def _pickup_slot_options(store_id: str, units: int) -> list[dict[str, Any]]:
+    store = _catalog_store(store_id)
     first = _ceil_to_five_minutes(
         datetime.now(SEOUL) + timedelta(minutes=int(store["pickup_minutes"]))
     )
+    return [
+        _pickup_slot_state(store_id, first + timedelta(minutes=offset * 5), units)
+        for offset in range(6)
+    ]
 
-    slots: list[dict[str, Any]] = []
-    for offset, reserved_units in enumerate(reserved_pattern):
-        pickup_at = first + timedelta(minutes=offset * 5)
-        available_units = max(0, capacity_units - int(reserved_units))
-        can_fit = available_units >= units
-        if not can_fit:
-            status = "FULL"
-        elif available_units <= max(units, 2):
-            status = "LIMITED"
-        else:
-            status = "AVAILABLE"
-        slots.append(
-            {
-                "pickup_at": pickup_at.strftime("%H:%M"),
-                "capacity_units": capacity_units,
-                "reserved_units": int(reserved_units),
-                "available_units": available_units,
-                "requested_units": units,
-                "can_fit": can_fit,
-                "status": status,
-            }
-        )
-    return slots
+
+def _pickup_slot_for_clock(store_id: str, pickup_clock: str, units: int) -> dict[str, Any]:
+    hour, minute = (int(part) for part in pickup_clock.split(":", 1))
+    now = datetime.now(SEOUL)
+    pickup_at = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    if pickup_at <= now:
+        pickup_at += timedelta(days=1)
+    return _pickup_slot_state(store_id, pickup_at, units)
 
 
 EVENT_LABELS = {
@@ -582,6 +594,7 @@ def run_scenario(scenario_id: str) -> dict[str, Any]:
 
 class DemoOrderCreate(BaseModel):
     store: str = Field(min_length=1, max_length=80)
+    store_id: str | None = Field(default=None, min_length=1, max_length=80)
     items: str = Field(min_length=1, max_length=160)
     total: int = Field(gt=0, le=1_000_000)
     pickup_at: str = Field(pattern=r"^\d{2}:\d{2}$")
@@ -677,6 +690,10 @@ def load_demo_preset(session_id: str, scenario_id: str) -> dict[str, Any]:
 @app.post("/api/demo/sessions/{session_id}/orders")
 def create_demo_order(session_id: str, request: DemoOrderCreate) -> dict[str, Any]:
     try:
+        if request.store_id is not None:
+            slot = _pickup_slot_for_clock(request.store_id, request.pickup_at, request.units)
+            if not slot["can_fit"]:
+                raise ValueError("selected pickup slot no longer has enough capacity")
         return demo_store.create_order(
             session_id,
             store=request.store,
