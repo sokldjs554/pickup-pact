@@ -5,6 +5,42 @@ info:
   description: API contracts for pickup commitments, financial postings, and deterministic reconciliation.
 
 paths:
+  /api/v1/commitments/promise-quote:
+    post:
+      summary: Quote whether a new remote pickup order can be accepted without over-promising
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [backlogUnits, orderUnits, serviceRateUnitsPerMinute, travelMinutes]
+              properties:
+                backlogUnits: {type: integer, minimum: 0}
+                orderUnits: {type: integer, minimum: 1}
+                serviceRateUnitsPerMinute: {type: number, exclusiveMinimum: 0}
+                travelMinutes: {type: integer, minimum: 0}
+                maxPromiseMinutes: {type: integer, minimum: 1, default: 18}
+                safetyMinutes: {type: integer, minimum: 0, default: 2}
+      responses:
+        "200":
+          description: Promise admission decision
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [decision, earliestReadyMinutes, retryAfterMinutes, queueCapUnits, reason]
+                properties:
+                  decision:
+                    type: string
+                    enum: [ACCEPT, OFFER_LATER, PAUSE]
+                  earliestReadyMinutes: {type: integer, minimum: 0}
+                  quotedMinutes: {type: [integer, "null"], minimum: 0}
+                  retryAfterMinutes: {type: integer, minimum: 0}
+                  queueCapUnits: {type: integer, minimum: 1}
+                  reason: {type: string}
+        "400": {description: Invalid promise inputs}
+
   /api/v1/commitments/hold:
     post:
       summary: Lease preparation capacity and create a HELD pickup commitment
