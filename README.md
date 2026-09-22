@@ -158,13 +158,13 @@ flowchart LR
 
 | 정책 결과 | Baseline | Pickup Pact |
 |---|---:|---:|
-| accepted orders | 19,751 | 20,000 |
-| rejected orders | 249 | 0 |
+| baseline admitted / offerable within window | 19,751 | 20,000 |
+| baseline rejected / no feasible slot | 249 | 0 |
 | overbooked slots | 96 | 0 |
 | oversubscribed units | 213 | 0 |
-| later-slot deferrals | — | 532 |
+| later-slot re-offers required | — | 532 |
 
-Pickup Pact의 0 overbooking은 공짜가 아닙니다. 이 workload에서는 532건이 선택 슬롯에 바로 들어가지 못하고 다음 가능한 5분 슬롯으로 이동했습니다. 따라서 포트폴리오에서는 **“항상 더 빠르다”가 아니라 “약속할 수 없는 시간을 과예약하지 않고, 필요하면 사용자에게 다음 가능한 시간을 제시한다”**는 trade-off로 설명합니다.
+Pickup Pact의 0 overbooking은 공짜가 아닙니다. 이 workload에서는 532건이 선택 슬롯에 바로 들어가지 못해 다음 가능한 5분 슬롯을 고객에게 다시 제안해야 했습니다. 따라서 포트폴리오에서는 **“항상 더 빠르다”가 아니라 “약속할 수 없는 시간을 과예약하지 않고, 필요하면 사용자에게 다음 가능한 시간을 제시한다”**는 trade-off로 설명합니다.
 
 이 결과는 결정적 합성 policy replay이며 실제 패스오더 주문량·매출·SLA를 의미하지 않습니다. 원본: [artifacts/pickup-policy-lab.json](artifacts/pickup-policy-lab.json)
 
