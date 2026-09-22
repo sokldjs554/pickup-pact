@@ -179,6 +179,7 @@ body:not(.expert-mode) .health{display:none}
 .cart-sheet-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px}.cart-sheet-head h3{margin:0;font-size:18px}.sheet-close{border:0;background:#f2f4f7;width:32px;height:32px;border-radius:10px;cursor:pointer}
 .cart-items{display:grid;gap:9px;max-height:310px;overflow:auto}.cart-item{display:grid;grid-template-columns:1fr auto;gap:12px;border-bottom:1px solid #f2f4f7;padding:10px 0}.cart-item:last-child{border-bottom:0}.cart-item b{font-size:12px}.cart-item small{display:block;font-size:10px;color:#667085;margin-top:3px}.qty-control{display:flex;align-items:center;gap:8px}.qty-control button{width:27px;height:27px;border:1px solid #d0d5dd;background:#fff;border-radius:8px;cursor:pointer}.qty-control span{font-size:11px;font-weight:900;min-width:14px;text-align:center}
 .cart-summary{border-top:1px solid #eaecf0;margin-top:14px;padding-top:14px;display:grid;gap:8px}.cart-summary-row{display:flex;justify-content:space-between;gap:12px;font-size:11px}.cart-summary-row.total{font-size:14px;font-weight:950}
+.pickup-slot-picker{margin-top:16px;padding:15px;border:1px solid #eaecf0;background:#f8fafc;border-radius:16px}.pickup-slot-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:11px}.pickup-slot-head b{font-size:12px}.pickup-slot-head span{font-size:9px;line-height:1.45;color:#667085;text-align:right}.pickup-slot-options{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}.pickup-slot{border:1px solid #d0d5dd;background:#fff;border-radius:11px;padding:10px 8px;display:grid;gap:3px;text-align:center;cursor:pointer}.pickup-slot b{font-size:12px}.pickup-slot small{font-size:8px;color:#667085}.pickup-slot.selected{border-color:#101828;background:#101828;color:#fff}.pickup-slot.selected small{color:#d0d5dd}.pickup-slot:disabled{cursor:not-allowed;background:#f2f4f7;color:#98a2b3;border-color:#eaecf0}.pickup-slot:disabled small{color:#98a2b3}.pickup-slot-loading{grid-column:1/-1;padding:13px;text-align:center;font-size:10px;color:#667085}.checkout-btn:disabled{background:#d0d5dd;color:#667085;cursor:not-allowed}
 .checkout-btn{width:100%;border:0;background:#101828;color:#fff;border-radius:12px;padding:13px 15px;font-size:12px;font-weight:900;margin-top:15px;cursor:pointer}
 .order-page{max-width:760px;margin:0 auto;display:grid;gap:14px}
 .order-page-head{display:flex;justify-content:space-between;align-items:center;gap:16px}.order-page-head h2{font-size:25px;letter-spacing:-.04em;margin:0}.order-page-head p{font-size:11px;color:#667085;margin:5px 0 0}
@@ -306,6 +307,10 @@ body.expert-mode .app{display:block}body.expert-mode .sidebar{position:relative;
           <div class="cart-sheet" role="dialog" aria-modal="true" aria-label="장바구니">
             <div class="cart-sheet-head"><h3>장바구니</h3><button class="sheet-close" type="button" onclick="closeCart()" aria-label="장바구니 닫기">×</button></div>
             <div class="cart-items" id="cartItems"></div>
+            <div class="pickup-slot-picker">
+              <div class="pickup-slot-head"><b>픽업 시간 선택</b><span>주문량과 현재 예약량을 확인해<br>선택 가능한 시간만 열어둬요.</span></div>
+              <div class="pickup-slot-options" id="pickupSlotOptions"><div class="pickup-slot-loading">장바구니를 열면 가능한 시간을 확인해요.</div></div>
+            </div>
             <div class="cart-summary">
               <div class="cart-summary-row"><span>픽업</span><b id="cartPickup">-</b></div>
               <div class="cart-summary-row total"><span>총 금액</span><b id="cartTotal">0원</b></div>
@@ -485,6 +490,9 @@ let catalog=[];
 let customer={name:"하늘",label:"체험 손님"};
 let selectedStoreId=null;
 let cart=[];
+let pickupSlots=[];
+let selectedPickupAt=null;
+let pickupSlotRequestSeq=0;
 let customerOrderStage="none";
 let orderReadyTimer=null;
 let promiseTimer=null;
@@ -594,18 +602,68 @@ function cartItemSummary(){
   return cart.map(item=>item.name+(item.qty>1?" "+item.qty+"개":"")).join(", ");
 }
 
-function pickupTimeForStore(store=selectedStore()){
-  if(!store)return "12:30";
-  const target=new Date(Date.now()+Number(store.pickup_minutes||10)*60*1000);
-  return new Intl.DateTimeFormat("en-GB",{
-    timeZone:"Asia/Seoul",hour:"2-digit",minute:"2-digit",hour12:false
-  }).format(target);
+function cartCapacityUnits(){
+  return cart.reduce((sum,item)=>sum+(Number(item.capacityUnits||1)*item.qty),0);
 }
 
 function estimatedPickup(){
+  if(!selectedStore())return "-";
+  return selectedPickupAt ? selectedPickupAt+" 픽업" : "시간을 선택해주세요.";
+}
+
+function pickupSlotStatus(slot){
+  if(!slot.can_fit)return "마감";
+  if(slot.status==="LIMITED")return "거의 마감";
+  return "선택 가능";
+}
+
+function renderPickupSlots(){
+  const target=$("pickupSlotOptions");
+  if(!target)return;
+  if(!cart.length){
+    target.innerHTML='<div class="pickup-slot-loading">메뉴를 담으면 가능한 시간을 확인해요.</div>';
+    return;
+  }
+  if(!pickupSlots.length){
+    target.innerHTML='<div class="pickup-slot-loading">가능한 픽업 시간을 확인하고 있어요.</div>';
+    return;
+  }
+  target.innerHTML=pickupSlots.map(slot=>
+    '<button type="button" class="pickup-slot '+(slot.pickup_at===selectedPickupAt?"selected":"")+'" '+
+      (slot.can_fit?'onclick="selectPickupSlot(\''+slot.pickup_at+'\')"':'disabled')+
+      ' aria-label="'+slot.pickup_at+' 픽업 '+(slot.can_fit?"선택":"마감")+'">'+
+      '<b>'+slot.pickup_at+'</b><small>'+pickupSlotStatus(slot)+'</small></button>'
+  ).join("");
+}
+
+async function refreshPickupSlots(){
   const store=selectedStore();
-  if(!store) return "-";
-  return pickupTimeForStore(store)+" 픽업 · 약 "+store.pickup_minutes+"분";
+  if(!store||!cart.length){
+    pickupSlots=[];
+    selectedPickupAt=null;
+    renderPickupSlots();
+    renderCart();
+    return;
+  }
+  const requestSeq=++pickupSlotRequestSeq;
+  const units=cartCapacityUnits();
+  pickupSlots=[];
+  renderPickupSlots();
+  const slots=await api("/api/demo/catalog/"+store.id+"/pickup-slots?units="+units);
+  if(requestSeq!==pickupSlotRequestSeq)return;
+  pickupSlots=slots;
+  if(selectedPickupAt && !slots.some(slot=>slot.pickup_at===selectedPickupAt && slot.can_fit)){
+    selectedPickupAt=null;
+  }
+  renderPickupSlots();
+  renderCart();
+}
+
+function selectPickupSlot(pickupAt){
+  const slot=pickupSlots.find(item=>item.pickup_at===pickupAt && item.can_fit);
+  if(!slot)return;
+  selectedPickupAt=pickupAt;
+  renderCart();
 }
 
 function menuEmoji(name){
@@ -634,7 +692,7 @@ function renderCustomerHome(){
   if(!$("storeList")||!$("menuList"))return;
   $("storeList").innerHTML=catalog.length?catalog.map(store=>
     '<button class="store-card '+(store.id===selectedStoreId?"active":"")+'" type="button" onclick="selectCustomerStore(\''+store.id+'\')">'+
-      '<div class="store-card-top"><span class="store-avatar">☕</span><span class="store-time">'+store.pickup_minutes+'분</span></div>'+
+      '<div class="store-card-top"><span class="store-avatar">☕</span><span class="store-time">'+store.pickup_minutes+'분 후부터</span></div>'+
       '<h4>'+store.name+'</h4><div class="store-meta">'+store.category+' · '+store.distance_m+'m</div><p>'+store.notice+'</p>'+
     '</button>'
   ).join(""):'<div class="empty">매장을 불러오지 못했어요.</div>';
@@ -649,7 +707,7 @@ function renderCustomerHome(){
     $("selectedStoreName").textContent=store.name;
     $("selectedStoreNotice").textContent=store.notice;
     $("selectedStoreTime").style.display="inline-block";
-    $("selectedStoreTime").textContent="픽업 "+store.pickup_minutes+"분";
+    $("selectedStoreTime").textContent="가장 빠른 픽업 "+store.pickup_minutes+"분 후";
     $("menuList").innerHTML=store.menu.map(item=>{
       const qty=cart.find(row=>row.id===item.id)?.qty||0;
       return '<div class="menu-card"><div class="menu-main"><span class="menu-visual">'+menuEmoji(item.name)+'</span><div><h4>'+item.name+(item.popular?'<span class="menu-popular">인기</span>':'')+'</h4><p>'+item.description+'</p><span class="menu-price">'+money(item.price)+'원</span></div></div>'+
@@ -660,6 +718,11 @@ function renderCustomerHome(){
 }
 
 function selectCustomerStore(storeId){
+  if(selectedStoreId!==storeId){
+    pickupSlots=[];
+    selectedPickupAt=null;
+    pickupSlotRequestSeq+=1;
+  }
   if(selectedStoreId!==storeId && cart.length){
     cart=[];
     closeCart();
@@ -674,7 +737,15 @@ function addToCart(menuId){
   if(!item)return;
   const existing=cart.find(row=>row.id===menuId);
   if(existing) existing.qty+=1;
-  else cart.push({id:item.id,name:item.name,price:item.price,qty:1});
+  else cart.push({
+    id:item.id,
+    name:item.name,
+    price:item.price,
+    capacityUnits:Number(item.capacity_units||1),
+    qty:1
+  });
+  selectedPickupAt=null;
+  pickupSlots=[];
   renderCustomerHome();
   toast(item.name+" 담았어요.");
 }
@@ -684,7 +755,12 @@ function changeCartQty(menuId,delta){
   if(!item)return;
   item.qty+=delta;
   if(item.qty<=0) cart=cart.filter(row=>row.id!==menuId);
+  selectedPickupAt=null;
+  pickupSlots=[];
   renderCustomerHome();
+  if($("cartBackdrop")?.classList.contains("show")){
+    refreshPickupSlots().catch(e=>toast(e.message,true));
+  }
 }
 
 function renderCart(){
@@ -698,7 +774,11 @@ function renderCart(){
   $("cartStoreLabel").textContent=selectedStore()?.name||"";
   if($("cartTotal")) $("cartTotal").textContent=money(total)+"원";
   if($("cartPickup")) $("cartPickup").textContent=estimatedPickup();
-  if($("checkoutButton")) $("checkoutButton").textContent=money(total)+"원 주문하기";
+  if($("checkoutButton")){
+    $("checkoutButton").textContent=selectedPickupAt ? money(total)+"원 주문하기" : "픽업 시간을 선택해주세요";
+    $("checkoutButton").disabled=!selectedPickupAt;
+  }
+  renderPickupSlots();
   if($("cartItems")){
     $("cartItems").innerHTML=cart.length?cart.map(item=>
       '<div class="cart-item"><div><b>'+item.name+'</b><small>'+money(item.price)+'원 · '+money(item.price*item.qty)+'원</small></div>'+
@@ -707,10 +787,15 @@ function renderCart(){
   }
 }
 
-function openCart(){
+async function openCart(){
   if(!cart.length)return;
   renderCart();
   $("cartBackdrop").classList.add("show");
+  try{
+    await refreshPickupSlots();
+  }catch(e){
+    toast(e.message,true);
+  }
 }
 
 function closeCart(){
@@ -728,10 +813,11 @@ async function placeCustomerOrder(){
     if(!store)throw new Error("매장을 먼저 골라주세요.");
     await waitForSession();
     state=await api("/api/demo/sessions/"+sessionId+"/reset","POST",{});
+    if(!selectedPickupAt)throw new Error("원하는 픽업 시간을 선택해주세요.");
     const items=cartItemSummary();
     const total=cartTotalValue();
-    const units=cartItemCount();
-    const pickupAt=pickupTimeForStore(store);
+    const units=cartCapacityUnits();
+    const pickupAt=selectedPickupAt;
     let result=await api("/api/demo/sessions/"+sessionId+"/orders","POST",{
       store:store.name,items,total,pickup_at:pickupAt,units
     });
@@ -742,6 +828,9 @@ async function placeCustomerOrder(){
     state=result.state;
     customerOrderStage="received";
     cart=[];
+    pickupSlots=[];
+    selectedPickupAt=null;
+    pickupSlotRequestSeq+=1;
     closeCart();
     renderAll();
     showPage("guided");
