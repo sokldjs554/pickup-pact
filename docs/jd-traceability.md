@@ -24,9 +24,10 @@ This document makes the job-description mapping auditable instead of listing tec
 | Distributed consistency | outbox, at-least-once delivery, event-level idempotency, conflict quarantine, compensation |
 | Customer requirements → product | public virtual-customer flow: store selection, menu/cart quantity changes, order/payment/confirmation, pickup status and cancellation; Chromium E2E verifies the journey |
 | Pickup promise protection | capacity revision → `RESLOT_REVIEW` → customer-friendly new-time proposal → `PickupRescheduled`; preserves backend evidence while minimizing customer friction |
+| Customer trust layer | one-time pickup code → `PickupClaimed`, mobile Trust Receipt, completed/cancelled order history; customer UI hides ledger/reconciliation terminology |
 | Order/payment/settlement/reward domains | customer checkout exercises order/payment/confirmation; hidden cancellation race exercises settlement/reward reconciliation and compensation |
 | REST/OpenAPI | explicit OpenAPI 3.1 contract for hold → payment authorization → confirm/cancel + tracking, ledger posting/history/conflicts, reconciliation |
-| SQL tuning | committed timeline indexes + executable `EXPLAIN (ANALYZE, BUFFERS)` query template |
+| SQL tuning | release-gate PostgreSQL 16 plan capture requires `idx_outbox_aggregate_timeline`; indexed and forced-sequential plans are uploaded as evidence |
 | Performance troubleshooting | deterministic race benchmark + loopback HTTP baseline + runbook |
 | Docker | commitment, ledger, reconciler, ops-console, and interviewer-demo images |
 | Kubernetes | checked-in deployments/services/probes/resource limits for the service topology |
@@ -44,3 +45,8 @@ This document makes the job-description mapping auditable instead of listing tec
 The project is not presented as “I used many tools.” The primary story is one production-shaped failure mode: **a pickup promise crosses capacity, payment, settlement and rewards while events may be delayed, duplicated or reordered**.
 
 The public URL behaves as a customer smart-order product first. Backend recovery and operator controls are not exposed to the customer route; reviewers enter them separately through `/?dev=1`. Technical evidence remains traceable to code, contracts, tests, measured artifacts, or clearly labeled blueprints.
+
+
+Full current-posting audit: [jd-audit-2026-09-22.md](jd-audit-2026-09-22.md)
+Customer feedback mapping: [customer-feedback-to-product.md](customer-feedback-to-product.md)
+AI iteration evidence: [ai-iteration-log.md](ai-iteration-log.md)
