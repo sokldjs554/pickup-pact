@@ -15,6 +15,14 @@ public record LedgerBatch(
         Objects.requireNonNull(eventId);
         Objects.requireNonNull(semanticFingerprint);
         entries = List.copyOf(entries);
+        if (entries.isEmpty()) {
+            throw new IllegalArgumentException("ledger batch must contain entries");
+        }
+        var units = entries.stream().map(LedgerEntry::currency).distinct().toList();
+        if (units.size() != 1) {
+            throw new IllegalArgumentException("ledger batch cannot mix accounting units");
+        }
+
         BigDecimal debit = entries.stream()
                 .filter(e -> e.direction() == LedgerDirection.DEBIT)
                 .map(LedgerEntry::amount).reduce(BigDecimal.ZERO, BigDecimal::add);
