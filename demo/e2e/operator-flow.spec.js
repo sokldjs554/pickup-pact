@@ -55,8 +55,14 @@ test('virtual customer can browse, add to cart, order, track, and cancel', async
   await expect(page.locator('#customerOrderView')).toContainText('9,000원 결제 취소');
   await expect(page.getByRole('button', { name: '다시 주문하기', exact: true })).toBeVisible();
 
-  // Recovery happened behind the customer UI. The customer never had to operate it.
+  // Recovery stayed hidden from the customer, but the backend evidence is still inspectable.
   await expect(page.getByRole('button', { name: '정합성 복구', exact: true })).not.toBeVisible();
+
+  await page.goto('/?dev=1');
+  await expect(page.locator('#orderEvents')).toContainText('PickupRescheduled');
+  await openPage(page, '정산 · 감사');
+  await expect(page.locator('#auditList')).toContainText('PICKUP_RESLOT_SUGGESTED');
+  await expect(page.locator('#auditList')).toContainText('PICKUP_RESCHEDULE_ACCEPTED');
 });
 
 test('cart follows the selected store and clears when the customer changes stores', async ({ page }) => {
