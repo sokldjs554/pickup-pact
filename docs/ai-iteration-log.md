@@ -59,3 +59,19 @@ Accepted approach:
 During the same review, an AI-assisted code audit found a more serious reliability issue: the Redis release script ignored the random lease identity embedded in the token. A duplicate release could decrement the shared slot twice. The fix stores a dedicated lease key and makes release idempotent. Terminal APIs are retry-safe when the database transition commits but Redis release fails.
 
 Verification contract: unit tests cover slot alignment/fit and release-retry semantics; Docker integration smoke checks reservation `0 → 2 → 0` and repeats cancellation without capacity underflow; browser E2E requires an explicit pickup-time selection before checkout.
+
+
+## 7. Green unit tests → failed full topology → readiness boundary
+
+The first full release-gate run after the scheduled-pickup work passed unit tests, browser E2E and repeated evidence checks but failed the persisted Docker topology. The reconciler process had already returned `/health=200`, while Elasticsearch was still warming; synchronous incident indexing timed out and made `POST /api/v1/reconcile` return 500.
+
+Rejected approach: add an arbitrary startup sleep to the integration test.
+
+Accepted approach:
+- keep `/health` as liveness;
+- add `/ready` that verifies PostgreSQL, MongoDB and Elasticsearch for persisted mode;
+- make Kubernetes readiness use `/ready`;
+- make topology smoke require HTTP 200 from `/ready`;
+- add bounded Elasticsearch timeout retries with deterministic document IDs.
+
+This iteration is deliberately kept in the history because the full-system failure was only visible after running the actual service topology, not from isolated tests.
