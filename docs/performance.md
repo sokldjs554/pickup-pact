@@ -49,7 +49,9 @@ Relevant committed indexes are:
 - `ledger_entries(event_id)` for batch entry lookup;
 - `reconciliation_run(aggregate_id, created_at desc)` for incident history.
 
-A real PostgreSQL plan should be captured before claiming query latency improvement.
+The release gate now boots PostgreSQL 16, seeds a mixed aggregate event set, runs the committed `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)` query, and fails unless the plan references `idx_outbox_aggregate_timeline`. The raw plan is uploaded as `commitment-timeline-explain.json` with the release-gate evidence.
+
+This proves the intended index is selected in the reproducible CI dataset. It is still **not** a production latency claim; environment-specific latency improvement must be measured separately.
 
 ## Load tooling
 
