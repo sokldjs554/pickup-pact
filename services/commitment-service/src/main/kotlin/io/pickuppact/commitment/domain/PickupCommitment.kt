@@ -3,7 +3,7 @@ package io.pickuppact.commitment.domain
 import java.time.Instant
 import java.util.UUID
 
-enum class CommitmentState { HELD, CONFIRMED, CANCELLED, AT_RISK }
+enum class CommitmentState { HELD, CONFIRMED, PICKED_UP, CANCELLED, AT_RISK }
 
 data class PickupCommitment(
     val id: UUID,
@@ -32,8 +32,14 @@ data class PickupCommitment(
         return copy(state = CommitmentState.CONFIRMED, version = version + 1)
     }
 
+    fun claimPickup(): PickupCommitment {
+        require(state == CommitmentState.CONFIRMED) { "pickup can only be claimed from CONFIRMED" }
+        return copy(state = CommitmentState.PICKED_UP, version = version + 1)
+    }
+
     fun cancel(): PickupCommitment {
         require(state != CommitmentState.CANCELLED) { "already cancelled" }
+        require(state != CommitmentState.PICKED_UP) { "picked up commitment cannot be cancelled" }
         return copy(state = CommitmentState.CANCELLED, version = version + 1)
     }
 
