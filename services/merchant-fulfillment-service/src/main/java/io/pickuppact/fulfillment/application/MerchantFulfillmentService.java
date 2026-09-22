@@ -199,7 +199,14 @@ public class MerchantFulfillmentService {
     }
 
     private void applyCancellation(UUID orderId, Instant occurredAt) {
-        MerchantOrder current = required(orderId);
+        var maybeOrder = repository.find(orderId);
+        if (maybeOrder.isEmpty()) {
+            // A commitment can be cancelled while still HELD, before the merchant
+            // context ever receives CommitmentConfirmed. That is a valid no-op here,
+            // not a poison event that should block the Kafka partition.
+            return;
+        }
+        MerchantOrder current = maybeOrder.get();
         var transition = current.requestCancellation(occurredAt);
         if (transition.order().version() != current.version()) {
             repository.update(transition.order());
