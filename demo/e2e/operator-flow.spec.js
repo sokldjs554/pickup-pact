@@ -113,7 +113,8 @@ test('promise admission offers a later slot or pauses orders before checkout', a
   await page.getByRole('button', { name: /장바구니 보기/ }).click();
   await expect(page.locator('#cartPromiseQuote')).toHaveClass(/pause/);
   await expect(page.locator('#cartPromiseQuote')).toContainText('지금은 주문을 잠깐 쉬어요');
-  const pausedButton=page.getByRole('button', { name: /분 뒤 다시 확인/ });
+  const pausedButton=page.locator('#checkoutButton');
+  await expect(pausedButton).toHaveText(/분 뒤 다시 확인/);
   await expect(pausedButton).toBeDisabled();
   await expect(page.getByRole('heading', { name: '내 주문', exact: true })).not.toBeVisible();
 });
