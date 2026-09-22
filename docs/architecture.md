@@ -1,5 +1,29 @@
 # Architecture
 
+## Admission trust boundary
+
+Customer-supplied workload numbers are not authoritative.
+
+1. `POST /api/v1/commitments/quotes` receives store ID and menu SKU/quantity.
+2. `MenuWorkloadPolicy` calculates preparation units and order amount on the server.
+3. `QuoteTokenService` signs store, workload, amount and expiry with HMAC-SHA256.
+4. `POST /hold` requires the signed quote plus `Idempotency-Key`; the client cannot lower the capacity cost by editing a request field.
+5. PostgreSQL has a unique idempotency index. Concurrent retries that race after the initial lookup release their speculative Redis lease and converge on the already-created commitment.
+6. Redis applies a default capacity with optional per-store overrides before executing the atomic Lua admission.
+
+The public FastAPI demo mirrors the trust boundary: the customer browser submits structured line items, and the demo server recalculates amount/workload instead of trusting client-provided totals.
+
+## Core Pact and financial side effects
+
+`confirm` persists `CommitmentConfirmed` and `PickupPactIssued` together with the aggregate. Reschedule persists the new slot and `PickupPactRenegotiated`; breach persists `PickupPactBreached`.
+
+The outbox relay publishes the domain event first and then derives deterministic financial events where the business transition has a financial consequence:
+
+- `PickupPactBreached` → `REWARD` using `<outbox-id>-pact-reward`;
+- `PickupClaimed` → `SETTLEMENT` using `<outbox-id>-settlement`.
+
+The row is marked published only after both sends complete. If a retry republishes either message, the downstream ledger's event-ID idempotency prevents a second posting.
+
 ## Runtime readiness boundary
 
 The reconciler now separates process liveness from dependency readiness.
