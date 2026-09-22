@@ -8,7 +8,7 @@ On 2026-08-13, one verified Google Play reviewer of PassOrder described several 
 
 This is one public review, not evidence that every user experiences these problems. It is used as a product-design signal, not as a claim about PassOrder's overall quality.
 
-Source checked: Google Play, PassOrder customer app, reviewed 2026-09-22.
+Source checked 2026-09-22: https://play.google.com/store/apps/details?hl=ko&id=com.paytalab.mkseo.passorder
 
 ## Product responses in Pickup Pact
 
