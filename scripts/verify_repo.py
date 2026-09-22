@@ -35,6 +35,8 @@ required = [
     "sql/explain/commitment_timeline.sql",
     "artifacts/consistency-benchmark.json",
     "artifacts/consistency-matrix.json",
+    "artifacts/pickup-policy-lab.json",
+    "scripts/pickup_policy_lab.py",
     "artifacts/reconciler-http-summary.json",
     "scripts/integration_smoke.py",
     "scripts/capture_postgres_plan.py",
