@@ -299,11 +299,21 @@ class DemoStore:
             else -batch["amount"] if batch["posting_type"] == "REVERSE_REWARD" else 0
             for batch in session["ledger_batches"]
         )
+        reversed_reward = sum(
+            batch["amount"]
+            for batch in session["ledger_batches"]
+            if batch["posting_type"] == "REVERSE_REWARD"
+        )
+        cancelled = order["status"] == "CANCELLED"
         return {
             "order_id": order["order_id"], "store": order["store"], "items": order["items"],
             "total": order["total"], "pickup_at": order["pickup_at"], "status": order["status"],
-            "payment_authorized": order["payment_authorized"], "net_settlement": net_settlement,
-            "reward_balance": reward_balance, "pickup_code": session["pickup_handoff"].get("code"),
+            "payment_authorized": order["payment_authorized"],
+            "charged_amount": 0 if cancelled else order["total"],
+            "cancelled_amount": order["total"] if cancelled else 0,
+            "points_adjusted": reversed_reward,
+            "net_settlement": net_settlement, "reward_balance": reward_balance,
+            "pickup_code": session["pickup_handoff"].get("code"),
             "pickup_claimed": session["pickup_handoff"].get("claimed", False),
             "pickup_claimed_at": session["pickup_handoff"].get("claimed_at"),
             "timeline": timeline, "updated_at": _iso(session["updated_at"]),
