@@ -114,7 +114,7 @@ flowchart LR
 - 같은 `event_id` + 다른 fingerprint는 조용히 dedupe하지 않고 `ledger_conflicts`에 근거를 격리해 조회할 수 있습니다.
 - 취소가 뒤늦게 도착해도 이미 기록한 회계 이력을 삭제하지 않고 **compensating entry**를 생성합니다.
 - canonical state는 수신 순서가 아니라 business occurrence time과 근거 이벤트에서 재구성합니다.
-- `PickupPactBreached`는 동일 outbox row에서 결정적 REWARD 금융 이벤트로 파생되고, `PickupClaimed`는 SETTLEMENT 금융 이벤트로 파생됩니다. 둘 다 Kafka consumer의 idempotent ledger 경계를 통과합니다.
+- `PickupPactBreached`는 동일 outbox row에서 결정적 REWARD 금융 이벤트로 파생되고, `PickupClaimed`는 SETTLEMENT 금융 이벤트로 파생됩니다. 보상은 **PTS**, 점주 정산은 **KRW**로 분리하며, 둘 다 Kafka consumer의 idempotent ledger 경계를 통과합니다.
 - AI는 사고 설명·테스트 생성·리뷰를 도울 수 있지만 금전 repair command를 직접 실행하지 못합니다.
 
 ## 공고 스택 → 실제 구현
