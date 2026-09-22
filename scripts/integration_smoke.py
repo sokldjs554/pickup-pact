@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import json
 import os
 import subprocess
@@ -219,6 +220,84 @@ def commitment_flow(pass_no: int) -> None:
         timeout_s=30,
         label="commitment outbox delivery to Kafka",
     )
+
+
+
+def capacity_concurrency_flow(pass_no: int) -> None:
+    store_id = f"concurrency-store-{pass_no}"
+    slots = expect(
+        httpx.get(
+            f"{COMMITMENT}/api/v1/commitments/slots",
+            params={"storeId": store_id, "count": 1, "units": 2},
+            timeout=15,
+        ),
+        200,
+    )
+    pickup_at = slots[0]["pickupAt"]
+
+    def hold_one(index: int) -> httpx.Response:
+        return httpx.post(
+            f"{COMMITMENT}/api/v1/commitments/hold",
+            json={
+                "storeId": store_id,
+                "pickupAt": pickup_at,
+                "units": 2,
+            },
+            timeout=20,
+        )
+
+    with ThreadPoolExecutor(max_workers=30) as pool:
+        responses = list(pool.map(hold_one, range(30)))
+
+    statuses = [response.status_code for response in responses]
+    assert set(statuses) <= {200, 409}, statuses
+    assert statuses.count(200) == 20, statuses
+    assert statuses.count(409) == 10, statuses
+
+    accepted = [response.json() for response in responses if response.status_code == 200]
+    live_slot = expect(
+        httpx.get(
+            f"{COMMITMENT}/api/v1/commitments/slots",
+            params={
+                "storeId": store_id,
+                "from": pickup_at,
+                "count": 1,
+                "units": 1,
+            },
+            timeout=15,
+        ),
+        200,
+    )[0]
+    assert live_slot["reservedUnits"] == 40, live_slot
+    assert live_slot["availableUnits"] == 0, live_slot
+    assert live_slot["canFit"] is False, live_slot
+
+    for commitment in accepted:
+        cancelled = expect(
+            httpx.post(
+                f"{COMMITMENT}/api/v1/commitments/{commitment['id']}/cancel",
+                timeout=15,
+            ),
+            200,
+        )
+        assert cancelled["state"] == "CANCELLED", cancelled
+
+    released_slot = expect(
+        httpx.get(
+            f"{COMMITMENT}/api/v1/commitments/slots",
+            params={
+                "storeId": store_id,
+                "from": pickup_at,
+                "count": 1,
+                "units": 1,
+            },
+            timeout=15,
+        ),
+        200,
+    )[0]
+    assert released_slot["reservedUnits"] == 0, released_slot
+    assert released_slot["availableUnits"] == 40, released_slot
+
 
 
 def ledger_flow(pass_no: int) -> None:
@@ -517,6 +596,7 @@ def celery_flow(pass_no: int) -> None:
 
 def one_pass(pass_no: int) -> None:
     commitment_flow(pass_no)
+    capacity_concurrency_flow(pass_no)
     ledger_flow(pass_no)
     kafka_ledger_flow(pass_no)
     reconciler_flow(pass_no)
