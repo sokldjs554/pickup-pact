@@ -55,12 +55,12 @@ data class PickupCommitment(
         )
     }
 
-    fun breachPact(): PickupCommitment {
+    fun breachPact(observedAt: Instant): PickupCommitment {
         check(state in setOf(CommitmentState.CONFIRMED, CommitmentState.AT_RISK)) {
             "only active pickup commitments can breach a pact"
         }
         val currentPact = checkNotNull(pact) { "pickup pact has not been issued" }
-        return copy(pact = currentPact.breach(), version = version + 1)
+        return copy(pact = currentPact.breach(observedAt), version = version + 1)
     }
 
     fun claimPickup(): PickupCommitment {
