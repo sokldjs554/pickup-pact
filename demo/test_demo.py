@@ -277,6 +277,55 @@ def test_capacity_risk_can_offer_and_accept_a_new_pickup_time():
     }
 
 
+def test_one_time_pickup_code_archives_trust_receipt():
+    session_id = create_session()
+    create_order(session_id, units=1, total=4500)
+    client.post(f"/api/demo/sessions/{session_id}/payment", json={"authorization_id": "auth-pickup"})
+    confirmed = client.post(f"/api/demo/sessions/{session_id}/confirm").json()["state"]
+    code = confirmed["pickup_handoff"]["code"]
+    assert code and len(code) == 4
+
+    claimed = client.post(
+        f"/api/demo/sessions/{session_id}/pickup/claim",
+        json={"code": code},
+    )
+    assert claimed.status_code == 200
+    state = claimed.json()["state"]
+    assert state["order"]["status"] == "PICKED_UP"
+    assert state["pickup_handoff"]["claimed"] is True
+    assert state["order_history"][0]["status"] == "PICKED_UP"
+    assert any(item["event_type"] == "PickupClaimed" for item in state["receipt"]["timeline"])
+
+    duplicate = client.post(
+        f"/api/demo/sessions/{session_id}/pickup/claim",
+        json={"code": code},
+    )
+    assert duplicate.status_code == 409
+
+
+def test_cancelled_order_receipt_is_zero_charge_and_kept_in_history():
+    session_id = create_session()
+    create_order(session_id, units=1, total=4500)
+    client.post(f"/api/demo/sessions/{session_id}/payment", json={"authorization_id": "auth-cancel-receipt"})
+    client.post(f"/api/demo/sessions/{session_id}/confirm")
+    client.post(f"/api/demo/sessions/{session_id}/cancel", json={"delay_seconds": 52})
+    client.post(f"/api/demo/sessions/{session_id}/settlement", json={"amount": 4500})
+    client.post(f"/api/demo/sessions/{session_id}/reward", json={"amount": 45})
+    client.post(f"/api/demo/sessions/{session_id}/reconcile")
+    repaired = client.post(f"/api/demo/sessions/{session_id}/repairs/apply")
+    assert repaired.status_code == 200
+
+    receipt = client.get(f"/api/demo/sessions/{session_id}/receipt").json()
+    assert receipt["status"] == "CANCELLED"
+    assert receipt["charged_amount"] == 0
+    assert receipt["cancelled_amount"] == 4500
+    assert receipt["points_adjusted"] == 45
+
+    history = client.get(f"/api/demo/sessions/{session_id}/history").json()
+    assert len(history) == 1
+    assert history[0]["order_id"] == receipt["order_id"]
+
+
 def test_preset_load_populates_order_ledger_and_evidence():
     session_id = create_session()
     response = client.post(f"/api/demo/sessions/{session_id}/presets/late-cancel")
