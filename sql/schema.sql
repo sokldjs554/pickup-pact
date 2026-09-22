@@ -161,7 +161,7 @@ create table if not exists merchant_deliveries (
   payload jsonb not null,
   acknowledged_at timestamptz,
   created_at timestamptz not null default now(),
-  unique(order_id, delivery_type)
+  unique(order_id, delivery_type, payload)
 );
 create index if not exists idx_merchant_deliveries_pending
   on merchant_deliveries(store_id, delivery_sequence)
