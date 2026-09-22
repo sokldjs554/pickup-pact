@@ -85,6 +85,20 @@ def test_pickup_reschedule_clears_capacity_risk():
     assert "RESLOT_REVIEW" not in result.repairs
 
 
+def test_pickup_pact_evidence_does_not_corrupt_commitment_state():
+    result = reconcile(ReconcileRequest(events=[
+        ev("hold", "PickupSlotHeld", 0, 0, {"capacity_units": 1}),
+        ev("pay", "PaymentAuthorized", 1, 1),
+        ev("confirm", "CommitmentConfirmed", 2, 2, {"capacity_units": 1}),
+        ev("pact", "PickupPactIssued", 3, 3, {"promised_at": "12:30", "latest_at": "12:33", "compensation_points": 500}),
+        ev("breach", "PickupPactBreached", 4, 4, {"compensation_points": 500}),
+        ev("reward", "RewardGranted", 5, 5, {"amount": "500", "source": "pickup_pact_breach"}),
+    ]))
+    assert result.canonical_state.status == "CONFIRMED"
+    assert result.canonical_state.rewarded is True
+    assert result.anomalies == []
+
+
 def test_pickup_claim_moves_confirmed_order_to_picked_up():
     result = reconcile(ReconcileRequest(events=[
         ev("hold", "PickupSlotHeld", 0, 0, {"capacity_units": 1}),
