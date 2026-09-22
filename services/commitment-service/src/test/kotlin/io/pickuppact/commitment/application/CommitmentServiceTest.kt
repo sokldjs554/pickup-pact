@@ -238,14 +238,40 @@ class CommitmentServiceTest {
     }
 
     @Test
-    fun pactBreachIsPersistedOnceAsDomainEvidence() {
+    fun pactBreachBeforeDeadlineIsRejectedWithoutRewardEvidence() {
+        val repository = FakeRepository()
+        val service = service(repository = repository)
+        val held = service.hold(
+            HoldCommand(quoteToken(units = 1), Instant.now().plusSeconds(600), "idem-breach-early")
+        ).block()!!
+        service.authorizePayment(held.id, "auth-breach-early").block()
+        service.confirm(held.id).block()
+
+        StepVerifier.create(service.breachPact(held.id))
+            .expectError(IllegalStateException::class.java)
+            .verify()
+
+        assertEquals(0, repository.events.count { it == "PickupPactBreached" })
+        assertEquals(PickupPactStatus.ACTIVE, repository.rows[held.id]!!.pact!!.status)
+    }
+
+    @Test
+    fun pactBreachAfterDeadlineIsPersistedOnceAsDomainEvidence() {
         val repository = FakeRepository()
         val service = service(repository = repository)
         val held = service.hold(
             HoldCommand(quoteToken(units = 1), Instant.now().plusSeconds(600), "idem-breach")
         ).block()!!
         service.authorizePayment(held.id, "auth-breach").block()
-        service.confirm(held.id).block()
+        val confirmed = service.confirm(held.id).block()!!
+
+        val now = Instant.now()
+        repository.rows[held.id] = confirmed.copy(
+            pact = confirmed.pact!!.copy(
+                promisedAt = now.minusSeconds(600),
+                latestAt = now.minusSeconds(300)
+            )
+        )
 
         val breached = service.breachPact(held.id).block()!!
 
