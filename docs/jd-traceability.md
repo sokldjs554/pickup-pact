@@ -25,7 +25,7 @@ This document makes the job-description mapping auditable instead of listing tec
 | Customer requirements → product | public virtual-customer flow: store selection, menu/cart quantity changes, order/payment/confirmation, pickup status and cancellation; Chromium E2E verifies the journey |
 | Pickup promise protection | capacity revision → `RESLOT_REVIEW` → customer-friendly new-time proposal → `PickupRescheduled`; preserves backend evidence while minimizing customer friction |
 | Trust Receipt / order history | customer-facing record derived from payment, reschedule, cancellation and reversal events while ledger details stay in dev mode |
-| Pickup handoff integrity | single-use 4-digit code → `PickupClaimed`; repeat claims are rejected and audit evidence is preserved |
+| Pickup handoff integrity | customer adapter validates a single-use 4-digit code; core Kotlin commitment enforces `CONFIRMED → PICKED_UP`, emits `PickupClaimed`, releases capacity, and rejects repeat claims |
 | Order/payment/settlement/reward domains | customer checkout exercises order/payment/confirmation; hidden cancellation race exercises settlement/reward reconciliation and compensation |
 | REST/OpenAPI | explicit OpenAPI 3.1 contract for hold → payment authorization → confirm/cancel + tracking, ledger posting/history/conflicts, reconciliation |
 | SQL tuning | committed timeline indexes + release-gate PostgreSQL `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)` with index-use assertion |
