@@ -34,12 +34,14 @@ required = [
     "services/reconciler/app/engine.py",
     "services/ops-console/app.py",
     "infra/k8s/reconciler.yaml",
+    "infra/k8s/merchant-fulfillment.yaml",
     "infra/aws/terraform/main.tf",
     "infra/observability/datadog-monitor.json",
     "automation/n8n/performance-regression-triage.json",
     "automation/make/README.md",
     "docs/ai-first-workflow.md",
     "docs/jd-traceability.md",
+    "docs/merchant-fulfillment.md",
     "docs/performance.md",
     "sql/explain/commitment_timeline.sql",
     "sql/explain/store_pickup_schedule.sql",
@@ -136,6 +138,11 @@ assert "PickupPactRenegotiated" in openapi and "PickupPactRenegotiated" in async
 assert "PickupPactBreached" in openapi and "PickupPactBreached" in asyncapi
 assert "pickup.fulfillment.events.v1" in asyncapi
 assert "FulfillmentAnomalyDetected" in asyncapi
+compose = (ROOT / "docker-compose.yml").read_text()
+assert "merchant-fulfillment:" in compose
+merchant_k8s = (ROOT / "infra/k8s/merchant-fulfillment.yaml").read_text()
+assert "name: merchant-fulfillment" in merchant_k8s
+assert "/actuator/health/readiness" in merchant_k8s
 assert "/api/v1/commitments/{id}/reschedule" in openapi
 assert "/api/v1/commitments/{id}/breach-pact" in openapi
 assert "/api/v1/merchant/stores/{storeId}/deliveries" in openapi
