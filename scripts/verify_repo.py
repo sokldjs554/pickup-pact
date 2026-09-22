@@ -20,6 +20,7 @@ required = [
     "contracts/openapi.yaml",
     "contracts/asyncapi.yaml",
     "services/commitment-service/src/main/kotlin/io/pickuppact/commitment/domain/PickupCommitment.kt",
+    "services/commitment-service/src/main/kotlin/io/pickuppact/commitment/domain/PickupPact.kt",
     "services/ledger-service/src/main/java/io/pickuppact/ledger/domain/LedgerBatch.java",
     "services/reconciler/app/main.py",
     "services/reconciler/app/engine.py",
@@ -102,6 +103,9 @@ assert "/api/v1/projections/{aggregateId}" in openapi
 assert "commitment_projection" in schema and "commitment_projection" in persistence
 assert "ledger_conflicts" in schema
 assert "required: [eventId, aggregateId, type, amount]" in asyncapi
+assert "PickupPactIssued" in openapi and "PickupPactIssued" in asyncapi
+assert "PickupPactRenegotiated" in openapi and "PickupPactRenegotiated" in asyncapi
+assert "PickupPactBreached" in openapi and "PickupPactBreached" in asyncapi
 assert "reconciliation_run" in schema and "reconciliation_run" in persistence
 assert "outbox_events" in explain and "outbox_event\n" not in explain
 assert "financial_event_receipt" not in architecture
@@ -136,7 +140,8 @@ for marker in [
     "ONE-TIME PICKUP CODE",
     "TRUST RECEIPT",
     "수령 완료 체험",
-    "픽업 시간이 바뀌면 먼저 알려드려요.",
+    "Pickup Pact — 픽업 시간을 약속해요.",
+    "보장 시간을 넘기면 500P",
     "괜찮아요",
     "제품 화면으로 돌아가기",
 ]:
