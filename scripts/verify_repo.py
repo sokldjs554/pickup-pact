@@ -24,6 +24,11 @@ required = [
     "services/commitment-service/src/main/kotlin/io/pickuppact/commitment/domain/MenuWorkloadPolicy.kt",
     "services/commitment-service/src/main/kotlin/io/pickuppact/commitment/application/QuoteTokenService.kt",
     "services/commitment-service/src/main/kotlin/io/pickuppact/commitment/application/StoreCapacityPolicy.kt",
+    "services/merchant-fulfillment-service/src/main/java/io/pickuppact/fulfillment/domain/MerchantOrder.java",
+    "services/merchant-fulfillment-service/src/main/java/io/pickuppact/fulfillment/domain/JitPreparationPolicy.java",
+    "services/merchant-fulfillment-service/src/main/java/io/pickuppact/fulfillment/application/MerchantFulfillmentService.java",
+    "services/merchant-fulfillment-service/src/main/java/io/pickuppact/fulfillment/infra/MerchantFulfillmentRepository.java",
+    "services/merchant-fulfillment-service/src/main/java/io/pickuppact/fulfillment/infra/FulfillmentOutboxRelay.java",
     "services/ledger-service/src/main/java/io/pickuppact/ledger/domain/LedgerBatch.java",
     "services/reconciler/app/main.py",
     "services/reconciler/app/engine.py",
@@ -116,12 +121,26 @@ assert "idx_pickup_commitments_store_schedule" in schema
 assert "uq_pickup_commitments_idempotency" in schema
 assert "pact_promised_at" in schema and "pact_status" in schema
 assert "order_amount" in schema
+for table in [
+    "merchant_orders",
+    "merchant_inbox_events",
+    "merchant_deliveries",
+    "merchant_effects",
+    "merchant_fulfillment_anomalies",
+    "fulfillment_outbox_events",
+]:
+    assert table in schema, f"merchant schema missing: {table}"
 assert "required: [eventId, aggregateId, type, amount]" in asyncapi
 assert "PickupPactIssued" in openapi and "PickupPactIssued" in asyncapi
 assert "PickupPactRenegotiated" in openapi and "PickupPactRenegotiated" in asyncapi
 assert "PickupPactBreached" in openapi and "PickupPactBreached" in asyncapi
+assert "pickup.fulfillment.events.v1" in asyncapi
+assert "FulfillmentAnomalyDetected" in asyncapi
 assert "/api/v1/commitments/{id}/reschedule" in openapi
 assert "/api/v1/commitments/{id}/breach-pact" in openapi
+assert "/api/v1/merchant/stores/{storeId}/deliveries" in openapi
+assert "/api/v1/merchant/orders/{orderId}/start" in openapi
+assert "/api/v1/merchant/orders/{orderId}/ready" in openapi
 assert "reconciliation_run" in schema and "reconciliation_run" in persistence
 assert "outbox_events" in explain and "outbox_event\n" not in explain
 assert "event_sequence" in schema
@@ -142,7 +161,10 @@ assert "path: /ready" in reconciler_k8s
 assert "RENDER_GIT_COMMIT" in demo and "release_commit" in demo
 assert "EXPECTED_COMMIT" in live_demo_workflow and 'health["release_commit"] == EXPECTED_COMMIT' in live_demo_workflow
 assert "COPY services /app/services" in demo_dockerfile
-assert (ROOT / "scripts/integration_smoke.py").read_text().count("full topology integration pass") == 1
+integration_smoke = (ROOT / "scripts/integration_smoke.py").read_text()
+assert integration_smoke.count("full topology integration pass") == 1
+assert "merchant_fulfillment_flow" in integration_smoke
+assert "READY_LATE automatic Pickup Pact compensation" in integration_smoke
 env_example = (ROOT / ".env.example").read_text()
 assert "MONGODB_URL=" in env_example
 assert "REDIS_URL=" in env_example
@@ -163,6 +185,9 @@ for marker in [
     "체험 손님",
     "주문 취소",
     "주문 내역",
+    "매장 운영",
+    "Merchant Fulfillment Reliability",
+    "JIT 제조 Window",
     "모바일 영수증",
     "ONE-TIME PICKUP CODE",
     "TRUST RECEIPT",
