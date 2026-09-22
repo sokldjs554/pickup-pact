@@ -197,6 +197,10 @@ body:not(.expert-mode) .health{display:none}
 .promise-benefit{display:flex;align-items:center;gap:14px;background:linear-gradient(135deg,#fff7ed,#fff);border:1px solid #fed7aa;border-radius:18px;padding:18px 20px}.promise-benefit-icon{width:42px;height:42px;border-radius:14px;background:#fff;border:1px solid #fed7aa;display:grid;place-items:center;font-size:18px;flex:0 0 auto}.promise-benefit b{display:block;font-size:13px;margin-bottom:4px}.promise-benefit span{font-size:10px;line-height:1.5;color:#667085}
 .pickup-promise-card{background:#fff;border:1px solid #d1fadf;border-radius:18px;padding:18px;display:grid;gap:10px}.pickup-promise-card.warning{background:#fffaeb;border-color:#fedf89}.pickup-promise-card.rescheduled{background:#f0fdf4;border-color:#abefc6}.pickup-promise-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}.pickup-promise-head span{font-size:9px;font-weight:900;color:#667085;letter-spacing:.06em}.pickup-promise-head b{font-size:12px}.pickup-promise-time{font-size:21px;font-weight:950;letter-spacing:-.03em}.pickup-promise-copy{font-size:11px;color:#667085;line-height:1.55}.pickup-promise-actions{display:flex;gap:8px;flex-wrap:wrap}.pickup-promise-actions button{border:1px solid #d0d5dd;background:#fff;border-radius:10px;padding:9px 11px;font-size:10px;font-weight:850;cursor:pointer}.pickup-promise-actions .accept{background:#101828;border-color:#101828;color:#fff}
 .order-status-card.promise{border-color:#fedf89;background:#fffcf5}.order-status-card.promise .order-status-icon{background:#fffaeb;color:#b54708}
+
+.history-list{display:grid;gap:10px}.history-card{background:#fff;border:1px solid #eaecf0;border-radius:17px;padding:17px;display:grid;grid-template-columns:1fr auto;gap:14px;align-items:center}.history-card b{font-size:13px}.history-card p{font-size:10px;color:#667085;margin:5px 0 0}.history-status{font-size:9px;font-weight:900;border-radius:999px;padding:5px 8px;background:#f2f4f7;color:#475467}.history-status.cancelled{background:#fff1f0;color:#b42318}.history-status.picked{background:#ecfdf3;color:#067647}
+.receipt-sheet{max-height:82vh;overflow:auto}.receipt-brand{text-align:center;padding:5px 0 18px}.receipt-brand b{font-size:18px}.receipt-brand span{display:block;font-size:9px;color:#98a2b3;margin-top:4px}.receipt-total{font-size:24px;font-weight:950;letter-spacing:-.03em;text-align:right}.receipt-row{display:flex;justify-content:space-between;gap:14px;padding:9px 0;border-bottom:1px dashed #eaecf0;font-size:11px}.receipt-row span{color:#667085}.receipt-timeline{display:grid;gap:9px;margin-top:15px}.receipt-event{display:grid;grid-template-columns:58px 1fr;gap:9px;font-size:10px}.receipt-event time{color:#98a2b3}.receipt-event b{display:block;font-size:10px;margin-bottom:2px}.receipt-event span{color:#667085;line-height:1.4}.receipt-note{background:#f8fafc;border-radius:12px;padding:12px;font-size:10px;color:#667085;line-height:1.5;margin-top:14px}
+.pickup-code-card{background:#101828;color:#fff;border-radius:18px;padding:18px;display:flex;justify-content:space-between;align-items:center;gap:16px}.pickup-code-card span{font-size:9px;color:#98a2b3;font-weight:850}.pickup-code-card b{display:block;font-size:26px;letter-spacing:.16em;margin-top:4px}.pickup-code-card button{border:0;background:#fff;color:#101828;border-radius:10px;padding:10px 12px;font-size:10px;font-weight:900;cursor:pointer}.pickup-code-card.used{background:#f2f4f7;color:#475467}.pickup-code-card.used span{color:#98a2b3}.pickup-code-card.used button{display:none}
 .dev-entry-note{display:none}
 body.expert-mode .customer-pill{display:none}
 @media(max-width:900px){.store-grid{grid-template-columns:1fr}.menu-grid{grid-template-columns:1fr}.customer-note{display:none}}
@@ -241,6 +245,7 @@ body.expert-mode .app{display:block}body.expert-mode .sidebar{position:relative;
         <nav class="product-tabs" aria-label="제품 메뉴">
           <button class="active" data-product-page="overview" type="button" onclick="goProductPage('overview')">홈</button>
           <button data-product-page="guided" type="button" onclick="goProductPage('guided')">내 주문</button>
+          <button data-product-page="history" type="button" onclick="goProductPage('history')">주문 내역</button>
         </nav>
       </div>
       <h1 class="expert-page-title" id="pageTitle">주문 흐름</h1>
@@ -334,6 +339,16 @@ body.expert-mode .app{display:block}body.expert-mode .sidebar{position:relative;
               <button class="confirm-cancel" type="button" onclick="cancelCustomerOrder()">주문 취소</button>
             </div>
           </div>
+        </div>
+      </section>
+
+      <section class="page" id="page-history">
+        <div class="order-page">
+          <div class="order-page-head">
+            <div><h2>주문 내역</h2><p>완료되거나 취소된 주문을 다시 볼 수 있어요.</p></div>
+            <button class="customer-action" type="button" onclick="goProductPage('overview')">메뉴 보기</button>
+          </div>
+          <div class="history-list" id="historyList"></div>
         </div>
       </section>
 
@@ -454,6 +469,12 @@ body.expert-mode .app{display:block}body.expert-mode .sidebar{position:relative;
     </div>
   </main>
 </div>
+<div class="sheet-backdrop" id="receiptBackdrop" onclick="closeReceiptFromBackdrop(event)">
+  <div class="cart-sheet receipt-sheet" role="dialog" aria-modal="true" aria-label="모바일 영수증">
+    <div class="cart-sheet-head"><h3>모바일 영수증</h3><button class="sheet-close" type="button" onclick="closeReceipt()" aria-label="영수증 닫기">×</button></div>
+    <div id="receiptView"></div>
+  </div>
+</div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -471,7 +492,7 @@ let promiseTimer=null;
 const $=id=>document.getElementById(id);
 
 const pageNames={
-  overview:"홈",guided:"내 주문",orders:"주문 흐름",capacity:"매장 처리량",
+  overview:"홈",guided:"내 주문",history:"주문 내역",orders:"주문 흐름",capacity:"매장 처리량",
   faults:"장애 주입",reconcile:"정합성 복구",ledger:"정산 · 감사"
 };
 
@@ -1013,7 +1034,61 @@ function renderOrderCard(target){
 
 
 function humanStatus(status){
-  return ({HELD:"주문 접수",CONFIRMED:"픽업 확정",CANCELLED:"주문 취소",AT_RISK:"확인 필요"})[status]||status;
+  return ({HELD:"주문 접수",CONFIRMED:"픽업 확정",CANCELLED:"주문 취소",PICKED_UP:"픽업 완료",AT_RISK:"확인 필요"})[status]||status;
+}
+
+function receiptStatusLabel(status){
+  return ({CANCELLED:"취소 완료",PICKED_UP:"픽업 완료",CONFIRMED:"주문 진행 중",AT_RISK:"시간 확인 필요"})[status]||status;
+}
+
+function renderReceipt(receipt){
+  if(!receipt)return '<div class="empty">영수증이 없어요.</div>';
+  const timeline=(receipt.timeline||[]).map(item=>
+    '<div class="receipt-event"><time>'+item.at.slice(11,16)+'</time><div><b>'+item.label+'</b><span>'+item.detail+'</span></div></div>'
+  ).join("");
+  return '<div class="receipt-brand"><b>Pickup Pact</b><span>TRUST RECEIPT · '+receipt.order_id+'</span></div>'+
+    '<div class="receipt-row"><span>매장</span><b>'+receipt.store+'</b></div>'+
+    '<div class="receipt-row"><span>메뉴</span><b>'+receipt.items+'</b></div>'+
+    '<div class="receipt-row"><span>픽업</span><b>'+receipt.pickup_at+'</b></div>'+
+    '<div class="receipt-row"><span>상태</span><b>'+receiptStatusLabel(receipt.status)+'</b></div>'+
+    '<div class="receipt-row"><span>주문 금액</span><b>'+money(receipt.total)+'원</b></div>'+
+    '<div class="receipt-row"><span>최종 정산</span><b>'+money(receipt.net_settlement)+'원</b></div>'+
+    '<div class="receipt-row"><span>포인트 잔액</span><b>'+money(receipt.reward_balance)+'P</b></div>'+
+    '<div class="receipt-total">'+money(receipt.status==="CANCELLED"?0:receipt.total)+'원</div>'+
+    '<div class="receipt-timeline">'+timeline+'</div>'+
+    '<div class="receipt-note">주문·결제·픽업 변경·취소 기록을 같은 주문 근거에서 보여주는 체험용 영수증이에요.</div>';
+}
+
+function openReceipt(receipt=null){
+  const value=receipt||state?.receipt;
+  $("receiptView").innerHTML=renderReceipt(value);
+  $("receiptBackdrop").classList.add("show");
+}
+function closeReceipt(){$("receiptBackdrop").classList.remove("show")}
+function closeReceiptFromBackdrop(event){if(event.target===$("receiptBackdrop"))closeReceipt()}
+
+function renderHistory(){
+  const el=$("historyList"); if(!el)return;
+  const history=state?.order_history||[];
+  if(!history.length){
+    el.innerHTML='<div class="customer-empty"><div class="order-status-icon" style="margin:0 auto">🧾</div><h3>아직 지난 주문이 없어요.</h3><p>픽업 완료나 취소가 끝나면 여기에 남아요.</p></div>';
+    return;
+  }
+  el.innerHTML=history.map((item,index)=>{
+    const cls=item.status==="CANCELLED"?"cancelled":item.status==="PICKED_UP"?"picked":"";
+    return '<button class="history-card" type="button" onclick="openHistoryReceipt('+index+')"><div><b>'+item.store+'</b><p>'+item.items+' · '+money(item.total)+'원 · '+item.pickup_at+'</p></div><span class="history-status '+cls+'">'+receiptStatusLabel(item.status)+'</span></button>';
+  }).join("");
+}
+function openHistoryReceipt(index){openReceipt((state.order_history||[])[index])}
+
+async function claimCustomerPickup(){
+  try{
+    const code=state?.pickup_handoff?.code;
+    if(!code)throw new Error("픽업 코드를 준비하지 못했어요.");
+    const result=await api("/api/demo/sessions/"+sessionId+"/pickup/claim","POST",{code});
+    state=result.state; customerOrderStage="picked"; if(orderReadyTimer)clearTimeout(orderReadyTimer);
+    renderAll(); toast("픽업 완료됐어요.");
+  }catch(e){toast(e.message,true)}
 }
 
 function renderCustomerOrder(){
@@ -1030,12 +1105,15 @@ function renderCustomerOrder(){
   const promiseWaiting=protection.status==="SUGGESTED"||o.status==="AT_RISK";
   const rescheduled=protection.status==="RESCHEDULED";
   const cancelled=o.status==="CANCELLED"||customerOrderStage==="cancelled";
-  const stage=cancelled?"cancelled":promiseWaiting?"promise":customerOrderStage==="ready"?"ready":customerOrderStage==="preparing"?"preparing":"received";
+  const picked=o.status==="PICKED_UP"||customerOrderStage==="picked";
+  const stage=cancelled?"cancelled":picked?"picked":promiseWaiting?"promise":customerOrderStage==="ready"?"ready":customerOrderStage==="preparing"?"preparing":"received";
   view.dataset.stage=stage;
 
-  const statusTitle=cancelled?"주문이 취소됐어요.":stage==="promise"?"픽업 시간이 조금 늦어져요.":stage==="ready"?"픽업 준비됐어요.":stage==="preparing"?"음료를 만들고 있어요.":"주문됐어요.";
+  const statusTitle=cancelled?"주문이 취소됐어요.":picked?"픽업 완료됐어요.":stage==="promise"?"픽업 시간이 조금 늦어져요.":stage==="ready"?"픽업 준비됐어요.":stage==="preparing"?"음료를 만들고 있어요.":"주문됐어요.";
   const statusText=cancelled
     ? money(o.total)+"원 결제 취소와 포인트 정리가 끝났어요."
+    : picked
+    ? "수령 확인이 끝났어요. 모바일 영수증에서 기록을 확인할 수 있어요."
     : stage==="promise"
     ? "매장이 조금 바빠졌어요. 새 시간을 확인해주세요."
     : stage==="ready"
@@ -1043,7 +1121,7 @@ function renderCustomerOrder(){
     : stage==="preparing"
     ? "조금만 기다려주세요. 준비되면 바로 알려드릴게요."
     : "매장에서 주문을 확인했어요.";
-  const icon=cancelled||stage==="ready"?"✓":stage==="promise"?"!":stage==="preparing"?"…":"✓";
+  const icon=cancelled||picked||stage==="ready"?"✓":stage==="promise"?"!":stage==="preparing"?"…":"✓";
   const orderNo=(o.order_id||"PP-0000").split("-").slice(-1)[0];
   const progress=cancelled?"":'<div class="order-progress"><div class="order-progress-step done">주문 접수</div><div class="order-progress-step '+(stage==="preparing"||stage==="promise"||stage==="ready"?"done":"current")+'">준비 중</div><div class="order-progress-step '+(stage==="ready"?"current":"")+'">픽업 준비</div></div>';
 
@@ -1063,6 +1141,7 @@ function renderCustomerOrder(){
   view.innerHTML=
     '<div class="order-status-card '+(cancelled?"cancelled":stage==="promise"?"promise":"")+'"><div class="order-status-icon">'+icon+'</div><h3>'+statusTitle+'</h3><p>'+statusText+'</p>'+progress+'</div>'+
     promiseCard+
+    (stage==="ready"&&!state.pickup_handoff?.claimed?'<div class="pickup-code-card"><div><span>1회용 픽업 코드</span><b>'+state.pickup_handoff.code+'</b></div><button type="button" onclick="claimCustomerPickup()">픽업 완료</button></div>':picked?'<div class="pickup-code-card used"><div><span>픽업 코드</span><b>사용 완료</b></div></div>':'')+
     '<div class="order-detail-card"><h3>주문 정보</h3>'+
       '<div class="order-detail-row"><span>매장</span><b>'+o.store+'</b></div>'+
       '<div class="order-detail-row"><span>메뉴</span><b>'+o.items+'</b></div>'+
@@ -1071,7 +1150,7 @@ function renderCustomerOrder(){
       '<div class="order-detail-row"><span>주문번호</span><b>'+orderNo+'</b></div>'+
     '</div>'+
     '<div class="order-actions">'+
-      (cancelled?'<button class="customer-action primary" type="button" onclick="startNewCustomerOrder()">다시 주문하기</button>':promiseWaiting?'':'<button class="customer-action danger" type="button" onclick="openCancelDialog()">주문 취소</button>')+
+      ((cancelled||picked)?'<button class="customer-action primary" type="button" onclick="openReceipt()">영수증 보기</button><button class="customer-action" type="button" onclick="startNewCustomerOrder()">다시 주문하기</button>':promiseWaiting?'':'<button class="customer-action" type="button" onclick="openReceipt()">영수증 보기</button><button class="customer-action danger" type="button" onclick="openCancelDialog()">주문 취소</button>')+
     '</div>';
 }
 
@@ -1079,6 +1158,7 @@ function renderAll(){
   if(!state)return;
   renderCustomerHome();
   renderCustomerOrder();
+  renderHistory();
   renderCart();
   $("mOrder").textContent=state.order?humanStatus(state.order.status):"-";
   $("mOrderSub").textContent=state.order?state.order.order_id:"주문 없음";
