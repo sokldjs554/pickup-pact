@@ -67,13 +67,14 @@ Only the recorded summary is committed at `artifacts/reconciler-http-summary.jso
 
 Relevant committed indexes are:
 
+- `pickup_commitments(store_id, pickup_at, id) where state in (HELD, CONFIRMED, AT_RISK)` for a merchant-facing upcoming pickup schedule;
 - `outbox_events(aggregate_id, occurred_at, id)` for one commitment's event timeline;
 - partial `outbox_events(occurred_at, id) where published_at is null` for relay polling;
 - `ledger_batches(aggregate_id, created_at desc)` for financial history;
 - `ledger_entries(event_id)` for batch entry lookup;
 - `reconciliation_run(aggregate_id, created_at desc)` for incident history.
 
-The release gate now starts the real PostgreSQL 16 Compose service and runs `scripts/capture_postgres_plan.py`. The script seeds a target aggregate plus noise rows, executes `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)`, requires the planner to use `idx_outbox_aggregate_timeline`, and captures both the normal indexed plan and a forced-sequential baseline as `postgres-plan-evidence.json`.
+The release gate now starts the real PostgreSQL 16 Compose service and runs `scripts/capture_postgres_plan.py`. The script seeds synthetic target/noise data and executes `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)` for **two paths**: an aggregate event timeline and a store's active pickup schedule. It requires `idx_outbox_aggregate_timeline` and `idx_pickup_commitments_store_schedule` respectively, then captures both indexed plans and forced-sequential baselines as `postgres-plan-evidence.json`.
 
 Execution times in that artifact are **CI-container measurements only**. They are useful for plan analysis and regression evidence, not production latency claims.
 
