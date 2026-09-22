@@ -3,6 +3,7 @@ create table if not exists pickup_commitments (
   store_id text not null,
   pickup_at timestamptz not null,
   units integer not null check (units > 0),
+  order_amount integer not null default 0 check (order_amount >= 0),
   lease_token text not null,
   payment_authorized boolean not null,
   state text not null,
@@ -18,6 +19,7 @@ create table if not exists pickup_commitments (
   updated_at timestamptz not null default now()
 );
 
+alter table pickup_commitments add column if not exists order_amount integer not null default 0;
 alter table pickup_commitments add column if not exists idempotency_key text;
 alter table pickup_commitments add column if not exists request_fingerprint text;
 alter table pickup_commitments add column if not exists pact_promised_at timestamptz;
