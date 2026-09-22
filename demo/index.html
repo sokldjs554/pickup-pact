@@ -574,10 +574,18 @@ function cartItemSummary(){
   return cart.map(item=>item.name+(item.qty>1?" "+item.qty+"개":"")).join(", ");
 }
 
+function pickupTimeForStore(store=selectedStore()){
+  if(!store)return "12:30";
+  const target=new Date(Date.now()+Number(store.pickup_minutes||10)*60*1000);
+  return new Intl.DateTimeFormat("en-GB",{
+    timeZone:"Asia/Seoul",hour:"2-digit",minute:"2-digit",hour12:false
+  }).format(target);
+}
+
 function estimatedPickup(){
   const store=selectedStore();
   if(!store) return "-";
-  return "약 "+store.pickup_minutes+"분 뒤";
+  return pickupTimeForStore(store)+" 픽업 · 약 "+store.pickup_minutes+"분";
 }
 
 function menuEmoji(name){
@@ -703,8 +711,9 @@ async function placeCustomerOrder(){
     const items=cartItemSummary();
     const total=cartTotalValue();
     const units=cartItemCount();
+    const pickupAt=pickupTimeForStore(store);
     let result=await api("/api/demo/sessions/"+sessionId+"/orders","POST",{
-      store:store.name,items,total,pickup_at:"12:30",units
+      store:store.name,items,total,pickup_at:pickupAt,units
     });
     state=result.state;
     result=await api("/api/demo/sessions/"+sessionId+"/payment","POST",{authorization_id:"customer-demo"});
@@ -1043,7 +1052,7 @@ function renderCustomerOrder(){
     if(promiseWaiting){
       const original=protection.original_pickup_at||o.pickup_at;
       const suggested=protection.suggested_pickup_at||o.pickup_at;
-      promiseCard='<div class="pickup-promise-card warning"><div class="pickup-promise-head"><span>픽업 약속</span><b>시간 변경 제안</b></div><div class="pickup-promise-time">'+original+' → '+suggested+'</div><div class="pickup-promise-copy">매장이 갑자기 바빠졌어요. '+suggested+'쯤 픽업하면 기다리는 시간을 줄일 수 있어요.</div><div class="pickup-promise-actions"><button class="accept" type="button" onclick="acceptPickupSuggestion()">'+suggested+' 괜찮아요</button><button type="button" onclick="openCancelDialog()">주문 취소</button></div></div>';
+      promiseCard='<div class="pickup-promise-card warning" data-original-pickup="'+original+'" data-suggested-pickup="'+suggested+'"><div class="pickup-promise-head"><span>픽업 약속</span><b>시간 변경 제안</b></div><div class="pickup-promise-time">'+original+' → '+suggested+'</div><div class="pickup-promise-copy">매장이 갑자기 바빠졌어요. '+suggested+'쯤 픽업하면 기다리는 시간을 줄일 수 있어요.</div><div class="pickup-promise-actions"><button class="accept" type="button" onclick="acceptPickupSuggestion()">'+suggested+' 괜찮아요</button><button type="button" onclick="openCancelDialog()">주문 취소</button></div></div>';
     }else if(rescheduled){
       promiseCard='<div class="pickup-promise-card rescheduled"><div class="pickup-promise-head"><span>픽업 약속</span><b>변경 완료</b></div><div class="pickup-promise-time">'+o.pickup_at+' 픽업</div><div class="pickup-promise-copy">새 시간으로 바꿨어요. 준비되면 바로 알려드릴게요.</div></div>';
     }else{
