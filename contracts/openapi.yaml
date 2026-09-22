@@ -189,6 +189,7 @@ components:
             - RewardGranted
             - CapacityRevised
             - PickupRescheduled
+            - PickupClaimed
             - SettlementReversed
             - RewardReversed
         occurred_at: {type: string, format: date-time}
