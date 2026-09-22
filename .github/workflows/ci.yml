@@ -71,6 +71,8 @@ jobs:
             --orders 20000 \
             --seed 42 \
             --output /tmp/promise-admission-benchmark.json
+          python scripts/verify_promise_admission_evidence.py \
+            --actual /tmp/promise-admission-benchmark.json
 
       - uses: actions/upload-artifact@v4
         with:
