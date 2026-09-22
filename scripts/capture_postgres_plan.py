@@ -14,6 +14,7 @@ import psycopg
 DSN = "postgresql://pickuppact:pickuppact@127.0.0.1:5432/pickuppact"
 OUTBOX_INDEX = "idx_outbox_aggregate_timeline"
 STORE_SCHEDULE_INDEX = "idx_pickup_commitments_store_schedule"
+MERCHANT_DELIVERY_INDEX = "idx_merchant_deliveries_pending"
 
 
 def connect_after_schema(timeout_s: int = 45):
@@ -96,6 +97,27 @@ def explain_store_schedule(cursor, store_id: str, start: datetime, end: datetime
     return cursor.fetchone()[0][0]
 
 
+def explain_merchant_reconnect(cursor, store_id: str, *, force_seq: bool) -> dict:
+    mode = "off" if force_seq else "on"
+    cursor.execute(f"set enable_indexscan = {mode}")
+    cursor.execute(f"set enable_bitmapscan = {mode}")
+    cursor.execute("set enable_seqscan = on")
+    cursor.execute(
+        """
+        explain (analyze, buffers, format json)
+        select delivery_sequence, order_id, delivery_type, payload
+        from merchant_deliveries
+        where store_id = %s
+          and delivery_sequence > 0
+          and acknowledged_at is null
+        order by delivery_sequence
+        limit 50
+        """,
+        (store_id,),
+    )
+    return cursor.fetchone()[0][0]
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", default="/tmp/postgres-plan-evidence.json")
@@ -151,6 +173,52 @@ def main() -> None:
             f"plan-fingerprint-noise-{i}",
         ))
 
+    merchant_order_rows = []
+    merchant_delivery_rows = []
+    for i in range(args.target_rows):
+        order_id = str(uuid.uuid4())
+        pickup_at = base + timedelta(minutes=30, seconds=i)
+        merchant_order_rows.append((
+            order_id,
+            target_store,
+            pickup_at,
+            1 + (i % 3),
+            "RECEIVED",
+            90,
+            pickup_at - timedelta(minutes=4),
+            pickup_at - timedelta(minutes=1),
+            pickup_at + timedelta(minutes=3),
+        ))
+        merchant_delivery_rows.append((
+            order_id,
+            target_store,
+            "ORDER_AVAILABLE",
+            json.dumps({"n": i, "kind": "target"}),
+            None,
+        ))
+    for i in range(args.noise_rows):
+        order_id = str(uuid.uuid4())
+        pickup_at = base + timedelta(minutes=i % 240)
+        store_id = f"noise-store-{i % 200}"
+        merchant_order_rows.append((
+            order_id,
+            store_id,
+            pickup_at,
+            1 + (i % 3),
+            "READY" if i % 7 == 0 else "RECEIVED",
+            90,
+            pickup_at - timedelta(minutes=4),
+            pickup_at - timedelta(minutes=1),
+            pickup_at + timedelta(minutes=3),
+        ))
+        merchant_delivery_rows.append((
+            order_id,
+            store_id,
+            "ORDER_AVAILABLE",
+            json.dumps({"n": i, "kind": "noise"}),
+            base if i % 3 == 0 else None,
+        ))
+
     with connect_after_schema() as connection:
         with connection.cursor() as cursor:
             cursor.executemany(
@@ -171,8 +239,30 @@ def main() -> None:
                 """,
                 commitment_rows,
             )
+            cursor.executemany(
+                """
+                insert into merchant_orders(
+                    order_id, store_id, pickup_at, capacity_units, state,
+                    preparation_seconds, earliest_start_at, target_ready_at, latest_ready_at,
+                    version, updated_at
+                )
+                values (%s::uuid, %s, %s, %s, %s, %s, %s, %s, %s, 0, now())
+                """,
+                merchant_order_rows,
+            )
+            cursor.executemany(
+                """
+                insert into merchant_deliveries(
+                    order_id, store_id, delivery_type, payload, acknowledged_at
+                )
+                values (%s::uuid, %s, %s, %s::jsonb, %s)
+                """,
+                merchant_delivery_rows,
+            )
             cursor.execute("analyze outbox_events")
             cursor.execute("analyze pickup_commitments")
+            cursor.execute("analyze merchant_orders")
+            cursor.execute("analyze merchant_deliveries")
 
             outbox_indexed = explain_outbox(cursor, target_aggregate, force_seq=False)
             outbox_sequential = explain_outbox(cursor, target_aggregate, force_seq=True)
@@ -195,6 +285,18 @@ def main() -> None:
                 force_seq=True,
             )
             require_index(schedule_indexed, STORE_SCHEDULE_INDEX)
+
+            merchant_indexed = explain_merchant_reconnect(
+                cursor,
+                target_store,
+                force_seq=False,
+            )
+            merchant_sequential = explain_merchant_reconnect(
+                cursor,
+                target_store,
+                force_seq=True,
+            )
+            require_index(merchant_indexed, MERCHANT_DELIVERY_INDEX)
 
             evidence = {
                 "scope": "CI PostgreSQL 16 container; synthetic plan evidence, not production latency",
@@ -232,6 +334,21 @@ def main() -> None:
                         "plan": schedule_sequential["Plan"],
                     },
                 },
+                "merchant_reconnect_delivery": {
+                    "target_store_id": target_store,
+                    "expected_index": MERCHANT_DELIVERY_INDEX,
+                    "index_used": True,
+                    "indexed": {
+                        "planning_time_ms": merchant_indexed.get("Planning Time"),
+                        "execution_time_ms": merchant_indexed.get("Execution Time"),
+                        "plan": merchant_indexed["Plan"],
+                    },
+                    "forced_sequential_baseline": {
+                        "planning_time_ms": merchant_sequential.get("Planning Time"),
+                        "execution_time_ms": merchant_sequential.get("Execution Time"),
+                        "plan": merchant_sequential["Plan"],
+                    },
+                },
             }
             Path(args.output).write_text(
                 json.dumps(evidence, ensure_ascii=False, indent=2),
@@ -244,6 +361,9 @@ def main() -> None:
                 "store_schedule_index": STORE_SCHEDULE_INDEX,
                 "store_schedule_indexed_execution_ms": evidence["store_pickup_schedule"]["indexed"]["execution_time_ms"],
                 "store_schedule_forced_seq_execution_ms": evidence["store_pickup_schedule"]["forced_sequential_baseline"]["execution_time_ms"],
+                "merchant_delivery_index": MERCHANT_DELIVERY_INDEX,
+                "merchant_delivery_indexed_execution_ms": evidence["merchant_reconnect_delivery"]["indexed"]["execution_time_ms"],
+                "merchant_delivery_forced_seq_execution_ms": evidence["merchant_reconnect_delivery"]["forced_sequential_baseline"]["execution_time_ms"],
             }, ensure_ascii=False))
 
 
