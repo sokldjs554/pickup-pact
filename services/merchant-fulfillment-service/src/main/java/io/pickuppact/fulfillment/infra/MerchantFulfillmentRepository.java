@@ -61,13 +61,20 @@ public class MerchantFulfillmentRepository {
         int changed = jdbc.update(
                 """
                 update merchant_orders set
-                  state=?, accepted_at=?, started_at=?, ready_at=?, picked_up_at=?,
+                  pickup_at=?, state=?,
+                  preparation_seconds=?, earliest_start_at=?, target_ready_at=?, latest_ready_at=?,
+                  accepted_at=?, started_at=?, ready_at=?, picked_up_at=?,
                   cancellation_requested_at=?, version=?, updated_at=now()
-                where order_id=? and version < ?
+                where order_id=? and version=?
                 """,
-                order.state().name(), ts(order.acceptedAt()), ts(order.startedAt()),
-                ts(order.readyAt()), ts(order.pickedUpAt()), ts(order.cancellationRequestedAt()),
-                order.version(), order.orderId(), order.version()
+                Timestamp.from(order.pickupAt()), order.state().name(),
+                order.window().preparationSeconds(),
+                Timestamp.from(order.window().earliestStartAt()),
+                Timestamp.from(order.window().targetReadyAt()),
+                Timestamp.from(order.window().latestReadyAt()),
+                ts(order.acceptedAt()), ts(order.startedAt()), ts(order.readyAt()),
+                ts(order.pickedUpAt()), ts(order.cancellationRequestedAt()),
+                order.version(), order.orderId(), order.version() - 1
         );
         if (changed != 1) throw new IllegalStateException("merchant order optimistic version conflict");
     }
