@@ -213,6 +213,16 @@ test('customer smart-order flow remains usable on a narrow mobile viewport', asy
 
   await page.getByRole('button', { name: '4,500원 주문하기', exact: true }).click();
   await expect(page.getByRole('heading', { name: '내 주문', exact: true })).toBeVisible();
+  await expect(page.locator('#customerOrderView')).toHaveAttribute('data-stage', 'ready', { timeout: 10000 });
+  await expect(page.locator('.pickup-code-value')).toHaveText(/^\d{4}$/);
+  await page.getByRole('button', { name: '수령 완료 체험', exact: true }).click();
+  await expect(page.locator('#customerOrderView')).toHaveAttribute('data-stage', 'pickedup', { timeout: 8000 });
+  await page.getByRole('button', { name: '영수증 보기', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: '모바일 영수증' })).toBeVisible();
+
+  const receiptOverflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  expect(receiptOverflow).toBeLessThanOrEqual(1);
+  await page.getByRole('button', { name: '영수증 닫기', exact: true }).click();
 
   const orderOverflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   expect(orderOverflow).toBeLessThanOrEqual(1);
