@@ -11,6 +11,7 @@ import jakarta.validation.Valid
 import jakarta.validation.constraints.Future
 import jakarta.validation.constraints.Min
 import jakarta.validation.constraints.NotBlank
+import jakarta.validation.constraints.Positive
 import org.springframework.web.bind.annotation.*
 import reactor.core.publisher.Mono
 import java.time.Instant
@@ -29,7 +30,7 @@ data class PaymentAuthorizationRequest @JsonCreator(mode = JsonCreator.Mode.PROP
 data class PromiseQuoteRequest(
     @field:Min(0) val backlogUnits: Int,
     @field:Min(1) val orderUnits: Int,
-    val serviceRateUnitsPerMinute: Double,
+    @field:Positive val serviceRateUnitsPerMinute: Double,
     @field:Min(0) val travelMinutes: Int,
     @field:Min(1) val maxPromiseMinutes: Int = 18,
     @field:Min(0) val safetyMinutes: Int = 2
