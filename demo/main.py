@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from services.reconciler.app.engine import reconcile as core_reconcile
 from services.reconciler.app.models import EventEnvelope, ReconcileRequest
 from demo.sandbox import demo_store
+from demo.promise_admission import PromiseAdmissionInput, quote_promise
 
 app = FastAPI(
     title="Pickup Pact Demo",
@@ -33,6 +34,7 @@ CUSTOMER_CATALOG: list[dict[str, Any]] = [
         "name": "패스카페 강남역점",
         "category": "커피 · 디저트",
         "pickup_minutes": 8,
+        "travel_minutes": 6,
         "distance_m": 180,
         "notice": "지금 주문하면 빠르게 픽업할 수 있어요.",
         "menu": [
@@ -47,6 +49,7 @@ CUSTOMER_CATALOG: list[dict[str, Any]] = [
         "name": "모닝빈 선릉점",
         "category": "커피 · 베이커리",
         "pickup_minutes": 11,
+        "travel_minutes": 5,
         "distance_m": 420,
         "notice": "샌드위치와 커피를 함께 주문할 수 있어요.",
         "menu": [
@@ -60,6 +63,7 @@ CUSTOMER_CATALOG: list[dict[str, Any]] = [
         "name": "커피온 역삼점",
         "category": "커피 · 티",
         "pickup_minutes": 6,
+        "travel_minutes": 7,
         "distance_m": 510,
         "notice": "주문이 비교적 빨리 준비되는 매장이에요.",
         "menu": [
@@ -69,6 +73,27 @@ CUSTOMER_CATALOG: list[dict[str, Any]] = [
         ],
     },
 ]
+
+PROMISE_ADMISSION_PROFILES: dict[str, dict[str, Any]] = {
+    "gangnam-pass-cafe": {
+        "backlog_units": 3,
+        "service_rate_units_per_minute": 1.2,
+        "max_promise_minutes": 18,
+        "safety_minutes": 2,
+    },
+    "seolleung-morning-bean": {
+        "backlog_units": 6,
+        "service_rate_units_per_minute": 0.8,
+        "max_promise_minutes": 18,
+        "safety_minutes": 2,
+    },
+    "yeoksam-coffee-on": {
+        "backlog_units": 18,
+        "service_rate_units_per_minute": 1.0,
+        "max_promise_minutes": 16,
+        "safety_minutes": 2,
+    },
+}
 
 EVENT_LABELS = {
     "PickupSlotHeld": "픽업 슬롯 확보",
@@ -520,6 +545,11 @@ class DemoOrderCreate(BaseModel):
     units: int = Field(ge=1, le=50)
 
 
+class PromiseQuoteRequest(BaseModel):
+    store_id: str = Field(min_length=1, max_length=80)
+    order_units: int = Field(ge=1, le=50)
+
+
 class PaymentRequest(BaseModel):
     authorization_id: str | None = Field(default=None, max_length=80)
 
@@ -554,6 +584,48 @@ def _demo_error(exc: Exception) -> HTTPException:
     return HTTPException(status_code=409, detail=str(exc))
 
 
+def _store_by_id(store_id: str) -> dict[str, Any]:
+    for store in CUSTOMER_CATALOG:
+        if store["id"] == store_id:
+            return store
+    raise KeyError(store_id)
+
+
+def _promise_quote_payload(store_id: str, order_units: int) -> dict[str, Any]:
+    store = _store_by_id(store_id)
+    profile = PROMISE_ADMISSION_PROFILES[store_id]
+    quote = quote_promise(
+        PromiseAdmissionInput(
+            backlog_units=int(profile["backlog_units"]),
+            order_units=order_units,
+            service_rate_units_per_minute=float(profile["service_rate_units_per_minute"]),
+            travel_minutes=int(store["travel_minutes"]),
+            max_promise_minutes=int(profile["max_promise_minutes"]),
+            safety_minutes=int(profile["safety_minutes"]),
+        )
+    )
+
+    if quote.decision.value == "ACCEPT":
+        headline = f"{quote.quoted_minutes}분 뒤 픽업 가능"
+        message = "지금 주문하면 이 시간에 맞춰 준비해요."
+    elif quote.decision.value == "OFFER_LATER":
+        headline = f"{quote.quoted_minutes}분 뒤 픽업 가능"
+        message = "지금은 조금 붐벼요. 대신 이 시간은 지킬 수 있어요."
+    else:
+        headline = "지금은 주문을 잠깐 쉬어요"
+        message = f"약 {quote.retry_after_minutes}분 뒤 다시 확인해 주세요."
+
+    return {
+        "store_id": store_id,
+        "decision": quote.decision.value,
+        "quoted_minutes": quote.quoted_minutes,
+        "retry_after_minutes": quote.retry_after_minutes,
+        "headline": headline,
+        "message": message,
+        "policy": quote.to_dict(),
+    }
+
+
 @app.get("/api/demo/customer")
 def demo_customer() -> dict[str, str]:
     return DEMO_CUSTOMER.copy()
@@ -561,7 +633,20 @@ def demo_customer() -> dict[str, str]:
 
 @app.get("/api/demo/catalog")
 def demo_catalog() -> list[dict[str, Any]]:
-    return CUSTOMER_CATALOG
+    result = []
+    for store in CUSTOMER_CATALOG:
+        item = dict(store)
+        item["promise_preview"] = _promise_quote_payload(store["id"], 1)
+        result.append(item)
+    return result
+
+
+@app.post("/api/demo/promise/quote")
+def demo_promise_quote(request: PromiseQuoteRequest) -> dict[str, Any]:
+    try:
+        return _promise_quote_payload(request.store_id, request.order_units)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="unknown store") from exc
 
 
 @app.post("/api/demo/sessions")
