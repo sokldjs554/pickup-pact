@@ -277,6 +277,108 @@ def test_capacity_risk_can_offer_and_accept_a_new_pickup_time():
     }
 
 
+def test_pickup_code_is_one_time_and_creates_trust_receipt_history():
+    session_id = create_session()
+    create_order(session_id, units=1, total=4500)
+    assert client.post(
+        f"/api/demo/sessions/{session_id}/payment",
+        json={"authorization_id": "auth-pickup"},
+    ).status_code == 200
+    confirmed = client.post(f"/api/demo/sessions/{session_id}/confirm")
+    assert confirmed.status_code == 200
+    code = confirmed.json()["state"]["order"]["pickup_code"]
+    assert code and len(code) == 4 and code.isdigit()
+
+    claimed = client.post(
+        f"/api/demo/sessions/{session_id}/pickup/claim",
+        json={"pickup_code": code},
+    )
+    assert claimed.status_code == 200
+    state = claimed.json()["state"]
+    assert state["order"]["status"] == "PICKED_UP"
+    assert state["order"]["pickup_claimed"] is True
+    assert state["metrics"]["net_settlement"] == 4500
+    assert state["metrics"]["reward_balance"] == 45
+    assert any(event["event_type"] == "PickupClaimed" for event in state["events"])
+
+    reused = client.post(
+        f"/api/demo/sessions/{session_id}/pickup/claim",
+        json={"pickup_code": code},
+    )
+    assert reused.status_code == 409
+
+    history = client.get(f"/api/demo/sessions/{session_id}/customer/history")
+    assert history.status_code == 200
+    assert len(history.json()) == 1
+    assert history.json()[0]["status"] == "PICKED_UP"
+
+    receipt = client.get(
+        f"/api/demo/sessions/{session_id}/customer/receipts/{state['order']['order_id']}"
+    )
+    assert receipt.status_code == 200
+    payload = receipt.json()
+    assert payload["final_charge"] == 4500
+    assert payload["reward_balance"] == 45
+    assert any(item["type"] == "PickupClaimed" for item in payload["timeline"])
+
+
+def test_cancelled_order_is_archived_with_zero_final_charge():
+    session_id = create_session()
+    create_order(session_id, units=2, total=9000)
+    client.post(
+        f"/api/demo/sessions/{session_id}/payment",
+        json={"authorization_id": "auth-cancel-history"},
+    )
+    client.post(f"/api/demo/sessions/{session_id}/confirm")
+    client.post(
+        f"/api/demo/sessions/{session_id}/cancel",
+        json={"delay_seconds": 52},
+    )
+    client.post(
+        f"/api/demo/sessions/{session_id}/settlement",
+        json={"amount": 9000},
+    )
+    client.post(
+        f"/api/demo/sessions/{session_id}/reward",
+        json={"amount": 90},
+    )
+    client.post(f"/api/demo/sessions/{session_id}/reconcile")
+    repaired = client.post(f"/api/demo/sessions/{session_id}/repairs/apply")
+    assert repaired.status_code == 200
+
+    history = client.get(f"/api/demo/sessions/{session_id}/customer/history").json()
+    assert len(history) == 1
+    assert history[0]["status"] == "CANCELLED"
+    assert history[0]["final_charge"] == 0
+    receipt = history[0]["receipt"]
+    assert receipt["settlement_balance"] == 0
+    assert receipt["reward_balance"] == 0
+    assert any(item["type"] == "SettlementReversed" for item in receipt["timeline"])
+    assert any(item["type"] == "RewardReversed" for item in receipt["timeline"])
+
+
+def test_next_customer_order_preserves_terminal_history():
+    session_id = create_session()
+    create_order(session_id, units=1, total=4500)
+    client.post(
+        f"/api/demo/sessions/{session_id}/payment",
+        json={"authorization_id": "auth-next"},
+    )
+    confirmed = client.post(f"/api/demo/sessions/{session_id}/confirm").json()
+    code = confirmed["state"]["order"]["pickup_code"]
+    client.post(
+        f"/api/demo/sessions/{session_id}/pickup/claim",
+        json={"pickup_code": code},
+    )
+
+    next_order = client.post(f"/api/demo/sessions/{session_id}/customer/next-order")
+    assert next_order.status_code == 200
+    state = next_order.json()
+    assert state["order"] is None
+    assert len(state["customer_history"]) == 1
+    assert state["customer_history"][0]["status"] == "PICKED_UP"
+
+
 def test_preset_load_populates_order_ledger_and_evidence():
     session_id = create_session()
     response = client.post(f"/api/demo/sessions/{session_id}/presets/late-cancel")
