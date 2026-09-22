@@ -42,7 +42,16 @@ class PickupPactTest {
 
         assertEquals(PickupPactStatus.COMPENSATED, breached.status)
         assertTrue(breached.compensationGranted)
-        assertThrows(IllegalArgumentException::class.java) { breached.breach() }
+        assertThrows(IllegalStateException::class.java) { breached.breach() }
         assertEquals(PickupPactStatus.COMPENSATED, breached.fulfill().status)
+    }
+
+    @Test
+    fun cancellationIsExplicitAndCannotCancelFulfilledPact() {
+        val cancelled = PickupPactPolicy.issue(Instant.now().plusSeconds(600)).cancel()
+        assertEquals(PickupPactStatus.CANCELLED, cancelled.status)
+
+        val fulfilled = PickupPactPolicy.issue(Instant.now().plusSeconds(600)).fulfill()
+        assertThrows(IllegalStateException::class.java) { fulfilled.cancel() }
     }
 }
