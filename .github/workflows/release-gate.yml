@@ -67,6 +67,7 @@ jobs:
           python scripts/consistency_matrix.py --orders 20000 --seeds 11,22,33,44,55 --output /tmp/pass1-matrix.json
           python scripts/verify_evidence.py             --benchmark-actual /tmp/pass1-benchmark.json             --matrix-actual /tmp/pass1-matrix.json
           python scripts/promise_admission_benchmark.py --orders 20000 --seed 42 --output /tmp/pass1-promise-admission.json
+          python scripts/verify_promise_admission_evidence.py --actual /tmp/pass1-promise-admission.json
 
       - name: Verification pass 2 — repeat tests from clean process
         env:
@@ -82,6 +83,7 @@ jobs:
           python scripts/consistency_matrix.py --orders 20000 --seeds 11,22,33,44,55 --output /tmp/pass2-matrix.json
           python scripts/verify_evidence.py             --benchmark-actual /tmp/pass2-benchmark.json             --matrix-actual /tmp/pass2-matrix.json
           python scripts/promise_admission_benchmark.py --orders 20000 --seed 42 --output /tmp/pass2-promise-admission.json
+          python scripts/verify_promise_admission_evidence.py --actual /tmp/pass2-promise-admission.json
 
       - name: Verification pass 3 — regression repeat
         env:
