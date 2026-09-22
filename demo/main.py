@@ -771,6 +771,10 @@ def create_demo_order(session_id: str, request: DemoOrderCreate) -> dict[str, An
             units = request.units
             total = request.total
             items = request.items
+            if request.store_id is not None:
+                slot = _pickup_slot_for_clock(request.store_id, request.pickup_at, units)
+                if not slot["can_fit"]:
+                    raise ValueError("selected pickup slot no longer has enough capacity")
 
         return demo_store.create_order(
             session_id,
