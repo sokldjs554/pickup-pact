@@ -62,6 +62,16 @@ paths:
         "404": {description: Commitment not found}
         "409": {description: Missing payment authorization or invalid state}
 
+  /api/v1/commitments/{id}/claim-pickup:
+    post:
+      summary: Mark a confirmed pickup as claimed after the customer-facing handoff adapter verifies its one-time code
+      parameters:
+        - $ref: "#/components/parameters/CommitmentId"
+      responses:
+        "200": {description: Pickup claimed and leased capacity released}
+        "404": {description: Commitment not found}
+        "409": {description: Invalid or already-terminal commitment state}
+
   /api/v1/commitments/{id}/cancel:
     post:
       summary: Cancel a commitment and release leased capacity
