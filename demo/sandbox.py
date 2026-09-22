@@ -18,6 +18,7 @@ EVENT_LABELS = {
     "RewardGranted": "고객 포인트 적립",
     "CapacityRevised": "매장 처리량 변경",
     "PickupRescheduled": "픽업 시간 변경",
+    "PickupClaimed": "픽업 완료",
     "SettlementReversed": "정산 취소 분개",
     "RewardReversed": "포인트 회수",
 }
@@ -101,6 +102,10 @@ def _shift_hhmm(value: str, minutes: int) -> str:
     return f"{total // 60:02d}:{total % 60:02d}"
 
 
+def _pickup_code() -> str:
+    return str(int(uuid4().hex[:8], 16) % 10000).zfill(4)
+
+
 class DemoStore:
     """Thread-safe, session-isolated in-memory sandbox for the public portfolio demo.
 
@@ -151,6 +156,16 @@ class DemoStore:
                     "original_pickup_at": None,
                     "suggested_pickup_at": None,
                 },
+                "pickup_guard": {
+                    "status": "NONE",
+                    "code": None,
+                    "issued_at": None,
+                    "expires_at": None,
+                    "claimed_at": None,
+                    "failed_attempts": 0,
+                    "max_attempts": 5,
+                },
+                "order_history": [],
             }
             self._audit_locked(session_id, "SESSION_CREATED", "새 데모 세션을 만들었습니다.")
             return self.snapshot(session_id)
@@ -165,6 +180,7 @@ class DemoStore:
         with self._lock:
             current = self.require(session_id)
             created_at = current["created_at"]
+            history = deepcopy(current.get("order_history", []))
             self._sessions[session_id] = {
                 "session_id": session_id,
                 "created_at": created_at,
@@ -187,6 +203,16 @@ class DemoStore:
                     "original_pickup_at": None,
                     "suggested_pickup_at": None,
                 },
+                "pickup_guard": {
+                    "status": "NONE",
+                    "code": None,
+                    "issued_at": None,
+                    "expires_at": None,
+                    "claimed_at": None,
+                    "failed_attempts": 0,
+                    "max_attempts": 5,
+                },
+                "order_history": history,
             }
             self._audit_locked(session_id, "SESSION_RESET", "데모 상태를 초기화했습니다.")
             return self.snapshot(session_id)
@@ -205,6 +231,110 @@ class DemoStore:
             }
         )
         self._touch(session)
+
+    def _customer_timeline_locked(self, session_id: str) -> list[dict[str, Any]]:
+        session = self.require(session_id)
+        labels = {
+            "ORDER_HELD": "주문 접수",
+            "PAYMENT_AUTHORIZED": "결제 완료",
+            "ORDER_CONFIRMED": "매장 확인",
+            "PICKUP_RESLOT_SUGGESTED": "픽업 시간 변경 안내",
+            "PICKUP_RESCHEDULE_ACCEPTED": "새 픽업 시간 확인",
+            "ORDER_CANCELLED": "주문 취소",
+            "PICKUP_CODE_REDEEMED": "픽업 완료",
+        }
+        return [
+            {
+                "label": labels[item["action"]],
+                "detail": item["detail"],
+                "at": item["at"],
+            }
+            for item in session["audit"]
+            if item["action"] in labels
+        ]
+
+    def _receipt_locked(self, session_id: str) -> dict[str, Any]:
+        session = self.require(session_id)
+        order = session.get("order")
+        if not order:
+            raise ValueError("order not found")
+        cancelled = order["status"] == "CANCELLED"
+        picked_up = order["status"] == "PICKED_UP"
+        protection = session.get("pickup_protection") or {}
+        guard = session.get("pickup_guard") or {}
+        return {
+            "receipt_id": f"receipt-{order['order_id']}",
+            "order_id": order["order_id"],
+            "store": order["store"],
+            "items": order["items"],
+            "total": order["total"],
+            "status": order["status"],
+            "payment_status": (
+                "CANCELLED"
+                if cancelled
+                else "PAID"
+                if order["payment_authorized"]
+                else "PENDING"
+            ),
+            "final_charge": 0 if cancelled else order["total"] if order["payment_authorized"] else 0,
+            "pickup_at": order["pickup_at"],
+            "original_pickup_at": protection.get("original_pickup_at"),
+            "pickup_changed": protection.get("status") in {"RESCHEDULED", "CANCELLED"}
+            and bool(protection.get("suggested_pickup_at")),
+            "pickup_status": (
+                "PICKED_UP"
+                if picked_up
+                else "CANCELLED"
+                if cancelled
+                else "READY"
+                if guard.get("status") == "ACTIVE"
+                else order["status"]
+            ),
+            "point_status": (
+                "ADJUSTED"
+                if cancelled and {"REVERSE_REWARD", "REVERSE_SETTLEMENT"} <= set(session["applied_repairs"])
+                else "NOT_APPLICABLE"
+            ),
+            "timeline": self._customer_timeline_locked(session_id),
+            "issued_at": _iso(_now()),
+        }
+
+    def _upsert_history_locked(self, session_id: str) -> None:
+        session = self.require(session_id)
+        order = session.get("order")
+        if not order:
+            return
+        receipt = self._receipt_locked(session_id)
+        entry = {
+            "order_id": order["order_id"],
+            "store": order["store"],
+            "items": order["items"],
+            "total": order["total"],
+            "status": order["status"],
+            "pickup_at": order["pickup_at"],
+            "updated_at": session["updated_at"].isoformat(timespec="microseconds"),
+            "receipt": receipt,
+        }
+        for index, existing in enumerate(session["order_history"]):
+            if existing["order_id"] == order["order_id"]:
+                session["order_history"][index] = entry
+                return
+        session["order_history"].append(entry)
+
+    def history(self, session_id: str) -> list[dict[str, Any]]:
+        with self._lock:
+            session = self.require(session_id)
+            return list(reversed(deepcopy(session["order_history"])))
+
+    def receipt(self, session_id: str, order_id: str | None = None) -> dict[str, Any]:
+        with self._lock:
+            session = self.require(session_id)
+            if order_id is None or (session.get("order") and session["order"]["order_id"] == order_id):
+                return deepcopy(self._receipt_locked(session_id))
+            for item in session["order_history"]:
+                if item["order_id"] == order_id:
+                    return deepcopy(item["receipt"])
+            raise KeyError(order_id)
 
     def _append_event_locked(
         self,
@@ -308,6 +438,15 @@ class DemoStore:
                 "original_pickup_at": pickup_at,
                 "suggested_pickup_at": None,
             }
+            session["pickup_guard"] = {
+                "status": "PENDING",
+                "code": None,
+                "issued_at": None,
+                "expires_at": None,
+                "claimed_at": None,
+                "failed_attempts": 0,
+                "max_attempts": 5,
+            }
             event = self._append_event_locked(
                 session_id,
                 "PickupSlotHeld",
@@ -353,6 +492,16 @@ class DemoStore:
             if not order["payment_authorized"]:
                 raise ValueError("payment authorization is required")
             order["status"] = "CONFIRMED"
+            now = _now()
+            session["pickup_guard"] = {
+                "status": "ACTIVE",
+                "code": _pickup_code(),
+                "issued_at": _iso(now),
+                "expires_at": _iso(now + timedelta(minutes=30)),
+                "claimed_at": None,
+                "failed_attempts": 0,
+                "max_attempts": 5,
+            }
             event = self._append_event_locked(
                 session_id,
                 "CommitmentConfirmed",
@@ -386,6 +535,12 @@ class DemoStore:
                 "original_pickup_at": protection.get("original_pickup_at") or order["pickup_at"],
                 "suggested_pickup_at": protection.get("suggested_pickup_at"),
             }
+            guard = session.get("pickup_guard") or {}
+            session["pickup_guard"] = {
+                **guard,
+                "status": "CANCELLED",
+                "code": None,
+            }
             event = self._append_event_locked(
                 session_id,
                 "CommitmentCancelled",
@@ -403,6 +558,62 @@ class DemoStore:
                 "ORDER_CANCELLED",
                 f"{order['order_id']} · delivery_delay={max(0, delay_seconds)}s",
             )
+            self._upsert_history_locked(session_id)
+            return {"event": deepcopy(event), "state": self.snapshot(session_id)}
+
+    def claim_pickup(self, session_id: str, code: str) -> dict[str, Any]:
+        with self._lock:
+            session = self.require(session_id)
+            order = session.get("order")
+            if not order:
+                raise ValueError("order not found")
+            guard = session.get("pickup_guard") or {}
+            if order["status"] != "CONFIRMED":
+                raise ValueError("pickup is not claimable")
+            if guard.get("status") == "CLAIMED":
+                raise ValueError("pickup code was already used")
+            if guard.get("status") == "LOCKED":
+                raise ValueError("pickup code is locked")
+            if guard.get("status") != "ACTIVE":
+                raise ValueError("pickup code is not active")
+            expires_at = guard.get("expires_at")
+            if expires_at and datetime.fromisoformat(expires_at) < _now():
+                guard["status"] = "EXPIRED"
+                guard["code"] = None
+                self._audit_locked(session_id, "PICKUP_CODE_EXPIRED", order["order_id"])
+                raise ValueError("pickup code expired")
+            if str(code) != str(guard.get("code")):
+                guard["failed_attempts"] = int(guard.get("failed_attempts", 0)) + 1
+                if guard["failed_attempts"] >= int(guard.get("max_attempts", 5)):
+                    guard["status"] = "LOCKED"
+                    guard["code"] = None
+                self._audit_locked(
+                    session_id,
+                    "PICKUP_CODE_REJECTED",
+                    f"{order['order_id']} · attempt={guard['failed_attempts']}",
+                )
+                raise ValueError("pickup code does not match")
+
+            event = self._append_event_locked(
+                session_id,
+                "PickupClaimed",
+                {"pickup_at": order["pickup_at"]},
+                detail=f"{order['pickup_at']} 픽업 완료",
+            )
+            order["status"] = "PICKED_UP"
+            session["capacity"]["reserved_units"] = max(
+                0,
+                session["capacity"]["reserved_units"] - order["units"],
+            )
+            guard["status"] = "CLAIMED"
+            guard["claimed_at"] = _iso(_now())
+            guard["code"] = None
+            self._audit_locked(
+                session_id,
+                "PICKUP_CODE_REDEEMED",
+                f"{order['order_id']} · one-time claim",
+            )
+            self._upsert_history_locked(session_id)
             return {"event": deepcopy(event), "state": self.snapshot(session_id)}
 
     def settle(self, session_id: str, amount: int | None = None) -> dict[str, Any]:
@@ -663,6 +874,8 @@ class DemoStore:
                     "REPAIR_PLAN_APPLIED_IN_SANDBOX",
                     ", ".join(applied),
                 )
+            if order["status"] in {"CANCELLED", "PICKED_UP"}:
+                self._upsert_history_locked(session_id)
             after = self._reconcile_locked(session_id)
             return {
                 "applied": applied,
@@ -752,6 +965,15 @@ class DemoStore:
                 "original_pickup_at": order_meta["pickup_at"],
                 "suggested_pickup_at": None,
             }
+            session["pickup_guard"] = {
+                "status": "DISABLED",
+                "code": None,
+                "issued_at": None,
+                "expires_at": None,
+                "claimed_at": None,
+                "failed_attempts": 0,
+                "max_attempts": 5,
+            }
             session["events"] = deepcopy(scenario["events"])
             session["capacity"]["slot"] = order_meta["pickup_at"]
             session["capacity"]["reserved_units"] = units
@@ -838,6 +1060,8 @@ class DemoStore:
                 "manual_review": session["manual_review"],
                 "projection_rebuilds": session["projection_rebuilds"],
                 "pickup_protection": deepcopy(session["pickup_protection"]),
+                "pickup_guard": deepcopy(session["pickup_guard"]),
+                "order_history": deepcopy(session["order_history"]),
                 "reconciliation": reconciliation,
                 "metrics": {
                     "event_count": len(events),
