@@ -124,9 +124,11 @@ assert "/api/v1/commitments/{id}/reschedule" in openapi
 assert "/api/v1/commitments/{id}/breach-pact" in openapi
 assert "reconciliation_run" in schema and "reconciliation_run" in persistence
 assert "outbox_events" in explain and "outbox_event\n" not in explain
+assert "event_sequence" in schema
 outbox_relay = (ROOT / "services/commitment-service/src/main/kotlin/io/pickuppact/commitment/infra/OutboxRelay.kt").read_text()
 assert "pickup.financial.events.v1" in outbox_relay
 assert "PickupPactBreached" in outbox_relay
+assert "order by event_sequence" in outbox_relay
 assert "financial_event_receipt" not in architecture
 assert "financial_event_receipt" not in domain_model
 assert "OutboxPublisher" not in architecture
