@@ -15,6 +15,7 @@ import httpx
 
 COMMITMENT = "http://127.0.0.1:8080"
 LEDGER = "http://127.0.0.1:8081"
+MERCHANT = "http://127.0.0.1:8082"
 RECONCILER = "http://127.0.0.1:8000"
 OPS = "http://127.0.0.1:5000"
 
@@ -550,6 +551,329 @@ def pact_financial_flow(pass_no: int) -> None:
     )
 
 
+def merchant_fulfillment_flow(pass_no: int) -> None:
+    store_id = f"merchant-store-{pass_no}"
+
+    def confirmed_order(suffix: str, sku: str = "cafe-latte") -> tuple[str, str]:
+        quote = expect(
+            httpx.post(
+                f"{COMMITMENT}/api/v1/commitments/quotes",
+                json={
+                    "storeId": store_id,
+                    "items": [{"sku": sku, "quantity": 1}],
+                    "count": 1,
+                },
+                timeout=15,
+            ),
+            200,
+        )
+        pickup_at = quote["slots"][0]["pickupAt"]
+        held = expect(
+            httpx.post(
+                f"{COMMITMENT}/api/v1/commitments/hold",
+                headers={"Idempotency-Key": f"merchant-{pass_no}-{suffix}-{uuid.uuid4().hex[:8]}"},
+                json={"quoteToken": quote["quoteToken"], "pickupAt": pickup_at},
+                timeout=15,
+            ),
+            200,
+        )
+        order_id = held["id"]
+        expect(
+            httpx.post(
+                f"{COMMITMENT}/api/v1/commitments/{order_id}/authorize-payment",
+                json={"authorizationId": f"merchant-auth-{pass_no}-{suffix}"},
+                timeout=15,
+            ),
+            200,
+        )
+        expect(
+            httpx.post(
+                f"{COMMITMENT}/api/v1/commitments/{order_id}/confirm",
+                timeout=15,
+            ),
+            200,
+        )
+        return order_id, pickup_at
+
+    order_id, pickup_at = confirmed_order("reconnect")
+
+    def merchant_order_received():
+        response = httpx.get(f"{MERCHANT}/api/v1/merchant/orders/{order_id}", timeout=10)
+        return response.status_code == 200 and response.json()["state"] == "RECEIVED"
+
+    wait_until(merchant_order_received, timeout_s=30, label="merchant confirmed-order intake")
+
+    deliveries = expect(
+        httpx.get(
+            f"{MERCHANT}/api/v1/merchant/stores/{store_id}/deliveries",
+            params={"afterSequence": 0, "limit": 20},
+            timeout=15,
+        ),
+        200,
+    )
+    order_deliveries = [item for item in deliveries if item["orderId"] == order_id]
+    assert len(order_deliveries) == 1, deliveries
+    assert order_deliveries[0]["type"] == "ORDER_AVAILABLE", order_deliveries
+    delivery_sequence = order_deliveries[0]["sequence"]
+
+    effects = expect(
+        httpx.get(f"{MERCHANT}/api/v1/merchant/orders/{order_id}/effects", timeout=15),
+        200,
+    )
+    assert sorted(item["type"] for item in effects) == [
+        "NEW_ORDER_NOTIFICATION",
+        "POS_PRINT",
+    ], effects
+
+    # Simulate Kafka at-least-once redelivery using the exact same event ID.
+    with postgres_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                select id::text, payload::text, occurred_at
+                from outbox_events
+                where aggregate_id=%s::uuid and event_type='CommitmentConfirmed'
+                order by event_sequence
+                limit 1
+                """,
+                (order_id,),
+            )
+            event_id, raw_payload, occurred_at = cursor.fetchone()
+    duplicate_envelope = {
+        "event_id": event_id,
+        "aggregate_id": order_id,
+        "event_type": "CommitmentConfirmed",
+        "occurred_at": occurred_at.isoformat(),
+        "schema_version": 1,
+        "payload": json.loads(raw_payload),
+    }
+    subprocess.run(
+        [
+            "docker", "compose", "exec", "-T", "kafka",
+            "/opt/kafka/bin/kafka-console-producer.sh",
+            "--bootstrap-server", "localhost:9092",
+            "--topic", "pickup.commitment.events.v1",
+            "--property", f"parse.key=true",
+            "--property", "key.separator=|",
+        ],
+        input=f"{order_id}|{json.dumps(duplicate_envelope)}\n",
+        text=True,
+        check=True,
+        timeout=30,
+    )
+    time.sleep(2)
+
+    effects_after_redelivery = expect(
+        httpx.get(f"{MERCHANT}/api/v1/merchant/orders/{order_id}/effects", timeout=15),
+        200,
+    )
+    assert len(effects_after_redelivery) == 2, effects_after_redelivery
+
+    reconnect_deliveries = expect(
+        httpx.get(
+            f"{MERCHANT}/api/v1/merchant/stores/{store_id}/deliveries",
+            params={"afterSequence": 0, "limit": 20},
+            timeout=15,
+        ),
+        200,
+    )
+    assert any(item["sequence"] == delivery_sequence for item in reconnect_deliveries), reconnect_deliveries
+
+    expect(
+        httpx.post(
+            f"{MERCHANT}/api/v1/merchant/deliveries/{delivery_sequence}/ack",
+            timeout=15,
+        ),
+        200,
+    )
+    after_ack = expect(
+        httpx.get(
+            f"{MERCHANT}/api/v1/merchant/stores/{store_id}/deliveries",
+            params={"afterSequence": 0, "limit": 20},
+            timeout=15,
+        ),
+        200,
+    )
+    assert not any(item["sequence"] == delivery_sequence for item in after_ack), after_ack
+
+    accepted = expect(
+        httpx.post(f"{MERCHANT}/api/v1/merchant/orders/{order_id}/accept", timeout=15),
+        200,
+    )
+    assert accepted["state"] == "ACCEPTED", accepted
+
+    # Deterministically prove the too-early start guard, then an EARLY ready anomaly.
+    with postgres_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                update merchant_orders
+                set earliest_start_at=now()+interval '10 minutes',
+                    target_ready_at=now()+interval '15 minutes',
+                    latest_ready_at=now()+interval '20 minutes'
+                where order_id=%s::uuid
+                """,
+                (order_id,),
+            )
+        connection.commit()
+
+    too_early = httpx.post(
+        f"{MERCHANT}/api/v1/merchant/orders/{order_id}/start",
+        timeout=15,
+    )
+    assert too_early.status_code == 409, too_early.text
+
+    with postgres_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                update merchant_orders
+                set earliest_start_at=now()-interval '1 minute',
+                    target_ready_at=now()+interval '5 minutes',
+                    latest_ready_at=now()+interval '10 minutes'
+                where order_id=%s::uuid
+                """,
+                (order_id,),
+            )
+        connection.commit()
+
+    preparing = expect(
+        httpx.post(f"{MERCHANT}/api/v1/merchant/orders/{order_id}/start", timeout=15),
+        200,
+    )
+    assert preparing["state"] == "PREPARING", preparing
+    early_ready = expect(
+        httpx.post(f"{MERCHANT}/api/v1/merchant/orders/{order_id}/ready", timeout=15),
+        200,
+    )
+    assert early_ready["state"] == "READY", early_ready
+
+    anomalies = expect(
+        httpx.get(f"{MERCHANT}/api/v1/merchant/orders/{order_id}/anomalies", timeout=15),
+        200,
+    )
+    assert any(item["code"] == "READY_TOO_EARLY" for item in anomalies), anomalies
+
+    new_pickup_at = (
+        datetime.fromisoformat(pickup_at.replace("Z", "+00:00")) + timedelta(minutes=10)
+    ).isoformat()
+    expect(
+        httpx.post(
+            f"{COMMITMENT}/api/v1/commitments/{order_id}/reschedule",
+            json={"pickupAt": new_pickup_at},
+            timeout=15,
+        ),
+        200,
+    )
+
+    def schedule_review_visible():
+        rows = httpx.get(
+            f"{MERCHANT}/api/v1/merchant/orders/{order_id}/anomalies",
+            timeout=10,
+        )
+        return (
+            rows.status_code == 200
+            and any(item["code"] == "RESCHEDULE_AFTER_PREPARATION" for item in rows.json())
+        )
+
+    wait_until(schedule_review_visible, timeout_s=30, label="post-preparation reschedule review")
+
+    expect(
+        httpx.post(f"{COMMITMENT}/api/v1/commitments/{order_id}/cancel", timeout=15),
+        200,
+    )
+
+    def cancellation_review_visible():
+        state = httpx.get(f"{MERCHANT}/api/v1/merchant/orders/{order_id}", timeout=10)
+        return state.status_code == 200 and state.json()["state"] == "CANCELLATION_REVIEW"
+
+    wait_until(cancellation_review_visible, timeout_s=30, label="post-preparation cancellation review")
+
+    # Second order proves READY_LATE -> fulfillment event -> Pickup Pact -> 500 PTS.
+    late_order_id, _ = confirmed_order("late", sku="americano")
+
+    wait_until(
+        lambda: httpx.get(
+            f"{MERCHANT}/api/v1/merchant/orders/{late_order_id}", timeout=10
+        ).status_code == 200,
+        timeout_s=30,
+        label="late merchant order intake",
+    )
+    expect(
+        httpx.post(f"{MERCHANT}/api/v1/merchant/orders/{late_order_id}/accept", timeout=15),
+        200,
+    )
+
+    with postgres_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                update merchant_orders
+                set earliest_start_at=now()-interval '10 minutes',
+                    target_ready_at=now()-interval '5 minutes',
+                    latest_ready_at=now()-interval '1 minute'
+                where order_id=%s::uuid
+                """,
+                (late_order_id,),
+            )
+            cursor.execute(
+                """
+                update pickup_commitments
+                set pact_promised_at=now()-interval '10 minutes',
+                    pact_latest_at=now()-interval '1 minute'
+                where id=%s::uuid
+                """,
+                (late_order_id,),
+            )
+        connection.commit()
+
+    expect(
+        httpx.post(f"{MERCHANT}/api/v1/merchant/orders/{late_order_id}/start", timeout=15),
+        200,
+    )
+    expect(
+        httpx.post(f"{MERCHANT}/api/v1/merchant/orders/{late_order_id}/ready", timeout=15),
+        200,
+    )
+
+    def late_pact_compensated():
+        response = httpx.get(
+            f"{COMMITMENT}/api/v1/commitments/{late_order_id}",
+            timeout=10,
+        )
+        return (
+            response.status_code == 200
+            and response.json().get("pact", {}).get("status") == "COMPENSATED"
+        )
+
+    wait_until(
+        late_pact_compensated,
+        timeout_s=30,
+        label="READY_LATE automatic Pickup Pact compensation",
+    )
+
+    def late_reward_in_ledger():
+        response = httpx.get(
+            f"{LEDGER}/api/v1/ledger/orders/{late_order_id}?limit=10",
+            timeout=10,
+        )
+        return (
+            response.status_code == 200
+            and any(
+                item["reason"] == "REWARD"
+                and item["amount"] == 500
+                and item["unit"] == "PTS"
+                for item in response.json()
+            )
+        )
+
+    wait_until(
+        late_reward_in_ledger,
+        timeout_s=30,
+        label="READY_LATE 500 PTS ledger posting",
+    )
+
+
 def ledger_flow(pass_no: int) -> None:
     event_id = f"integration-ledger-{pass_no}-{uuid.uuid4().hex[:8]}"
     payload = {
@@ -851,6 +1175,7 @@ def one_pass(pass_no: int) -> None:
     capacity_concurrency_flow(pass_no)
     idempotency_concurrency_flow(pass_no)
     pact_financial_flow(pass_no)
+    merchant_fulfillment_flow(pass_no)
     ledger_flow(pass_no)
     kafka_ledger_flow(pass_no)
     reconciler_flow(pass_no)
@@ -866,6 +1191,7 @@ def main() -> None:
 
     wait_http(f"{COMMITMENT}/actuator/health", timeout_s=240)
     wait_http(f"{LEDGER}/actuator/health", timeout_s=240)
+    wait_http(f"{MERCHANT}/actuator/health", timeout_s=240)
     wait_http(f"{RECONCILER}/health", timeout_s=240)
     wait_http(f"{RECONCILER}/ready", timeout_s=240)
     wait_http(f"{OPS}/health", timeout_s=240)
