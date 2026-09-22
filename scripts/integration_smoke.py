@@ -46,7 +46,7 @@ def wait_http(url: str, *, timeout_s: int = 180) -> None:
     while time.time() < deadline:
         try:
             response = httpx.get(url, timeout=5)
-            if response.status_code < 500:
+            if response.status_code == 200:
                 return
             last = f"HTTP {response.status_code}: {response.text[:200]}"
         except Exception as exc:
@@ -613,6 +613,7 @@ def main() -> None:
     wait_http(f"{COMMITMENT}/actuator/health", timeout_s=240)
     wait_http(f"{LEDGER}/actuator/health", timeout_s=240)
     wait_http(f"{RECONCILER}/health", timeout_s=240)
+    wait_http(f"{RECONCILER}/ready", timeout_s=240)
     wait_http(f"{OPS}/health", timeout_s=240)
 
     for pass_no in range(1, args.passes + 1):
