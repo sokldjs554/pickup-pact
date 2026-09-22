@@ -63,22 +63,36 @@ class OutboxRelay(
      * event id stable across relay retries.
      */
     private fun publishDerivedFinancialEffect(row: OutboxRow): Mono<Void> {
-        if (row.eventType != "PickupPactBreached") return Mono.empty()
-
         val payload = objectMapper.readTree(row.payload)
-        val compensation = payload.path("compensation_points").asInt(0)
-        if (compensation <= 0) {
-            return Mono.error(IllegalStateException("PickupPactBreached requires positive compensation_points"))
+        val posting = when (row.eventType) {
+            "PickupPactBreached" -> {
+                val compensation = payload.path("compensation_points").asInt(0)
+                if (compensation <= 0) {
+                    return Mono.error(
+                        IllegalStateException("PickupPactBreached requires positive compensation_points")
+                    )
+                }
+                mapOf(
+                    "eventId" to "${row.id}-pact-reward",
+                    "aggregateId" to row.aggregateId.toString(),
+                    "type" to "REWARD",
+                    "amount" to compensation
+                )
+            }
+            "PickupClaimed" -> {
+                val amount = payload.path("amount").asInt(0)
+                if (amount <= 0) return Mono.empty()
+                mapOf(
+                    "eventId" to "${row.id}-settlement",
+                    "aggregateId" to row.aggregateId.toString(),
+                    "type" to "SETTLEMENT",
+                    "amount" to amount
+                )
+            }
+            else -> return Mono.empty()
         }
 
-        val ledgerPosting = objectMapper.writeValueAsString(
-            mapOf(
-                "eventId" to "${row.id}-pact-reward",
-                "aggregateId" to row.aggregateId.toString(),
-                "type" to "REWARD",
-                "amount" to compensation
-            )
-        )
+        val ledgerPosting = objectMapper.writeValueAsString(posting)
         return Mono.fromFuture(
             kafka.send("pickup.financial.events.v1", row.aggregateId.toString(), ledgerPosting)
         ).then()
