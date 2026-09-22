@@ -120,7 +120,7 @@ assert "Customer smart-order experience" in demo_doc
 assert "Technical detail layer" in demo_doc
 assert "REVERSE_SETTLEMENT" in demo_doc and "REVERSE_REWARD" in demo_doc
 for marker in [
-    "커피, 미리 주문해요.",
+    "오늘 뭐 드실래요?",
     "근처 매장",
     "장바구니 보기",
     "내 주문",
