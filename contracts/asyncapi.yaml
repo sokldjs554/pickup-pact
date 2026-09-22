@@ -19,6 +19,15 @@ channels:
       pickupRescheduled:
         payload:
           $ref: "#/components/schemas/CommitmentEvent"
+      pickupPactIssued:
+        payload:
+          $ref: "#/components/schemas/CommitmentEvent"
+      pickupPactRenegotiated:
+        payload:
+          $ref: "#/components/schemas/CommitmentEvent"
+      pickupPactBreached:
+        payload:
+          $ref: "#/components/schemas/CommitmentEvent"
       pickupClaimed:
         payload:
           $ref: "#/components/schemas/CommitmentEvent"
@@ -47,7 +56,7 @@ components:
         aggregate_id: {type: string}
         event_type:
           type: string
-          enum: [PaymentAuthorized, CommitmentConfirmed, CommitmentCancelled, PickupRescheduled, PickupClaimed]
+          enum: [PaymentAuthorized, CommitmentConfirmed, CommitmentCancelled, PickupRescheduled, PickupPactIssued, PickupPactRenegotiated, PickupPactBreached, PickupClaimed]
         occurred_at: {type: string, format: date-time}
         schema_version: {type: integer, const: 1}
         payload: {type: object}

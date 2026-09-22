@@ -16,6 +16,7 @@ Source checked 2026-09-22: https://play.google.com/store/apps/details?hl=ko&id=c
 |---|---|---|
 | Did my payment/order really finish? | Trust Receipt shows order, payment, time changes, cancellation cleanup, final charge and reward result in one mobile receipt | append-only event timeline + ledger/audit |
 | Why was it made too early / why am I still waiting? | Pickup Promise proposes a new pickup time when synthetic capacity falls and records customer acceptance | CapacityRevised → RESLOT_REVIEW → PickupRescheduled |
+| What happens if the newly promised time is still missed? | Pickup Pact publishes an explicit guarantee window and automatically grants 500P when the guarantee is breached | PickupPactIssued → PickupPactRenegotiated → PickupPactBreached → RewardGranted |
 | Someone else picked up the same item | One-time Pickup Code is consumed once and rejects reuse | PickupClaimed + one-time code validation + 409 on reuse |
 | Why expose my phone/name on the slip? | Customer receipt uses order number and one-time pickup code; it does not display phone/name | receipt contract contains no phone/name field |
 

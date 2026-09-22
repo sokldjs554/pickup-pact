@@ -196,6 +196,7 @@ body:not(.expert-mode) .health{display:none}
 .menu-card{position:relative;overflow:hidden}.menu-main{display:flex;gap:12px;align-items:flex-start}.menu-visual{width:44px;height:44px;border-radius:14px;background:#f8fafc;border:1px solid #eaecf0;display:grid;place-items:center;font-size:20px;flex:0 0 auto}
 .promise-benefit{display:flex;align-items:center;gap:14px;background:linear-gradient(135deg,#fff7ed,#fff);border:1px solid #fed7aa;border-radius:18px;padding:18px 20px}.promise-benefit-icon{width:42px;height:42px;border-radius:14px;background:#fff;border:1px solid #fed7aa;display:grid;place-items:center;font-size:18px;flex:0 0 auto}.promise-benefit b{display:block;font-size:13px;margin-bottom:4px}.promise-benefit span{font-size:10px;line-height:1.5;color:#667085}
 .pickup-promise-card{background:#fff;border:1px solid #d1fadf;border-radius:18px;padding:18px;display:grid;gap:10px}.pickup-promise-card.warning{background:#fffaeb;border-color:#fedf89}.pickup-promise-card.rescheduled{background:#f0fdf4;border-color:#abefc6}.pickup-promise-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}.pickup-promise-head span{font-size:9px;font-weight:900;color:#667085;letter-spacing:.06em}.pickup-promise-head b{font-size:12px}.pickup-promise-time{font-size:21px;font-weight:950;letter-spacing:-.03em}.pickup-promise-copy{font-size:11px;color:#667085;line-height:1.55}.pickup-promise-actions{display:flex;gap:8px;flex-wrap:wrap}.pickup-promise-actions button{border:1px solid #d0d5dd;background:#fff;border-radius:10px;padding:9px 11px;font-size:10px;font-weight:850;cursor:pointer}.pickup-promise-actions .accept{background:#101828;border-color:#101828;color:#fff}
+.pact-card{background:linear-gradient(145deg,#101828,#1d2939);color:#fff;border-radius:20px;padding:20px;display:grid;gap:10px;box-shadow:0 12px 34px rgba(16,24,40,.12)}.pact-card.compensated{background:linear-gradient(145deg,#3b2f13,#694f14)}.pact-card.fulfilled{background:linear-gradient(145deg,#054f31,#067647)}.pact-head{display:flex;justify-content:space-between;gap:14px;align-items:flex-start}.pact-head span{font-size:9px;color:#98a2b3;font-weight:900;letter-spacing:.09em}.pact-head b{font-size:10px;background:rgba(255,255,255,.1);padding:5px 8px;border-radius:999px}.pact-window{font-size:23px;font-weight:950;letter-spacing:-.035em}.pact-copy{font-size:10px;color:#d0d5dd;line-height:1.55}.pact-comp{display:flex;justify-content:space-between;align-items:center;gap:12px;border-top:1px solid rgba(255,255,255,.12);padding-top:10px;font-size:10px}.pact-comp strong{font-size:16px}.pact-card.compensated .pact-head span,.pact-card.fulfilled .pact-head span,.pact-card.compensated .pact-copy,.pact-card.fulfilled .pact-copy{color:#f2f4f7}
 .order-status-card.promise{border-color:#fedf89;background:#fffcf5}.order-status-card.promise .order-status-icon{background:#fffaeb;color:#b54708}
 .history-list{display:grid;gap:10px}.history-card{background:#fff;border:1px solid #eaecf0;border-radius:18px;padding:17px;display:grid;grid-template-columns:1fr auto;gap:14px;align-items:center}.history-card h3{font-size:13px;margin:0 0 5px}.history-card p{font-size:10px;color:#667085;margin:0 0 7px}.history-meta{display:flex;gap:7px;flex-wrap:wrap;font-size:9px;color:#98a2b3}.history-status{font-size:9px;font-weight:900;padding:5px 8px;border-radius:999px;background:#ecfdf3;color:#067647}.history-status.cancelled{background:#f2f4f7;color:#475467}.history-actions{display:flex;gap:7px;align-items:center}.history-actions button{border:1px solid #d0d5dd;background:#fff;border-radius:10px;padding:9px 10px;font-size:10px;font-weight:850;cursor:pointer}
 .pickup-code-card{background:#101828;color:#fff;border-radius:18px;padding:19px;display:grid;gap:9px}.pickup-code-card .micro{color:#98a2b3}.pickup-code-value{font-size:34px;font-weight:950;letter-spacing:.18em}.pickup-code-card p{font-size:10px;color:#d0d5dd;line-height:1.5;margin:0}.pickup-code-card button{justify-self:start;border:1px solid #475467;background:#fff;color:#101828;border-radius:10px;padding:9px 11px;font-size:10px;font-weight:900;cursor:pointer}
@@ -291,8 +292,8 @@ body.expert-mode .app{display:block}body.expert-mode .sidebar{position:relative;
           </div>
 
           <div class="promise-benefit">
-            <div class="promise-benefit-icon">⏱</div>
-            <div><b>픽업 시간이 바뀌면 먼저 알려드려요.</b><span>매장이 갑자기 바빠져도 그냥 기다리게 두지 않고, 새 픽업 시간을 바로 보여드려요.</span></div>
+            <div class="promise-benefit-icon">🤝</div>
+            <div><b>Pickup Pact — 픽업 시간을 약속해요.</b><span>주문마다 보장 구간을 발급해요. 새 시간에 동의하면 약속도 같이 바뀌고, 보장 시간을 넘기면 500P를 자동으로 적립해요.</span></div>
           </div>
           <div class="product-footnote">실제 결제는 일어나지 않아요. 메뉴 담기부터 픽업 코드·주문 내역·취소 영수증까지 직접 눌러볼 수 있어요.</div>
         </div>
@@ -488,6 +489,7 @@ let cart=[];
 let customerOrderStage="none";
 let orderReadyTimer=null;
 let promiseTimer=null;
+let pactTimer=null;
 const $=id=>document.getElementById(id);
 
 const pageNames={
@@ -748,6 +750,7 @@ async function placeCustomerOrder(){
     toast("주문됐어요.");
     if(orderReadyTimer)clearTimeout(orderReadyTimer);
     if(promiseTimer)clearTimeout(promiseTimer);
+    if(pactTimer)clearTimeout(pactTimer);
     setTimeout(()=>{if(state?.order?.status==="CONFIRMED"){customerOrderStage="preparing";renderCustomerOrder();}},450);
     if(units>=2){
       promiseTimer=setTimeout(()=>triggerPickupPromiseProtection(),900);
@@ -785,7 +788,27 @@ async function acceptPickupSuggestion(){
     renderAll();
     toast(suggested+" 픽업으로 바꿨어요.");
     if(orderReadyTimer)clearTimeout(orderReadyTimer);
-    orderReadyTimer=setTimeout(()=>{if(state?.order?.status==="CONFIRMED"){customerOrderStage="ready";renderCustomerOrder();}},1100);
+    if(pactTimer)clearTimeout(pactTimer);
+    pactTimer=setTimeout(()=>simulatePickupPactBreach(),650);
+  }catch(e){toast(e.message,true)}
+}
+
+async function simulatePickupPactBreach(){
+  try{
+    if(!state?.order||state.order.status!=="CONFIRMED")return;
+    if(state?.pickup_pact?.status!=="ACTIVE")return;
+    const result=await api("/api/demo/sessions/"+sessionId+"/pickup/pact/breach","POST",{});
+    state=result.state;
+    customerOrderStage="compensated";
+    renderAll();
+    toast(state.pickup_pact.compensation_points+"P가 자동으로 적립됐어요.");
+    if(orderReadyTimer)clearTimeout(orderReadyTimer);
+    orderReadyTimer=setTimeout(()=>{
+      if(state?.order?.status==="CONFIRMED"){
+        customerOrderStage="ready";
+        renderCustomerOrder();
+      }
+    },900);
   }catch(e){toast(e.message,true)}
 }
 
@@ -820,6 +843,7 @@ async function cancelCustomerOrder(){
     customerOrderStage="cancelled";
     if(orderReadyTimer)clearTimeout(orderReadyTimer);
     if(promiseTimer)clearTimeout(promiseTimer);
+    if(pactTimer)clearTimeout(pactTimer);
     closeCancelDialog();
     renderAll();
     toast("주문을 취소했어요.");
@@ -834,6 +858,7 @@ async function startNewCustomerOrder(){
     cart=[];
     if(orderReadyTimer)clearTimeout(orderReadyTimer);
     if(promiseTimer)clearTimeout(promiseTimer);
+    if(pactTimer)clearTimeout(pactTimer);
     renderAll();
     showPage("overview");
   }catch(e){toast(e.message,true)}
@@ -1069,6 +1094,8 @@ async function openReceipt(orderId){
         '<div class="receipt-row"><span>주문 금액</span><b>'+money(receipt.total)+'원</b></div>'+
         '<div class="receipt-row receipt-total"><span>최종 청구</span><b>'+money(receipt.final_charge)+'원</b></div>'+
         '<div class="receipt-row"><span>포인트</span><b>'+money(receipt.reward_balance)+'P</b></div>'+
+        (receipt.pickup_pact&&receipt.pickup_pact.version?'<div class="receipt-row"><span>Pickup Pact</span><b>'+receipt.pickup_pact.promised_at+'~'+receipt.pickup_pact.latest_at+' · v'+receipt.pickup_pact.version+'</b></div>':'')+
+        (receipt.pickup_pact?.compensation_granted?'<div class="receipt-row"><span>자동 보상</span><b>+'+money(receipt.pickup_pact.compensation_points)+'P</b></div>':'')+
       '</div>'+
       '<div class="receipt-timeline">'+timeline+'</div>'+
       '<div class="receipt-privacy">이 영수증에는 이름·전화번호를 표시하지 않아요. 수령 확인은 주문별 1회용 픽업 코드로 처리해요.</div>';
@@ -1105,12 +1132,14 @@ function renderCustomerOrder(){
   const promiseWaiting=protection.status==="SUGGESTED"||o.status==="AT_RISK";
   const rescheduled=protection.status==="RESCHEDULED";
   const cancelled=o.status==="CANCELLED"||customerOrderStage==="cancelled";
-  const stage=cancelled?"cancelled":pickedUp?"pickedup":promiseWaiting?"promise":customerOrderStage==="ready"?"ready":customerOrderStage==="preparing"?"preparing":"received";
+  const pact=state.pickup_pact||{status:"NONE"};
+  const pactCompensated=pact.status==="COMPENSATED";
+  const stage=cancelled?"cancelled":pickedUp?"pickedup":promiseWaiting?"promise":customerOrderStage==="ready"?"ready":pactCompensated?"compensated":customerOrderStage==="preparing"?"preparing":"received";
   view.dataset.stage=stage;
 
-  const statusTitle=cancelled?"주문이 취소됐어요.":pickedUp?"픽업 완료됐어요.":stage==="promise"?"픽업 시간이 조금 늦어져요.":stage==="ready"?"픽업 준비됐어요.":stage==="preparing"?"음료를 만들고 있어요.":"주문됐어요.";
-  const statusText=cancelled?money(o.total)+"원 결제 취소와 포인트 정리가 끝났어요.":pickedUp?"수령 확인이 끝났어요. 모바일 영수증도 확인할 수 있어요.":stage==="promise"?"매장이 조금 바빠졌어요. 새 시간을 확인해주세요.":stage==="ready"?"아래 픽업 코드를 매장 직원에게 보여주세요.":stage==="preparing"?"조금만 기다려주세요. 준비되면 바로 알려드릴게요.":"매장에서 주문을 확인했어요.";
-  const icon=cancelled||stage==="ready"||pickedUp?"✓":stage==="promise"?"!":stage==="preparing"?"…":"✓";
+  const statusTitle=cancelled?"주문이 취소됐어요.":pickedUp?"픽업 완료됐어요.":stage==="promise"?"픽업 시간이 조금 늦어져요.":stage==="compensated"?"보장 포인트가 자동 적립됐어요.":stage==="ready"?"픽업 준비됐어요.":stage==="preparing"?"음료를 만들고 있어요.":"주문됐어요.";
+  const statusText=cancelled?money(o.total)+"원 결제 취소와 포인트 정리가 끝났어요.":pickedUp?"수령 확인이 끝났어요. 모바일 영수증도 확인할 수 있어요.":stage==="promise"?"매장이 조금 바빠졌어요. 새 시간을 확인해주세요.":stage==="compensated"?"약속한 보장 시간을 넘겨 "+money(pact.compensation_points)+"P를 따로 요청하지 않아도 적립했어요.":stage==="ready"?"아래 픽업 코드를 매장 직원에게 보여주세요.":stage==="preparing"?"조금만 기다려주세요. 준비되면 바로 알려드릴게요.":"매장에서 주문을 확인했어요.";
+  const icon=cancelled||stage==="ready"||pickedUp||stage==="compensated"?"✓":stage==="promise"?"!":stage==="preparing"?"…":"✓";
   const orderNo=(o.order_id||"PP-0000").split("-").slice(-1)[0];
   const progress=cancelled||pickedUp?"":'<div class="order-progress"><div class="order-progress-step done">주문 접수</div><div class="order-progress-step '+(stage==="preparing"||stage==="promise"||stage==="ready"?"done":"current")+'">준비 중</div><div class="order-progress-step '+(stage==="ready"?"current":"")+'">픽업 준비</div></div>';
 
@@ -1126,11 +1155,22 @@ function renderCustomerOrder(){
       promiseCard='<div class="pickup-promise-card"><div class="pickup-promise-head"><span>픽업 약속</span><b>예정대로</b></div><div class="pickup-promise-time">'+o.pickup_at+' 픽업</div><div class="pickup-promise-copy">지금은 예정대로 준비 중이에요. 시간이 바뀌면 먼저 알려드릴게요.</div></div>';
     }
   }
+  let pactCard="";
+  if(!cancelled&&pact.version){
+    const pactClass=pact.status==="COMPENSATED"?" compensated":pact.status==="FULFILLED"?" fulfilled":"";
+    const pactBadge=pact.status==="COMPENSATED"?"자동 보상 완료":pact.status==="FULFILLED"?"약속 지킴":"v"+pact.version+" 보장 중";
+    const pactCopy=pact.status==="COMPENSATED"
+      ? "보장 구간을 넘겨 고객 문의 없이 포인트를 자동 적립했어요."
+      : pact.status==="FULFILLED"
+      ? "보장한 시간 안에 픽업이 완료됐어요."
+      : "이 시간을 넘기면 "+money(pact.compensation_points)+"P를 자동으로 적립해요.";
+    pactCard='<div class="pact-card'+pactClass+'" data-pact-status="'+pact.status+'"><div class="pact-head"><span>PICKUP PACT</span><b>'+pactBadge+'</b></div><div class="pact-window">'+pact.promised_at+' ~ '+pact.latest_at+'</div><div class="pact-copy">'+pactCopy+'</div><div class="pact-comp"><span>보장 위반 시</span><strong>'+money(pact.compensation_points)+'P</strong></div></div>';
+  }
   const pickupCodeCard=stage==="ready"?'<div class="pickup-code-card"><div class="micro">ONE-TIME PICKUP CODE</div><div class="pickup-code-value">'+(o.pickup_code||"----")+'</div><p>전화번호나 이름 대신 이 번호로 확인해요. 한 번 수령하면 다시 쓸 수 없어요.</p><button type="button" onclick="claimCustomerPickup()">수령 완료 체험</button></div>':"";
 
   view.innerHTML=
     '<div class="order-status-card '+(cancelled?"cancelled":stage==="promise"?"promise":"")+'"><div class="order-status-icon">'+icon+'</div><h3>'+statusTitle+'</h3><p>'+statusText+'</p>'+progress+'</div>'+
-    promiseCard+pickupCodeCard+
+    pactCard+promiseCard+pickupCodeCard+
     '<div class="order-detail-card"><h3>주문 정보</h3>'+
       '<div class="order-detail-row"><span>매장</span><b>'+o.store+'</b></div>'+
       '<div class="order-detail-row"><span>메뉴</span><b>'+o.items+'</b></div>'+

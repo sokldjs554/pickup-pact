@@ -18,12 +18,14 @@ The visitor can:
 3. increase or decrease item quantities and see totals recalculate;
 4. place an order, which calls the real session order/payment/confirm APIs;
 5. follow the order through received, preparing, and pickup-ready presentation states;
-6. see **pickup promise protection** when a multi-item demo order exceeds a revised synthetic capacity: the UI offers a new time such as `12:30 → 12:35`, and accepting it records `PickupRescheduled`;
-7. when pickup is ready, use a one-time four-digit Pickup Code; successful redemption emits `PickupClaimed`, posts settlement/reward and rejects code reuse;
-8. inspect completed/cancelled orders in customer history and open a mobile Trust Receipt;
-9. cancel the order through a customer-facing confirmation dialog; after compensation, the receipt shows final charge 0 and reward balance 0.
+6. receive a **Pickup Pact Guarantee** at confirmation: a promised pickup time, a latest guaranteed time (+3 minutes), and 500P automatic compensation terms are recorded with `PickupPactIssued`;
+7. see pickup-promise protection when a multi-item demo order exceeds revised synthetic capacity; accepting `12:30 → 12:35` records `PickupRescheduled` and a versioned `PickupPactRenegotiated`;
+8. observe a second synthetic delay cross the new guarantee window; `PickupPactBreached` automatically grants 500P without a support action;
+9. when pickup is ready, use a one-time four-digit Pickup Code; successful redemption emits `PickupClaimed`, posts settlement/reward and rejects code reuse;
+10. inspect completed/cancelled orders in customer history and open a mobile Trust Receipt containing the Pact lifecycle;
+11. cancel the order through a customer-facing confirmation dialog; after compensation, the receipt shows final charge 0 and cleans up only cancellation-related financial side effects.
 
-The multi-item capacity change is an intentional synthetic demo condition used to make the promise-protection behavior observable; it is not presented as random production traffic.
+The multi-item capacity change and second missed-window delay are intentional synthetic demo conditions used to make the Pact lifecycle observable; they are not presented as random production traffic or a measured production SLA.
 
 The cancellation UI intentionally stays simple. The demo silently reproduces a late-cancellation race behind the customer experience, runs reconciliation, applies deterministic `REVERSE_SETTLEMENT` and `REVERSE_REWARD`, and then shows only the customer-relevant outcome: the order is cancelled and payment/points are cleaned up.
 

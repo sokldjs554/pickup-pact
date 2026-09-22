@@ -199,6 +199,9 @@ components:
             - RewardGranted
             - CapacityRevised
             - PickupRescheduled
+            - PickupPactIssued
+            - PickupPactRenegotiated
+            - PickupPactBreached
             - PickupClaimed
             - SettlementReversed
             - RewardReversed
