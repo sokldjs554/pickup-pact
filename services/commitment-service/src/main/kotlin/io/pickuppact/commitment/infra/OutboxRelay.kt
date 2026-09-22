@@ -17,7 +17,7 @@ class OutboxRelay(
     private val kafka: KafkaTemplate<String, String>,
     private val objectMapper: ObjectMapper
 ) {
-    @Scheduled(fixedDelayString = "${pickup.outbox.poll-ms:500}")
+    @Scheduled(fixedDelayString = "\${pickup.outbox.poll-ms:500}")
     fun relay(): Mono<Void> =
         db.sql(
             """select id, aggregate_id, event_type, payload::text as payload, occurred_at
