@@ -96,6 +96,37 @@ def _catalog_store(store_id: str) -> dict[str, Any]:
     raise KeyError(store_id)
 
 
+def _customer_order_calculation(
+    store_id: str,
+    line_items: list[dict[str, Any]],
+) -> dict[str, Any]:
+    store = _catalog_store(store_id)
+    menu = {item["id"]: item for item in store["menu"]}
+    if not line_items:
+        raise ValueError("at least one line item is required")
+
+    units = 0
+    total = 0
+    labels: list[str] = []
+    for line in line_items:
+        sku = str(line["sku"])
+        quantity = int(line["quantity"])
+        if quantity < 1 or quantity > 20:
+            raise ValueError("line item quantity must be between 1 and 20")
+        item = menu.get(sku)
+        if item is None:
+            raise ValueError(f"unknown menu sku for store: {sku}")
+        units += int(item["capacity_units"]) * quantity
+        total += int(item["price"]) * quantity
+        labels.append(item["name"] + (f" {quantity}개" if quantity > 1 else ""))
+
+    return {
+        "units": units,
+        "total": total,
+        "items": ", ".join(labels),
+    }
+
+
 def _ceil_to_five_minutes(value: datetime) -> datetime:
     rounded = value.replace(second=0, microsecond=0)
     remainder = rounded.minute % 5
@@ -595,13 +626,23 @@ def run_scenario(scenario_id: str) -> dict[str, Any]:
     }
 
 
+class DemoLineItem(BaseModel):
+    sku: str = Field(min_length=1, max_length=80)
+    quantity: int = Field(ge=1, le=20)
+
+
+class DemoPickupQuoteRequest(BaseModel):
+    line_items: list[DemoLineItem] = Field(min_length=1, max_length=20)
+
+
 class DemoOrderCreate(BaseModel):
     store: str = Field(min_length=1, max_length=80)
     store_id: str | None = Field(default=None, min_length=1, max_length=80)
-    items: str = Field(min_length=1, max_length=160)
-    total: int = Field(gt=0, le=1_000_000)
+    line_items: list[DemoLineItem] | None = Field(default=None, max_length=20)
+    items: str | None = Field(default=None, min_length=1, max_length=160)
+    total: int | None = Field(default=None, gt=0, le=1_000_000)
     pickup_at: str = Field(pattern=r"^\d{2}:\d{2}$")
-    units: int = Field(ge=1, le=50)
+    units: int | None = Field(default=None, ge=1, le=50)
 
 
 class PaymentRequest(BaseModel):
@@ -659,6 +700,26 @@ def demo_pickup_slots(
         raise HTTPException(status_code=404, detail="store not found") from exc
 
 
+@app.post("/api/demo/catalog/{store_id}/pickup-quote")
+def demo_pickup_quote(
+    store_id: str,
+    request: DemoPickupQuoteRequest,
+) -> dict[str, Any]:
+    try:
+        calculation = _customer_order_calculation(
+            store_id,
+            [item.model_dump() for item in request.line_items],
+        )
+        return {
+            **calculation,
+            "slots": _pickup_slot_options(store_id, calculation["units"]),
+        }
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="store not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @app.post("/api/demo/sessions")
 def create_demo_session() -> dict[str, Any]:
     return demo_store.create_session()
@@ -693,17 +754,31 @@ def load_demo_preset(session_id: str, scenario_id: str) -> dict[str, Any]:
 @app.post("/api/demo/sessions/{session_id}/orders")
 def create_demo_order(session_id: str, request: DemoOrderCreate) -> dict[str, Any]:
     try:
-        if request.store_id is not None:
-            slot = _pickup_slot_for_clock(request.store_id, request.pickup_at, request.units)
+        if request.store_id is not None and request.line_items is not None:
+            calculation = _customer_order_calculation(
+                request.store_id,
+                [item.model_dump() for item in request.line_items],
+            )
+            units = int(calculation["units"])
+            total = int(calculation["total"])
+            items = str(calculation["items"])
+            slot = _pickup_slot_for_clock(request.store_id, request.pickup_at, units)
             if not slot["can_fit"]:
                 raise ValueError("selected pickup slot no longer has enough capacity")
+        else:
+            if request.items is None or request.total is None or request.units is None:
+                raise ValueError("legacy demo order requires items, total and units")
+            units = request.units
+            total = request.total
+            items = request.items
+
         return demo_store.create_order(
             session_id,
             store=request.store,
-            items=request.items,
-            total=request.total,
+            items=items,
+            total=total,
             pickup_at=request.pickup_at,
-            units=request.units,
+            units=units,
         )
     except (KeyError, ValueError) as exc:
         raise _demo_error(exc) from exc
