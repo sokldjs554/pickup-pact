@@ -88,7 +88,7 @@ class ReactiveRedisCapacityLease(
     override fun release(token: String): Mono<Void> {
         val parts = token.split("|")
         if (parts.size != 2) return Mono.error(IllegalArgumentException("invalid lease token"))
-        return redis.execute(releaseScript, listOf(parts[0], parts[1]), emptyList()).then()
+        return redis.execute(releaseScript, listOf(parts[0], parts[1]), emptyList<String>()).then()
     }
 
     override fun availability(storeId: String, pickupAt: Instant): Mono<CapacityAvailability> =
