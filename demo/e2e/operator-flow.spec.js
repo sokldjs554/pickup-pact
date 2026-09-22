@@ -74,7 +74,7 @@ test('virtual customer can order, protect pickup time, claim once, and read a tr
   await expect(page.locator('#receiptContent')).toContainText('픽업 완료');
   await page.getByRole('button', { name: '영수증 닫기', exact: true }).click();
 
-  await page.getByRole('button', { name: '주문 내역', exact: true }).click();
+  await page.getByRole('button', { name: '주문 내역', exact: true }).last().click();
   await expect(page.locator('#customerHistoryList')).toContainText('픽업 완료');
   await expect(page.locator('#customerHistoryList')).toContainText('아메리카노 2개');
 
@@ -161,7 +161,7 @@ test('customer cancellation recovery remains inspectable only in dev mode', asyn
   await expect(page.locator('#receiptContent')).toContainText('포인트 조정 완료');
   await page.getByRole('button', { name: '영수증 닫기', exact: true }).click();
 
-  await page.getByRole('button', { name: '주문 내역', exact: true }).click();
+  await page.getByRole('button', { name: '주문 내역', exact: true }).last().click();
   await expect(page.locator('#customerHistoryList')).toContainText('취소');
 
   await page.goto('/?dev=1');
