@@ -18,6 +18,7 @@ EVENT_LABELS = {
     "RewardGranted": "고객 포인트 적립",
     "CapacityRevised": "매장 처리량 변경",
     "PickupRescheduled": "픽업 시간 변경",
+    "PickupClaimed": "픽업 완료",
     "SettlementReversed": "정산 취소 분개",
     "RewardReversed": "포인트 회수",
 }
@@ -101,6 +102,10 @@ def _shift_hhmm(value: str, minutes: int) -> str:
     return f"{total // 60:02d}:{total % 60:02d}"
 
 
+def _new_pickup_code() -> str:
+    return f"{int(uuid4().hex[:8], 16) % 10000:04d}"
+
+
 class DemoStore:
     """Thread-safe, session-isolated in-memory sandbox for the public portfolio demo.
 
@@ -151,6 +156,7 @@ class DemoStore:
                     "original_pickup_at": None,
                     "suggested_pickup_at": None,
                 },
+                "customer_history": [],
             }
             self._audit_locked(session_id, "SESSION_CREATED", "새 데모 세션을 만들었습니다.")
             return self.snapshot(session_id)
@@ -187,6 +193,7 @@ class DemoStore:
                     "original_pickup_at": None,
                     "suggested_pickup_at": None,
                 },
+                "customer_history": [],
             }
             self._audit_locked(session_id, "SESSION_RESET", "데모 상태를 초기화했습니다.")
             return self.snapshot(session_id)
@@ -265,6 +272,116 @@ class DemoStore:
         self._touch(session)
         return batch
 
+    def _customer_timeline_locked(self, session_id: str) -> list[dict[str, Any]]:
+        session = self.require(session_id)
+        labels = {
+            "PickupSlotHeld": "주문 접수",
+            "PaymentAuthorized": "결제 완료",
+            "CommitmentConfirmed": "매장 확인",
+            "PickupRescheduled": "픽업 시간 변경",
+            "PickupClaimed": "픽업 완료",
+            "CommitmentCancelled": "주문 취소",
+            "RewardGranted": "포인트 적립",
+            "SettlementReversed": "결제 취소 완료",
+            "RewardReversed": "포인트 조정 완료",
+        }
+        timeline: list[dict[str, Any]] = []
+        for event in sorted(session["events"], key=lambda item: (item["occurred_at"], item["event_id"])):
+            label = labels.get(event["event_type"])
+            if not label:
+                continue
+            detail = event["detail"]
+            if event["event_type"] == "PickupRescheduled":
+                detail = f"{event['payload'].get('from_pickup_at')} → {event['payload'].get('pickup_at')}"
+            elif event["event_type"] == "PickupClaimed":
+                detail = "매장에서 수령 확인"
+            elif event["event_type"] == "SettlementReversed":
+                detail = "결제 금액 정리 완료"
+            timeline.append({
+                "type": event["event_type"],
+                "label": label,
+                "detail": detail,
+                "at": event["occurred_at"],
+            })
+        return timeline
+
+    def _customer_receipt_locked(self, session_id: str) -> dict[str, Any]:
+        session = self.require(session_id)
+        order = session.get("order")
+        if not order:
+            raise ValueError("order not found")
+        settlement = sum(
+            batch["amount"] if batch["posting_type"] == "SETTLEMENT"
+            else -batch["amount"] if batch["posting_type"] == "REVERSE_SETTLEMENT"
+            else 0
+            for batch in session["ledger_batches"]
+        )
+        reward = sum(
+            batch["amount"] if batch["posting_type"] == "REWARD"
+            else -batch["amount"] if batch["posting_type"] == "REVERSE_REWARD"
+            else 0
+            for batch in session["ledger_batches"]
+        )
+        terminal = order["status"] in {"CANCELLED", "PICKED_UP"}
+        final_charge = 0 if order["status"] == "CANCELLED" else order["total"]
+        return {
+            "order_id": order["order_id"],
+            "store": order["store"],
+            "items": order["items"],
+            "total": order["total"],
+            "status": order["status"],
+            "pickup_at": order["pickup_at"],
+            "pickup_code": order.get("pickup_code"),
+            "pickup_claimed": bool(order.get("pickup_claimed")),
+            "payment_authorized": bool(order.get("payment_authorized")),
+            "final_charge": final_charge,
+            "settlement_balance": settlement,
+            "reward_balance": reward,
+            "terminal": terminal,
+            "timeline": self._customer_timeline_locked(session_id),
+            "updated_at": _iso(session["updated_at"]),
+        }
+
+    def _archive_customer_order_locked(self, session_id: str) -> dict[str, Any]:
+        session = self.require(session_id)
+        receipt = self._customer_receipt_locked(session_id)
+        if not receipt["terminal"]:
+            raise ValueError("only terminal customer orders can be archived")
+        summary = {
+            "order_id": receipt["order_id"],
+            "store": receipt["store"],
+            "items": receipt["items"],
+            "total": receipt["total"],
+            "status": receipt["status"],
+            "pickup_at": receipt["pickup_at"],
+            "final_charge": receipt["final_charge"],
+            "updated_at": receipt["updated_at"],
+            "receipt": receipt,
+        }
+        history = session["customer_history"]
+        for index, item in enumerate(history):
+            if item["order_id"] == summary["order_id"]:
+                history[index] = summary
+                break
+        else:
+            history.insert(0, summary)
+        self._touch(session)
+        return deepcopy(summary)
+
+    def customer_history(self, session_id: str) -> list[dict[str, Any]]:
+        with self._lock:
+            return deepcopy(self.require(session_id)["customer_history"])
+
+    def customer_receipt(self, session_id: str, order_id: str) -> dict[str, Any]:
+        with self._lock:
+            session = self.require(session_id)
+            if session.get("order") and session["order"]["order_id"] == order_id:
+                return deepcopy(self._customer_receipt_locked(session_id))
+            for item in session["customer_history"]:
+                if item["order_id"] == order_id:
+                    return deepcopy(item["receipt"])
+            raise KeyError(order_id)
+
     def create_order(
         self,
         session_id: str,
@@ -300,6 +417,8 @@ class DemoStore:
                 "payment_authorized": False,
                 "settled": False,
                 "rewarded": False,
+                "pickup_code": None,
+                "pickup_claimed": False,
             }
             session["capacity"]["slot"] = pickup_at
             session["capacity"]["reserved_units"] += units
@@ -353,6 +472,8 @@ class DemoStore:
             if not order["payment_authorized"]:
                 raise ValueError("payment authorization is required")
             order["status"] = "CONFIRMED"
+            if not order.get("pickup_code"):
+                order["pickup_code"] = _new_pickup_code()
             event = self._append_event_locked(
                 session_id,
                 "CommitmentConfirmed",
@@ -663,12 +784,112 @@ class DemoStore:
                     "REPAIR_PLAN_APPLIED_IN_SANDBOX",
                     ", ".join(applied),
                 )
+            if order["status"] == "CANCELLED":
+                self._archive_customer_order_locked(session_id)
             after = self._reconcile_locked(session_id)
             return {
                 "applied": applied,
                 "reconciliation": deepcopy(after),
                 "state": self.snapshot(session_id),
             }
+
+    def claim_pickup(self, session_id: str, pickup_code: str) -> dict[str, Any]:
+        with self._lock:
+            session = self.require(session_id)
+            order = session.get("order")
+            if not order:
+                raise ValueError("order not found")
+            if order.get("pickup_claimed"):
+                raise ValueError("pickup code has already been used")
+            if order["status"] != "CONFIRMED":
+                raise ValueError("pickup is allowed only for a confirmed order")
+            if not order.get("pickup_code") or order["pickup_code"] != pickup_code:
+                raise ValueError("pickup code does not match")
+
+            event = self._append_event_locked(
+                session_id,
+                "PickupClaimed",
+                {"pickup_code": pickup_code},
+                detail="1회용 픽업 코드 확인",
+            )
+            order["pickup_claimed"] = True
+            order["status"] = "PICKED_UP"
+            session["capacity"]["reserved_units"] = max(
+                0,
+                session["capacity"]["reserved_units"] - order["units"],
+            )
+            settlement_event = self._append_event_locked(
+                session_id,
+                "SettlementPosted",
+                {"amount": str(order["total"]), "source": "pickup_claim"},
+                detail=f"점주 정산 {order['total']:,}원 반영",
+            )
+            order["settled"] = True
+            self._ledger_locked(
+                session_id,
+                "SETTLEMENT",
+                order["total"],
+                settlement_event["event_id"],
+            )
+            reward_amount = max(1, order["total"] // 100)
+            reward_event = self._append_event_locked(
+                session_id,
+                "RewardGranted",
+                {"amount": str(reward_amount), "source": "pickup_claim"},
+                detail=f"고객 포인트 {reward_amount}P 적립",
+            )
+            order["rewarded"] = True
+            self._ledger_locked(
+                session_id,
+                "REWARD",
+                reward_amount,
+                reward_event["event_id"],
+            )
+            self._audit_locked(
+                session_id,
+                "PICKUP_CLAIMED",
+                f"{order['order_id']} · one-time code consumed",
+            )
+            history = self._archive_customer_order_locked(session_id)
+            return {
+                "event": deepcopy(event),
+                "history": history,
+                "state": self.snapshot(session_id),
+            }
+
+    def next_customer_order(self, session_id: str) -> dict[str, Any]:
+        with self._lock:
+            current = self.require(session_id)
+            if current.get("order") and current["order"]["status"] not in {"CANCELLED", "PICKED_UP"}:
+                raise ValueError("current order is not complete")
+            history = deepcopy(current["customer_history"])
+            created_at = current["created_at"]
+            self._sessions[session_id] = {
+                "session_id": session_id,
+                "created_at": created_at,
+                "updated_at": _now(),
+                "order": None,
+                "capacity": {
+                    "slot": "12:30",
+                    "available_units": 12,
+                    "reserved_units": 0,
+                    "revision": 1,
+                },
+                "events": [],
+                "ledger_batches": [],
+                "audit": [],
+                "applied_repairs": [],
+                "manual_review": False,
+                "projection_rebuilds": 0,
+                "pickup_protection": {
+                    "status": "NONE",
+                    "original_pickup_at": None,
+                    "suggested_pickup_at": None,
+                },
+                "customer_history": history,
+            }
+            self._audit_locked(session_id, "CUSTOMER_NEXT_ORDER", "이전 주문 내역을 보존하고 새 주문을 시작했습니다.")
+            return self.snapshot(session_id)
 
     def accept_pickup_reschedule(self, session_id: str, pickup_at: str | None = None) -> dict[str, Any]:
         with self._lock:
@@ -746,6 +967,8 @@ class DemoStore:
                 "payment_authorized": True,
                 "settled": False,
                 "rewarded": False,
+                "pickup_code": _new_pickup_code(),
+                "pickup_claimed": False,
             }
             session["pickup_protection"] = {
                 "status": "ON_TIME",
@@ -838,6 +1061,7 @@ class DemoStore:
                 "manual_review": session["manual_review"],
                 "projection_rebuilds": session["projection_rebuilds"],
                 "pickup_protection": deepcopy(session["pickup_protection"]),
+                "customer_history": deepcopy(session["customer_history"]),
                 "reconciliation": reconciliation,
                 "metrics": {
                     "event_count": len(events),
