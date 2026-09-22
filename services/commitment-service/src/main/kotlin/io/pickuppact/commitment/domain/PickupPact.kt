@@ -29,9 +29,12 @@ data class PickupPact(
         )
     }
 
-    fun breach(): PickupPact {
+    fun breach(observedAt: Instant): PickupPact {
         check(status == PickupPactStatus.ACTIVE) { "only an active pact can be breached" }
         check(!compensationGranted) { "compensation already granted" }
+        check(!observedAt.isBefore(latestAt)) {
+            "pickup pact cannot be breached before its guarantee deadline"
+        }
         return copy(
             status = PickupPactStatus.COMPENSATED,
             compensationGranted = true
