@@ -249,8 +249,9 @@ class CommitmentServiceTest {
 
         val breached = service.breachPact(held.id).block()!!
 
-        assertEquals(PickupPactStatus.COMPENSATED, breached.pact!!.status)
-        assertTrue(breached.pact.compensationGranted)
+        val breachedPact = breached.pact!!
+        assertEquals(PickupPactStatus.COMPENSATED, breachedPact.status)
+        assertTrue(breachedPact.compensationGranted)
         assertEquals(1, repository.events.count { it == "PickupPactBreached" })
 
         StepVerifier.create(service.breachPact(held.id))
