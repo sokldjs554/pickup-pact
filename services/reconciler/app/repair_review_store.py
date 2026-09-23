@@ -46,8 +46,15 @@ def sample_events(case: str) -> list[EventEnvelope]:
         return root+[cancel,post,post.model_copy(update={'payload':{'amount':'1','currency':'KRW'}})]
     if case == 'terminal_conflict': return root+[cancel,post,ev('claim','PickupClaimed',6,'confirm')]
     if case == 'missing_parent': return root+[cancel,post.model_copy(update={'causation_id':'late'})]
-    if case == 'partial_cancel': return root+[cancel.model_copy(update={'payload':{'scope':'PARTIAL','amount':'3000'}}),post]
-    if case == 'multiple_postings': return root+[cancel,post,ev('settle2','SettlementPosted',6,'cancel',{'amount':'2000','currency':'KRW'})]
+    if case == 'partial_cancel':
+        partial = cancel.model_copy(update={'payload':{
+            'scope':'PARTIAL',
+            'amount':'3000',
+            'allocations':[{'target_event_id':'settle','amount':'3000','unit':'KRW'}],
+        }})
+        return root+[partial,post]
+    if case == 'multiple_postings':
+        return root+[cancel,post,ev('settle2','SettlementPosted',6,'cancel',{'amount':'2000','currency':'KRW'})]
     raise ValueError('unknown sample case')
 
 
@@ -179,15 +186,13 @@ class ReviewStore:
         if evaluation['decision'] != 'AUTO' or 'MANUAL_REVIEW' in evaluation['repairs']:
             raise ReviewConflict('evidence is not executable')
         actions = []
-        for repair,kind,unit in [('REVERSE_SETTLEMENT','SettlementPosted','KRW'),('REVERSE_REWARD','RewardGranted','PTS')]:
-            if repair not in evaluation['repairs']: continue
-            posts = [e for e in view['events'] if e['event_type']==kind]
-            if len(posts)!=1: raise ReviewConflict('single posting evidence required')
-            post = posts[0]
-            amount = accounting_amount(post['payload'].get('amount'))
-            if post['payload'].get('currency',unit)!=unit or post['payload'].get('unit',unit)!=unit:
-                raise ReviewConflict('accounting unit mismatch')
-            data={'target_event_id':post['event_id'],'repair':repair,'amount':amount,'unit':unit}
+        for action in evaluation.get('financial_actions', []):
+            data = {
+                'target_event_id': action['target_event_id'],
+                'repair': action['repair'],
+                'amount': accounting_amount(action['amount']),
+                'unit': action['unit'],
+            }
             actions.append({'action_id':digest({'session':view['id'],**data}),**data})
         if not actions: raise ReviewConflict('no financial correction is required')
         return actions
