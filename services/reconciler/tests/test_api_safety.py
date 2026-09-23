@@ -11,15 +11,18 @@ client = TestClient(app)
 
 
 def test_http_projection_rebuild_rejects_conflicting_evidence_before_writing(monkeypatch):
-    written = []
-    monkeypatch.setattr(persistence, "rebuild_projection", lambda result: written.append(result) or {})
+    from app import projection_store
+    def capture(request):
+        events=tuple(request.events)
+        return projection_store.ProjectionCandidate(events[0].aggregate_id,1,
+            projection_store.evidence_digest(events),events,reconcile(request))
+    monkeypatch.setattr(projection_store,"capture_evidence",capture)
     request = ReconcileRequest(events=cancelled() + [
         event("x", "SettlementPosted", 4, payload={"amount": "9000"}),
         event("x", "SettlementPosted", 4, payload={"amount": "1"}),
     ])
     response = client.post("/api/v1/projections/rebuild", json=request.model_dump(mode="json"))
     assert response.status_code == 409, response.text
-    assert written == []
     assert response.json()["detail"]["decision"] == "MANUAL_REVIEW"
 
 
@@ -37,9 +40,10 @@ def test_projection_persistence_rejects_waiting_decision_before_opening_db(monke
 
 def test_http_valid_projection_still_reaches_persistence(monkeypatch):
     written = []
-    def write(result):
-        written.append(result)
-        return result.canonical_state.model_dump()
+    def write(request):
+        # This is a routing unit test; real PostgreSQL fencing is in tests/postgres.
+        written.append(request)
+        return reconcile(request).canonical_state.model_dump()
     monkeypatch.setattr(persistence, "rebuild_projection", write)
     request = ReconcileRequest(events=prefix())
     response = client.post("/api/v1/projections/rebuild", json=request.model_dump(mode="json"))

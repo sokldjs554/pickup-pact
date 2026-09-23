@@ -116,21 +116,22 @@ def incidents_api(aggregate_id: str) -> dict:
 def rebuild_projection_api(request: ReconcileRequest) -> dict:
     from .persistence import rebuild_projection
 
-    result = reconcile(request)
-    if result.decision != "AUTO" or "MANUAL_REVIEW" in result.repairs:
-        raise HTTPException(
-            status_code=409,
-            detail={
-                "error": "unresolved_reconciliation_evidence",
-                "decision": result.decision,
-                "blocking_reasons": result.blocking_reasons,
-                "missing_event_ids": result.missing_event_ids,
-            },
-        )
-    projection = rebuild_projection(result)
+    from .projection_store import StaleProjection, UnresolvedProjection
+    try:
+        projection = rebuild_projection(request)
+    except UnresolvedProjection as exc:
+        result = exc.result
+        raise HTTPException(status_code=409, detail={
+            "error": "unresolved_reconciliation_evidence", "decision": result.decision,
+            "blocking_reasons": result.blocking_reasons, "missing_event_ids": result.missing_event_ids,
+        }) from exc
+    except StaleProjection as exc:
+        raise HTTPException(status_code=409, detail={
+            "error": "stale_projection_evidence", "message": str(exc),
+        }) from exc
     return {
-        "aggregate_id": result.aggregate_id,
-        "source": "canonical-event-time",
+        "aggregate_id": request.events[0].aggregate_id,
+        "source": "registered-causal-evidence",
         "projection": projection,
     }
 

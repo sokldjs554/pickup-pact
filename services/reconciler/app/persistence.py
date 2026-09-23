@@ -143,48 +143,17 @@ def record_reconciliation(result: ReconcileResult) -> str:
 
 
 
-def rebuild_projection(result: ReconcileResult) -> dict:
-    """Rebuild only from executable evidence; reject before touching storage."""
-    if result.decision != "AUTO" or "MANUAL_REVIEW" in result.repairs:
-        raise ValueError("reconciliation evidence is not executable")
-    import psycopg
-
-    snapshot = result.canonical_state.model_dump(mode="json")
-    canonical_hash = _stable_digest(snapshot)
-    with psycopg.connect(os.environ["POSTGRES_DSN"]) as connection:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                """
-                insert into commitment_projection(
-                  aggregate_id, status, payment_authorized, settled, rewarded,
-                  capacity_revision, settlement_post_count, reward_post_count,
-                  canonical_hash, rebuilt_at
-                )
-                values (%s,%s,%s,%s,%s,%s,%s,%s,%s,now())
-                on conflict (aggregate_id) do update set
-                  status = excluded.status,
-                  payment_authorized = excluded.payment_authorized,
-                  settled = excluded.settled,
-                  rewarded = excluded.rewarded,
-                  capacity_revision = excluded.capacity_revision,
-                  settlement_post_count = excluded.settlement_post_count,
-                  reward_post_count = excluded.reward_post_count,
-                  canonical_hash = excluded.canonical_hash,
-                  rebuilt_at = now()
-                """,
-                (
-                    result.aggregate_id,
-                    snapshot["status"],
-                    snapshot["payment_authorized"],
-                    snapshot["settled"],
-                    snapshot["rewarded"],
-                    snapshot["capacity_revision"],
-                    snapshot["settlement_post_count"],
-                    snapshot["reward_post_count"],
-                    canonical_hash,
-                ),
-            )
-    return {**snapshot, "canonical_hash": canonical_hash}
+def rebuild_projection(evidence) -> dict:
+    """Register supplied facts; never persist an unfenced caller-computed result."""
+    from .models import ReconcileRequest
+    from .projection_store import capture_evidence, publish_projection
+    if isinstance(evidence, ReconcileResult):
+        if evidence.decision != "AUTO" or "MANUAL_REVIEW" in evidence.repairs:
+            raise ValueError("reconciliation evidence is not executable")
+        raise ValueError("server-owned evidence packet is required, not a computed result")
+    if not isinstance(evidence, ReconcileRequest):
+        raise ValueError("validated evidence packet required")
+    return publish_projection(capture_evidence(evidence))
 
 
 def get_projection(aggregate_id: str) -> dict | None:
@@ -198,11 +167,15 @@ def get_projection(aggregate_id: str) -> dict | None:
         with connection.cursor() as cursor:
             cursor.execute(
                 """
-                select aggregate_id, status, payment_authorized, settled, rewarded,
-                       capacity_revision, settlement_post_count, reward_post_count,
-                       canonical_hash, rebuilt_at
-                from commitment_projection
-                where aggregate_id = %s
+                select p.aggregate_id,p.status,p.payment_authorized,p.settled,p.rewarded,
+                       p.capacity_revision,p.settlement_post_count,p.reward_post_count,
+                       p.canonical_hash,p.rebuilt_at,p.source_revision,p.evidence_hash,
+                       h.revision as evidence_revision,
+                       (h.revision is not null and p.source_revision=h.revision
+                        and p.evidence_hash=h.evidence_hash) as is_current
+                from commitment_projection p
+                left join projection_evidence_heads h on h.aggregate_id=p.aggregate_id
+                where p.aggregate_id = %s
                 """,
                 (aggregate_id,),
             )
