@@ -166,7 +166,11 @@ def reconcile(request: ReconcileRequest) -> ReconcileResult:
     claims = [e for e in unique if e.event_type == "PickupClaimed"]
     settlements = [e for e in unique if e.event_type == "SettlementPosted"]
     rewards = [e for e in unique if e.event_type == "RewardGranted"]
-    financial_actions = []
+    financial_actions, financial_blockers = plan_financial_repairs(unique)
+    # Schema/scope validation also applies to projections with no cancellation.
+    manual.extend(financial_blockers)
+    if financial_blockers:
+        evidence.update(event.event_id for event in unique)
 
     if full_cancels and claims:
         # Only a full committed cancellation conflicts with final pickup.
@@ -187,10 +191,6 @@ def reconcile(request: ReconcileRequest) -> ReconcileResult:
                 evidence.update((cancel.event_id, posting.event_id))
 
     if financial_cancels:
-        financial_actions, financial_blockers = plan_financial_repairs(unique)
-        manual.extend(financial_blockers)
-        if financial_blockers:
-            evidence.update(event.event_id for event in unique)
         if financial_actions:
             evidence.update(event.event_id for event in financial_cancels)
             evidence.update(action.target_event_id for action in financial_actions)
