@@ -166,13 +166,13 @@ paths:
 
   /api/v1/commitments/{id}/cancel:
     post:
-      summary: Cancel a commitment and release leased capacity
+      summary: Cancel HELD immediately or request merchant-authorized cancellation for confirmed work
       parameters:
         - $ref: "#/components/parameters/CommitmentId"
       responses:
-        "200": {description: Cancelled commitment}
+        "200": {description: HELD cancelled immediately, or confirmed commitment returned with a pending merchant cancellation request}
         "404": {description: Commitment not found}
-        "409": {description: Invalid commitment state}
+        "409": {description: Picked-up commitment or invalid cancellation state}
 
   /api/v1/merchant/orders/{orderId}:
     get:
