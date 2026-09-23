@@ -1192,6 +1192,16 @@ def reconciler_flow(pass_no: int) -> None:
     assert stale_rebuild.status_code == 409, stale_rebuild.text
     assert stale_rebuild.json()["detail"]["error"] == "stale_projection_evidence", stale_rebuild.text
 
+    semantic_mutation = json.loads(json.dumps(packet))
+    semantic_mutation["events"][4]["payload"]["amount"] = "11999"
+    changed_rebuild = httpx.post(
+        f"{RECONCILER}/api/v1/projections/rebuild",
+        json=semantic_mutation,
+        timeout=20,
+    )
+    assert changed_rebuild.status_code == 409, changed_rebuild.text
+    assert changed_rebuild.json()["detail"]["error"] == "stale_projection_evidence", changed_rebuild.text
+
     superset_packet = {
         "events": [
             *packet["events"],
