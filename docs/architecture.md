@@ -15,7 +15,7 @@ The public FastAPI demo mirrors the trust boundary: the customer browser submits
 
 ## Outbox ordering
 
-Multiple domain facts can be committed in one database transaction. For example, confirmation writes `CommitmentConfirmed` followed by `PickupPactIssued`. Ordering by timestamp plus random UUID is not sufficient because equal timestamps can reorder those events. The outbox therefore owns a monotonic `event_sequence` and the relay publishes unpublished rows strictly by that sequence. Full-topology integration asserts the committed business order.
+Multiple domain facts can be committed in one database transaction. For example, confirmation writes `CommitmentConfirmed` followed by `PickupPactIssued`. Ordering by timestamp plus random UUID is not sufficient because equal timestamps can reorder those events. The outbox therefore owns an `event_sequence` and each relay scan orders visible unpublished rows by that sequence. The integration test checks order within the tested lifecycle. A database sequence is not a global commit-order proof, and this implementation does not claim cross-replica ordered publication.
 
 ## Core Pact and financial side effects
 
@@ -56,7 +56,7 @@ Protect the customer's pickup-time promise and the merchant's financial state wh
 
 ### Capacity scope
 
-The current Lua implementation is a per-slot atomic counter with release and TTL. The TTL covers the requested pickup time plus a grace period, which favors promise safety over early capacity reclamation. It proves the no-oversubscription invariant under the synthetic race benchmark. It does not claim token-level retry deduplication or a production abandoned-checkout timeout.
+The current Lua implementation is a per-slot atomic counter with release and TTL. The TTL covers the requested pickup time plus a grace period, which favors promise safety over early capacity reclamation. The synthetic concurrent-admission test exercises the configured slot limit. HOLD request retries use an Idempotency-Key and release checks a per-lease identity. This is not a production abandoned-checkout timeout or proof under every distributed failure schedule.
 
 ## Financial path
 
@@ -67,14 +67,16 @@ The Financial Ledger is a separate bounded context.
 - supported posting types: settlement, settlement reversal, reward, reward reversal
 - shared application service and `LedgerPostingPolicy` are used by both ingress paths
 - `ledger_batches.event_id` + `semantic_fingerprint` distinguish an exact redelivery from a conflicting reused event ID
-- each accepted batch is balanced before repository append\n- conflicting reused IDs are recorded in `ledger_conflicts` and can be inspected through `GET /api/v1/ledger/conflicts`\n- `GET /api/v1/ledger/orders/{aggregateId}` exposes append-only financial history without mutating the ledger
+- each accepted batch is balanced before repository append
+- conflicting reused IDs are recorded in `ledger_conflicts` and can be inspected through `GET /api/v1/ledger/conflicts`
+- `GET /api/v1/ledger/orders/{aggregateId}` exposes append-only financial history without mutating the ledger
 
 The portfolio does not pretend to contain a real payment provider. The payment-authorization command represents the result boundary that a provider adapter would own.
 
 ## Investigation / reconciliation path
 
 1. An operator or integration submits one aggregate's event envelope to FastAPI; Celery exposes the same deterministic replay asynchronously.
-2. Reconciliation compares receive-order folding with canonical business-time folding (`occurred_at`).
+2. Reconciliation compares a diagnostic receive-order fold with explicit-causation-aware replay. Incomplete or conflicting evidence cannot authorize a mutation; unrelated events still rely on the documented comparable-clock assumption.
 3. When persistence mode is enabled:
    - MongoDB archives each distinct **delivery** using a delivery digest, so conflicting copies of one event ID are not lost;
    - Elasticsearch indexes the normalized reconciliation result under a stable digest;
@@ -89,7 +91,7 @@ The pickup-command path coordinates Redis, R2DBC, and asynchronous event publica
 
 ## CQRS boundary
 
-The command model owns invariants. `POST /api/v1/projections/rebuild` explicitly upserts the canonical snapshot into PostgreSQL `commitment_projection`, and `GET /api/v1/projections/{aggregateId}` exposes that read model. Reconciliation never edits an original event merely to make a projection look correct.
+The command model owns invariants. `POST /api/v1/projections/rebuild` rejects WAIT/MANUAL evidence in both API and persistence layers, then upserts supported snapshots into PostgreSQL `commitment_projection`. `GET /api/v1/projections/{aggregateId}` exposes that read model. An older valid rebuild can still overwrite a newer one because this legacy projection has no version fence; the new workbench fence applies only inside its own SQLite review transaction. Reconciliation never edits an original event to make a projection look correct.
 
 ## Temporal model
 
@@ -99,3 +101,8 @@ A business fact and its delivery are different timestamps:
 - `received_at`: when a particular consumer observed it.
 
 This distinction is why a cancellation received at 12:15:02 can still be understood as having happened at 12:14:10, before settlement at 12:14:36.
+
+
+## Verification boundary correction — 2026-09-23
+
+Merchant `POS_PRINT` and notification effects in this repository are durable **intent records**, not a physical printer driver or an external notification provider. The tested unique constraint prevents duplicate intent rows; exactly-once physical printing/delivery is not claimed. The repair workbench is a separate, bounded synthetic approval journal. It does not resolve the authority race between cancellation approval and physical preparation, execute real refunds, or implement partial-refund allocation. The current README and repair-workbench document are the scope reference; earlier implementation-history descriptions are not a broader completion claim.

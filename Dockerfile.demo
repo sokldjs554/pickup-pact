@@ -6,4 +6,4 @@ COPY services /app/services
 COPY demo /app/demo
 ENV PORT=10000
 EXPOSE 10000
-CMD ["sh","-c","uvicorn demo.main:app --host 0.0.0.0 --port ${PORT:-10000}"]
+CMD ["sh","-c","uvicorn demo.review_app:app --host 0.0.0.0 --port ${PORT:-10000}"]

@@ -41,11 +41,19 @@ def scope_blockers(events: list[EventEnvelope], repairs: set[str]) -> list[str]:
     ):
         postings = [e for e in events if e.event_type == kind]
         reversals = [e for e in events if e.event_type == reverse]
+        if reversals and not postings:
+            blockers.append('missing_financial_posting')
         if len(postings) > 1 or len(reversals) > 1:
             blockers.append('multiple_financial_postings')
         if len(postings) == 1 and reversals:
             post = postings[0]
             for rev in reversals:
+                expected_unit = FINANCIAL_TYPES[kind]
+                if any(rev.payload.get(key, expected_unit) != expected_unit for key in ('currency','unit')):
+                    blockers.append('invalid_reversal_unit')
+                source_id = rev.payload.get('source_event_id')
+                if source_id is not None and source_id != post.event_id:
+                    blockers.append('ambiguous_reversal_attribution')
                 try:
                     if ('amount' in rev.payload and
                         accounting_amount(rev.payload['amount']) != accounting_amount(post.payload.get('amount'))):

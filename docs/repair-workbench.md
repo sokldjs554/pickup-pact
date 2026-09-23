@@ -42,3 +42,21 @@ PYTHONPATH=.:services/reconciler python -m scripts.repair_audit.verify_workbench
 
 ## 구버전 테스트 변경 이유
 기존 causal-order 테스트 중 금액이 생략된 전표 4개는 정상 전표 금액을 제공하도록 fixture를 강화했다. 인과관계 관련 기대 단언은 그대로 유지했다. 금액 누락 시 차단해야 한다는 새 독립 회귀 테스트를 추가했다. 이전 자동 허용을 되살려서 테스트를 맞추지 않았다.
+
+## 기존 공개 데모와의 통합
+
+`demo/main.py`는 기존 고객·점주 앱(`demo/customer_app.py`)과 복구 router를 합친다. 기존 Render start command와 `demo.review_app:app` 모두 `/repair-lab`을 제공한다. standalone 앱의 보안 미들웨어에만 의존하지 않고 router 자체에서도 JSON·Origin 검사를 적용한다. `demo/test_repair_integration.py`가 기존 홈·health·주문 세션과 새 계획·승인·명세가 함께 동작하는지 검증한다.
+
+공개 인스턴스의 기본 DB는 `/tmp/pickup-pact-repair-review.sqlite`다. 무료 호스팅의 재배포·인스턴스 교체에도 영구 보존된다고 주장하지 않는다. 로컬에서 지정한 DB 파일을 유지한 재시작과는 다른 조건이다.
+
+통합 앱 브라우저 시험:
+
+```
+PYTHONPATH=.:services/reconciler python -m scripts.repair_audit.verify_workbench_browser --app-entry demo.main:app --repeat 3
+```
+
+공개 배포 시험은 `/health`의 커밋을 확인한 뒤 `--base-url https://pickup-pact-demo.onrender.com --expected-commit <실제 배포 커밋> --repeat 3`로 실행한다. 새로 조회한 CI artifact의 JSON·캡처·로그를 확인해야 하며 이전 실행의 성공 상태로 대체하지 않는다.
+
+## 추가로 바로잡은 계약
+
+역분개에 원래와 다른 단위나 다른 원본 ID가 명시되면 검토로 보낸다. 원본 정산 없이 역분개만 있으면 해결된 전체취소로 간주하지 않는다. 자동 생성 OpenAPI에는 구체적인 SessionView/PlanView/ApprovalView 응답과 오류 상태를 선언한다. 통합 수동 OpenAPI에도 projection 거절 409와 새 판정 모델을 연결했다.

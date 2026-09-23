@@ -7,7 +7,7 @@ on:
       - "demo/**"
       - "Dockerfile.demo"
       - "render.yaml"
-      - "services/reconciler/app/engine.py"
+      - "services/reconciler/app/**"
       - "services/reconciler/app/models.py"
       - ".github/workflows/demo-ci.yml"
   pull_request:
@@ -15,7 +15,7 @@ on:
       - "demo/**"
       - "Dockerfile.demo"
       - "render.yaml"
-      - "services/reconciler/app/engine.py"
+      - "services/reconciler/app/**"
       - "services/reconciler/app/models.py"
       - ".github/workflows/demo-ci.yml"
 
@@ -36,7 +36,7 @@ jobs:
         run: pip install -r demo/requirements.txt
 
       - name: Run interviewer demo tests
-        run: pytest -q demo/test_demo.py
+        run: pytest -q demo/test_demo.py demo/test_repair_integration.py
 
       - name: Build public demo image
         run: docker build -f Dockerfile.demo -t pickup-pact-demo:ci .

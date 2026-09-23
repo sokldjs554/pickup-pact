@@ -81,3 +81,9 @@ https://docs.aws.amazon.com/en_en/prescriptive-guidance/latest/cloud-design-patt
 
 SQLite Atomic Commit: 로컬 트랜잭션 내구성 검증 범위.
 https://www.sqlite.org/atomiccommit.html
+
+## 후속 구현 — 복구 작업대
+
+위 로컬 38개 검증과 검토용 브랜치 상태는 최초 감사 시점의 기록이다. 후속 작업은 [복구 작업대 문서](repair-workbench.md)와 해당 커밋의 CI artifact를 기준으로 확인한다. 전체 소스를 CI archive로 확보한 뒤 기존 고객·점주 데모와 통합했고, 원격 Chromium의 실제 HTTP 실행도 추가했다. 최초 로컬 환경 제약이나 테스트 수를 현재 최종 상태로 오해하지 않는다.
+
+부분취소·복수 전표 등은 안전하게 차단하는 범위이며, 실제 금액 배분 정책을 구현했다는 뜻이 아니다. SQLite의 승인 버전 검사와 기존 PostgreSQL projection의 전역/오래된 결과 차단도 구분한다.

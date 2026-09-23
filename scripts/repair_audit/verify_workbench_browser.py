@@ -11,22 +11,39 @@ import urllib.request
 from playwright.sync_api import sync_playwright
 
 
-def run(output: Path, repeat: int):
+def run(output: Path, repeat: int, *, base_url: str | None = None, app_entry: str | None = None, expected_commit: str | None = None):
     output.mkdir(parents=True,exist_ok=True)
-    with socket.socket() as socket_:
-        socket_.bind(('127.0.0.1',0)); port=socket_.getsockname()[1]
-    base=f'http://127.0.0.1:{port}'
+    if repeat < 1 or repeat > 10:
+        raise ValueError('repeat must be between 1 and 10')
     log=(output/'server.log').open('w')
-    process=subprocess.Popen([sys.executable,'-m','app.workbench','--port',str(port),
-        '--db',str(output/'browser.sqlite')],stdout=log,stderr=subprocess.STDOUT)
+    process=None
+    if base_url:
+        from urllib.parse import urlsplit
+        if urlsplit(base_url).scheme not in {'http','https'}:
+            raise ValueError('HTTP(S) base URL required')
+        base=base_url.rstrip('/')
+    else:
+        with socket.socket() as socket_:
+            socket_.bind(('127.0.0.1',0)); port=socket_.getsockname()[1]
+        base=f'http://127.0.0.1:{port}'
+        env=os.environ.copy()
+        env['REPAIR_REVIEW_DB']=str(output/'browser.sqlite')
+        command=([sys.executable,'-m','uvicorn',app_entry,'--host','127.0.0.1','--port',str(port)]
+                 if app_entry else
+                 [sys.executable,'-m','app.workbench','--port',str(port),'--db',str(output/'browser.sqlite')])
+        process=subprocess.Popen(command,stdout=log,stderr=subprocess.STDOUT,env=env)
     results=[]
     try:
         for _ in range(80):
             try:
-                with urllib.request.urlopen(base+'/health',timeout=.5) as r:
-                    if r.status==200: break
+                with urllib.request.urlopen(base+'/health',timeout=10 if base_url else .5) as r:
+                    if r.status==200:
+                        health=json.load(r)
+                        if expected_commit and health.get('release_commit')!=expected_commit:
+                            raise RuntimeError(f'wrong deployed commit: {health}')
+                        break
             except OSError:
-                if process.poll() is not None: raise RuntimeError('server failed; inspect server.log')
+                if process is not None and process.poll() is not None: raise RuntimeError('server failed; inspect server.log')
                 time.sleep(.15)
         else: raise RuntimeError('server readiness timed out')
         with sync_playwright() as pw:
@@ -37,6 +54,7 @@ def run(output: Path, repeat: int):
             for pass_no in range(1,repeat+1):
                 for mode,viewport in [('desktop',{'width':1440,'height':1100}),('mobile',{'width':390,'height':844})]:
                     context=browser.new_context(viewport=viewport,locale='ko-KR')
+                    context.set_default_timeout(20000)
                     page=context.new_page(); errors=[]; requests=[]
                     page.on('pageerror',lambda e:errors.append(str(e)))
                     page.on('request',lambda r:requests.append(r.url))
@@ -85,17 +103,24 @@ def run(output: Path, repeat: int):
                     results.append({'pass':pass_no,'viewport':mode,'browser':browser.version,
                         'checks':['real_http','approval','duplicate','reload','missing_then_resolved',
                                   'four_blocked_cases','stale_approval_rejected','no_external_requests','no_horizontal_overflow'],
-                        'page_errors':errors,'http_requests':len(requests),'result':'passed'})
+                        'page_errors':errors,'http_requests':len(requests),'result':'passed','server_entry':app_entry or ('deployed' if base_url else 'standalone'),
+                        'verified_commit':expected_commit})
                     context.close()
             browser.close()
     finally:
-        process.terminate()
-        try: process.wait(timeout=5)
-        except subprocess.TimeoutExpired: process.kill();process.wait()
+        if process is not None:
+            process.terminate()
+            try: process.wait(timeout=5)
+            except subprocess.TimeoutExpired: process.kill();process.wait()
         log.close()
     (output/'browser-results.json').write_text(json.dumps(results,ensure_ascii=False,indent=2)+'\n')
     print(json.dumps({'verified_flows':len(results),'repeat':repeat,'result':'passed'},ensure_ascii=False))
 
 if __name__=='__main__':
     parser=argparse.ArgumentParser();parser.add_argument('--output',type=Path,default=Path('verification/workbench'))
-    parser.add_argument('--repeat',type=int,default=3);a=parser.parse_args();run(a.output,a.repeat)
+    parser.add_argument('--repeat',type=int,default=3)
+    parser.add_argument('--base-url')
+    parser.add_argument('--app-entry')
+    parser.add_argument('--expected-commit')
+    a=parser.parse_args()
+    run(a.output,a.repeat,base_url=a.base_url,app_entry=a.app_entry,expected_commit=a.expected_commit)

@@ -1,0 +1,54 @@
+name: live-repair-review
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  exact-deployed-workbench:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PYTHONPATH: .:services/reconciler
+      EXPECTED_COMMIT: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Wait for exact deployed commit
+        run: |
+          python - <<'PY'
+          import json, os, time, urllib.request
+          expected=os.environ['EXPECTED_COMMIT']
+          deadline=time.monotonic()+600
+          last='not checked'
+          while time.monotonic()<deadline:
+              try:
+                  with urllib.request.urlopen('https://pickup-pact-demo.onrender.com/health',timeout=10) as r:
+                      health=json.load(r)
+                  last=health.get('release_commit')
+                  if last==expected:
+                      print('Exact deployed commit:',last)
+                      break
+              except Exception as exc:
+                  last=repr(exc)
+              time.sleep(8)
+          else:
+              raise SystemExit(f'Expected {expected}; last observed {last}')
+          PY
+      - run: python -m pip install -r requirements-workbench.txt playwright
+      - run: python -m playwright install --with-deps chromium
+      - name: Deployed real HTTP desktop/mobile journeys repeated
+        run: >-
+          python -m scripts.repair_audit.verify_workbench_browser
+          --base-url https://pickup-pact-demo.onrender.com
+          --expected-commit "$EXPECTED_COMMIT"
+          --repeat 3
+          --output verification/live-repair-review
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: live-repair-review-evidence
+          path: verification/live-repair-review/

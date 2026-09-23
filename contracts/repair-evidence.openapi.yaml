@@ -1,9 +1,9 @@
 openapi: 3.1.0
 info:
   title: Pickup Pact Reconciliation Evidence Gate
-  version: 0.1.0
+  version: 0.2.0
   description: >-
-    Service-scoped contract for the draft repair-safety patch. A cancellation
+    Service-scoped contract for the evidence-safe reconciliation implementation. A cancellation
     request is not a committed cancellation. causation_id, when supplied here,
     refers to an antecedent event in the supplied aggregate evidence.
 paths:
@@ -71,7 +71,13 @@ components:
         correlation_id: {type: [string, 'null']}
         causation_id: {type: [string, 'null']}
         schema_version: {type: integer, minimum: 1, default: 1}
-        payload: {type: object}
+        payload:
+          type: object
+          additionalProperties: true
+          properties:
+            capacity_units: {type: integer, minimum: 1}
+            available_units: {type: integer, minimum: 0}
+            revision: {type: integer, minimum: 1}
     ReconcileResult:
       type: object
       required: [aggregate_id, receive_order_state, canonical_state, anomalies, repairs, duplicate_event_ids, evidence_event_ids, decision, blocking_reasons, missing_event_ids]

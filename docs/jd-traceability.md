@@ -21,12 +21,12 @@ This document makes the job-description mapping auditable instead of listing tec
 | DDD | Pickup Commitment + Merchant Fulfillment + Financial Ledger bounded contexts and invariants |
 | EDA | versioned domain envelopes and AsyncAPI contract |
 | CQRS | command-owned invariants + explicit PostgreSQL projection rebuild/query API from canonical event-time replay |
-| Distributed consistency | outbox, merchant inbox dedupe, durable ACK delivery, exactly-once business effects, event idempotency, conflict quarantine, compensation |
+| Distributed consistency | outbox, merchant inbox dedupe, durable ACK delivery, deduplicated intent records, event idempotency, conflict quarantine, compensation |
 | Customer requirements → product | customer flow is store/menu/cart → server-authoritative workload quote → signed feasible slots → customer time selection → idempotent hold → payment/confirmation → pickup/cancellation/receipt; Chromium E2E verifies the journey |
 | Scheduled pickup + promise protection | customer chooses a feasible capacity-backed slot before payment; later capacity revision → `RESLOT_REVIEW` → customer-friendly new-time proposal → `PickupRescheduled` |
 | Merchant order intake | `CommitmentConfirmed` → DB inbox dedupe → durable `ORDER_AVAILABLE` delivery; ACK-before/after reconnect behavior is exercised in full-topology integration |
 | JIT preparation | pickup time + workload → earliest start / target ready / latest ready; too-early start is rejected; EARLY/LATE READY and post-preparation cancellation/reschedule races are explicit evidence |
-| Exactly-once business effects | duplicate Kafka event ID does not create a second POS print or new-order notification because effects are unique by order + effect type |
+| Deduplicated intent records | duplicate Kafka event ID does not create a second POS-print or notification intent row; actual device/provider execution is not claimed |
 | Fulfillment → promise feedback | `READY_LATE → FulfillmentAnomalyDetected → PickupPactBreached → REWARD 500 PTS`, duplicate late signals do not double-compensate |
 | Pickup Pact Guarantee | versioned `PickupPactIssued → PickupPactRenegotiated → PickupPactBreached` lifecycle is persisted in the Kotlin aggregate/PostgreSQL/outbox; breach derives a deterministic 500P Kafka ledger posting; browser/API evidence covers the customer view |
 | Customer trust layer | customer adapter validates a one-time pickup code; core Kotlin commitment enforces `CONFIRMED → PICKED_UP`, emits `PickupClaimed`, releases capacity exactly once; mobile Trust Receipt and order history keep backend terminology hidden |
@@ -45,13 +45,27 @@ This document makes the job-description mapping auditable instead of listing tec
 | Slack / Jira / Notion | optional automation destinations; no live account connection claimed |
 | Sprint/cross-functional workflow | `docs/sprint-brief.md` with PRD, handoff, QA, rollout and retrospective evidence plan |
 
+## Current repair-review evidence
+
+| Requirement | Bounded implementation |
+|---|---|
+| Domain rules | Full-cancellation/single-posting scope; partial or unattributed amounts are blocked, not guessed |
+| API correctness | Strict request and response schemas, 403/404/409/415/422 tests, mounted-router checks |
+| Retry and recovery | Evidence-version/hash-bound approval, 24 concurrent requests, forced process termination before/after commit |
+| Honest comparison | Original 25/65; independent conservative reference and candidate 65/65 on the documented 13-case corpus; no superiority claim |
+
 ## Interview story
 
-The project is not presented as “I used many tools.” The primary story is a merchant-fulfillment problem: **a paid pickup order must reach the store reliably, survive reconnect/redelivery, be prepared in the right time window, and feed late execution back into the customer promise and financial ledger without duplicate effects**.
+The current primary deliverable is the evidence-bound repair workbench: **identify when cancellation/settlement evidence is sufficient, wait or block when it is not, and approve only the saved target, amount, unit and evidence version**. The prior merchant-fulfillment implementation remains a supporting scenario, not a claim of market novelty or production-grade cancellation authority.
 
-The public URL behaves as a customer smart-order product first. Backend recovery and operator controls are not exposed to the customer route; reviewers enter them separately through `/?dev=1`. Technical evidence remains traceable to code, contracts, tests, measured artifacts, or clearly labeled blueprints.
+The existing root URL keeps the customer/merchant demo. `/repair-lab` exposes fixed synthetic evidence and an approval journal; `/?dev=1` keeps the older console. Both are simulations. Technical evidence is traceable to code, contracts, repeated tests and clearly labeled infrastructure blueprints.
 
 
 Full current-posting audit: [jd-audit-2026-09-22.md](jd-audit-2026-09-22.md)
 Customer feedback mapping: [customer-feedback-to-product.md](customer-feedback-to-product.md)
 AI iteration evidence: [ai-iteration-log.md](ai-iteration-log.md)
+
+
+## Verification boundary correction — 2026-09-23
+
+Merchant `POS_PRINT` and notification effects in this repository are durable **intent records**, not a physical printer driver or an external notification provider. The tested unique constraint prevents duplicate intent rows; exactly-once physical printing/delivery is not claimed. The repair workbench is a separate, bounded synthetic approval journal. It does not resolve the authority race between cancellation approval and physical preparation, execute real refunds, or implement partial-refund allocation. The current README and repair-workbench document are the scope reference; earlier implementation-history descriptions are not a broader completion claim.

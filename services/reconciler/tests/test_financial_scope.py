@@ -79,3 +79,25 @@ def test_missing_amount_cannot_authorize_financial_action():
     req = request()
     del req.events[4].payload['amount']
     assert_blocked(req, 'invalid_financial_amount')
+
+
+@pytest.mark.parametrize('unit_field',['currency','unit'])
+def test_reversal_cannot_change_accounting_unit(unit_field):
+    req=request()
+    req.events.append(ev('reverse','SettlementReversed',7,cause='settle',
+        payload={'amount':'9000',unit_field:'PTS'}))
+    assert_blocked(req,'invalid_reversal_unit')
+
+
+def test_reversal_cannot_reference_a_different_source_posting():
+    req=request()
+    req.events.append(ev('reverse','SettlementReversed',7,
+        payload={'amount':'9000','source_event_id':'not-this-settlement'}))
+    assert_blocked(req,'ambiguous_reversal_attribution')
+
+
+def test_reversal_without_any_original_posting_is_not_resolved():
+    req=request()
+    req.events=[e for e in req.events if e.event_type!='SettlementPosted']
+    req.events.append(ev('reverse','SettlementReversed',7,payload={'amount':'9000'}))
+    assert_blocked(req,'missing_financial_posting')

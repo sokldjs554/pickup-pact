@@ -19,3 +19,7 @@ artifacts/runtime/
 # IDE
 .idea/
 .vscode/
+
+# Synthetic review runtime
+.repair-review/
+verification/

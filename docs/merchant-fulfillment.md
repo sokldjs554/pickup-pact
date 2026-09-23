@@ -28,7 +28,7 @@ These sources describe public product behavior only. This repository does **not*
 The merchant fulfillment context therefore protects five boundaries:
 
 1. **Durable merchant intake** — a confirmed order becomes a durable merchant delivery.
-2. **Reconnect / redelivery** — an unacknowledged delivery is replayable after reconnect, while the same Kafka event does not create duplicate POS prints or notifications.
+2. **Reconnect / redelivery** — an unacknowledged delivery is replayable after reconnect, while the same Kafka event does not create duplicate POS-print or notification intent records.
 3. **JIT preparation** — pickup time + preparation workload produce an earliest start, target ready, and latest guaranteed ready time.
 4. **Race handling** — cancellation or pickup-time changes after preparation starts are not silently applied; they become explicit review evidence.
 5. **Promise feedback** — a late READY event crosses the fulfillment event boundary and causes the existing Pickup Pact compensation flow exactly once.
@@ -61,12 +61,12 @@ Kafka itself is at-least-once. The project therefore does not claim “exactly-o
 Instead:
 
 - `merchant_inbox_events.event_id` collapses redelivery at the application boundary;
-- `merchant_effects unique(order_id, effect_type)` prevents a repeated order event from creating a second POS print or new-order notification;
+- `merchant_effects unique(order_id, effect_type)` prevents a repeated order event from creating a second POS-print or new-order-notification intent record;
 - `merchant_deliveries` stays pending until merchant ACK;
 - reconnect reads unacknowledged delivery rows in monotonic sequence order;
-- fulfillment outbox events also use a monotonic sequence before Kafka publication.
+- each fulfillment outbox scan orders visible rows by sequence before Kafka publication; this is not a global multi-relay ordering guarantee.
 
-This is an **exactly-once business-effect** claim, not an exactly-once transport claim.
+This is a **deduplicated database-intent** claim. Physical printing, external notification delivery, and exactly-once transport are not implemented or proven by this constraint.
 
 ## JIT preparation policy
 
@@ -99,7 +99,7 @@ The point is not to guess Paytalab's actual policy. It is to show that irreversi
 The full Docker topology verifies:
 
 - commitment event → merchant order intake;
-- exact event-ID Kafka redelivery does not duplicate POS/notification effects;
+- exact event-ID Kafka redelivery does not duplicate POS/notification intent rows;
 - ACK-before/after reconnect behavior;
 - start-before-window rejection;
 - EARLY READY anomaly;
@@ -108,3 +108,8 @@ The full Docker topology verifies:
 - READY_LATE → fulfillment event → Pickup Pact compensation → 500 PTS ledger posting.
 
 The public Render demo mirrors the same domain decisions in a session-isolated sandbox so a reviewer can operate the flow without requiring the whole Kafka/PostgreSQL topology on the public instance.
+
+
+## Verification boundary correction — 2026-09-23
+
+Merchant `POS_PRINT` and notification effects in this repository are durable **intent records**, not a physical printer driver or an external notification provider. The tested unique constraint prevents duplicate intent rows; exactly-once physical printing/delivery is not claimed. The repair workbench is a separate, bounded synthetic approval journal. It does not resolve the authority race between cancellation approval and physical preparation, execute real refunds, or implement partial-refund allocation. The current README and repair-workbench document are the scope reference; earlier implementation-history descriptions are not a broader completion claim.
