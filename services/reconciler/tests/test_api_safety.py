@@ -77,10 +77,17 @@ def test_http_projection_rebuild_surfaces_stale_source_fence(monkeypatch):
     assert response.json()["detail"]["source_event_ids"] == ["confirmed", "hold", "pay"]
 
 
-def test_cancellation_request_is_not_accepted_as_a_committed_cancellation():
+def test_cancellation_request_is_evidence_but_not_a_committed_cancellation():
     request = ReconcileRequest(events=prefix()).model_dump(mode="json")
     pending = event("request", "CommitmentCancelled", 3).model_dump(mode="json")
     pending["event_type"] = "CancellationRequested"
     request["events"].append(pending)
+
     response = client.post("/api/v1/reconcile", json=request)
-    assert response.status_code == 422
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["canonical_state"]["status"] == "CONFIRMED"
+    assert body["financial_actions"] == []
+    assert "REVERSE_SETTLEMENT" not in body["repairs"]
+    assert "request" in body["source_event_ids"]
