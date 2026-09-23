@@ -121,6 +121,22 @@ def record_reconciliation(result: ReconcileResult) -> str:
             "anomalies": result.anomalies,
             "repairs": result.repairs,
             "evidence_event_ids": result.evidence_event_ids,
+            # A boolean snapshot and event IDs alone collapse different amounts
+            # and changed payloads into the same persisted audit run.
+            "source_event_fingerprints": result.source_event_fingerprints,
+            "financial_actions": [
+                action.model_dump(mode="json")
+                for action in sorted(
+                    result.financial_actions,
+                    key=lambda action: (
+                        action.cancellation_event_id, action.target_event_id,
+                        action.repair, action.amount, action.unit,
+                    ),
+                )
+            ],
+            "decision": result.decision,
+            "blocking_reasons": result.blocking_reasons,
+            "missing_event_ids": result.missing_event_ids,
         }
     )
     run_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"pickup-pact:{run_fingerprint}"))

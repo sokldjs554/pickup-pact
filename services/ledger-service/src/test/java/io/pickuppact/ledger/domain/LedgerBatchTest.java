@@ -43,6 +43,19 @@ class LedgerBatchTest {
     }
 
     @Test
+    void originalPostingsKeepPersistedPreAllocationFingerprints() {
+        // Golden vectors from the original aggregate|reason|amount|unit format.
+        var settlement = LedgerPostingPolicy.settlement(
+                "settlement-legacy", "order-1", new BigDecimal("12000.00")
+        );
+        var reward = LedgerPostingPolicy.reward(
+                "reward-legacy", "order-1", new BigDecimal("90.00")
+        );
+        assertEquals("8a729cd726dc0b89df52c90bf723d6be909aef1d87e4c3e240ef27a27aa48b12", settlement.semanticFingerprint());
+        assertEquals("0fdb5a1551e377164cbddc3ba90db63f4fe8ae0aeb6ea278d2ed2b106ff08179", reward.semanticFingerprint());
+    }
+
+    @Test
     void reversalRequiresAndFingerprintsSourcePostingIdentity() {
         assertThrows(
                 IllegalArgumentException.class,

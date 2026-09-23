@@ -106,8 +106,10 @@ public final class LedgerPostingPolicy {
             String unit,
             String sourceEventId
     ) {
+        // Original postings already persist the four-field fingerprint. Keep
+        // their identity stable across upgrades; only reversals add a source.
         String canonical = aggregateId + "|" + reason + "|" + amount.toPlainString()
-                + "|" + unit + "|" + (sourceEventId == null ? "" : sourceEventId);
+                + "|" + unit + (sourceEventId == null ? "" : "|" + sourceEventId);
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256")
                     .digest(canonical.getBytes(StandardCharsets.UTF_8));
