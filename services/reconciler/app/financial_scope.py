@@ -148,12 +148,25 @@ def plan_financial_repairs(
         blockers.append("multiple_cancellation_facts")
         return [], list(dict.fromkeys(blockers))
 
+    cancel = cancels[0]
+    if cancel.event_type == "CommitmentCancelled" and (
+        str(cancel.payload.get("scope", "FULL")).upper() != "FULL"
+        or cancel.payload.get("partial") is True
+        or cancel.payload.get("partial_refund") is True
+        or cancel.payload.get("items")
+        or cancel.payload.get("line_items")
+    ):
+        # Preserve the old quarantine boundary. A terminal cancellation with
+        # partial hints is not permission to reverse every source posting.
+        # Supported partial adjustments use PartialCancellationApplied plus
+        # explicit allocations; do not infer that conversion from legacy flags.
+        return [], ["unsupported_partial_cancellation"]
+
     balances, balance_blockers = _posting_balances(events)
     blockers.extend(balance_blockers)
     if blockers:
         return [], list(dict.fromkeys(blockers))
 
-    cancel = cancels[0]
     default_scope = "PARTIAL" if cancel.event_type == "PartialCancellationApplied" else "FULL"
     scope = str(cancel.payload.get("scope", default_scope)).upper()
     if cancel.event_type == "PartialCancellationApplied" and scope != "PARTIAL":
