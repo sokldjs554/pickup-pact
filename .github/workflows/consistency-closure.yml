@@ -19,7 +19,7 @@ jobs:
           POSTGRES_DB: closure
         ports: ['5432:5432']
         options: >-
-          --health-cmd 'pg_isready -U pickuppact -d closure'
+          --health-cmd pg_isready
           --health-interval 5s --health-timeout 3s --health-retries 20
     env:
       PYTHONPATH: .:services/reconciler
@@ -28,6 +28,7 @@ jobs:
       AI_PROVIDER: offline
     steps:
       - uses: actions/checkout@v4
+        id: checkout
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
@@ -40,7 +41,7 @@ jobs:
             python -m pytest -q tests/postgres | tee /tmp/closure/postgres-$pass.log
           done
       - name: Preserve tested source
-        if: always()
+        if: ${{ always() && steps.checkout.outcome == 'success' }}
         run: |
           mkdir -p /tmp/closure
           git rev-parse HEAD > /tmp/closure/tested-commit.txt
