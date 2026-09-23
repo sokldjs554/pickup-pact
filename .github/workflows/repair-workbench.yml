@@ -1,0 +1,36 @@
+name: repair-workbench
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  real-ui-and-recovery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHONPATH: .:services/reconciler
+      AI_PROVIDER: offline
+      PERSIST_RECONCILIATION: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install -r requirements-workbench.txt playwright
+      - run: python -m playwright install --with-deps chromium
+      - name: Repeat current code and comparison three times
+        run: |
+          set -euo pipefail
+          mkdir -p verification/repair-workbench
+          for pass in 1 2 3; do
+            python -m pytest -q services/reconciler/tests | tee verification/repair-workbench/tests-$pass.log
+            python -m scripts.repair_audit.run --output verification/repair-workbench/comparison-$pass.json
+          done
+      - name: Real HTTP desktop and mobile journeys, no mocked fetch
+        run: python -m scripts.repair_audit.verify_workbench_browser --output verification/repair-workbench/browser --repeat 3
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: repair-workbench-evidence
+          path: verification/repair-workbench/

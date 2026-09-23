@@ -4,6 +4,7 @@ from collections import defaultdict
 
 from .models import EventEnvelope, ReconcileRequest, ReconcileResult, Snapshot
 from .evidence_order import causal_order
+from .financial_scope import scope_blockers
 
 _EVENT_PRIORITY = {
     "PickupSlotHeld": 10,
@@ -159,6 +160,13 @@ def reconcile(request: ReconcileRequest) -> ReconcileResult:
     if "confirmed_without_payment_authorization" in canonical_anomalies:
         manual.append("confirmed_without_payment_authorization")
         evidence.update(e.event_id for e in unique if e.event_type == "CommitmentConfirmed")
+
+    # A missing antecedent remains WAIT, not a guessed full-amount reversal.
+    if not ordered.missing_ids:
+        scope_errors = scope_blockers(unique, repairs)
+        manual.extend(scope_errors)
+        if scope_errors:
+            evidence.update(e.event_id for e in unique)
 
     decision = "AUTO"
     blockers = list(dict.fromkeys(manual))

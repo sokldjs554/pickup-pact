@@ -17,6 +17,10 @@ MUTATING = {"REVERSE_SETTLEMENT", "REVERSE_REWARD", "REBUILD_PROJECTION"}
 
 
 def event(key, kind, second, *, arrived=None, cause=None, payload=None):
+    # Causal-order tests use valid whole-posting evidence. Amount omission is
+    # independently tested by test_financial_scope after the contract was tightened.
+    if payload is None and kind in {"SettlementPosted", "RewardGranted"}:
+        payload = {"amount": "9000" if kind == "SettlementPosted" else "90"}
     return EventEnvelope(
         event_id=key, aggregate_id="audit-order", event_type=kind,
         occurred_at=T0 + timedelta(seconds=second),
