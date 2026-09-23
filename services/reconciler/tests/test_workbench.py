@@ -47,13 +47,41 @@ def test_explicit_plan_binds_event_amount_unit_and_exact_evidence(client):
     assert r.json()['session']['evaluation']['decision']=='AUTO'
     assert not {'REVERSE_SETTLEMENT','REVERSE_REWARD'} & set(r.json()['session']['evaluation']['repairs'])
 
-@pytest.mark.parametrize('case',['conflicting_identity','terminal_conflict','partial_cancel','multiple_postings'])
+@pytest.mark.parametrize('case',['conflicting_identity','terminal_conflict'])
 def test_unsafe_cases_have_no_executable_plan(client,case):
     s=create(client,case)
     assert s['evaluation']['decision']=='MANUAL_REVIEW'
     r=client.post(f"/api/repair-lab/sessions/{s['id']}/plans",json={'version':s['version']})
     assert r.status_code==409
     assert client.get(f"/api/repair-lab/sessions/{s['id']}").json()['effects']==[]
+
+def test_partial_cancellation_plan_uses_only_explicit_allocation(client):
+    s=create(client,'partial_cancel')
+    assert s['evaluation']['decision']=='AUTO'
+    p=preview(client,s)
+    assert [(a['target_event_id'],a['amount'],a['unit']) for a in p['actions']] == [
+        ('settle',3000,'KRW')
+    ]
+    result=approve(client,s,p)
+    assert result.status_code==200,result.text
+    effects=result.json()['session']['effects']
+    assert [(e['target_event_id'],e['amount'],e['unit']) for e in effects] == [
+        ('settle',3000,'KRW')
+    ]
+
+
+def test_full_cancellation_multiple_postings_records_each_open_balance_once(client):
+    s=create(client,'multiple_postings')
+    assert s['evaluation']['decision']=='AUTO'
+    p=preview(client,s)
+    assert sorted((a['target_event_id'],a['amount'],a['unit']) for a in p['actions']) == [
+        ('settle',9000,'KRW'),
+        ('settle2',2000,'KRW'),
+    ]
+    result=approve(client,s,p)
+    assert result.status_code==200,result.text
+    assert len(result.json()['session']['effects'])==2
+
 
 def test_missing_parent_stays_waiting_until_evidence_arrives(client):
     s=create(client,'missing_parent')
