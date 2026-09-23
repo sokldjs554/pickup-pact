@@ -26,6 +26,7 @@ def test_partial_cancellation_without_explicit_allocation_is_blocked():
         'event_type': 'PartialCancellationApplied',
         'payload': {'scope': 'PARTIAL', 'amount': '3000'},
     })
+    req.events[4] = req.events[4].model_copy(update={'causation_id': 'partial-cancel'})
     assert_blocked(req, 'partial_cancellation_allocation_required')
 
 
