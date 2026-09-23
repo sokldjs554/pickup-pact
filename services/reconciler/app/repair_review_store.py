@@ -79,6 +79,7 @@ class ReviewStore:
                     actions TEXT NOT NULL, applied INTEGER NOT NULL DEFAULT 0);
                 CREATE TABLE IF NOT EXISTS review_effects (
                     session_id TEXT NOT NULL REFERENCES review_sessions(id), action_id TEXT NOT NULL,
+                    cancellation_event_id TEXT,
                     target_event_id TEXT NOT NULL, repair TEXT NOT NULL,
                     amount INTEGER NOT NULL CHECK(amount>0), unit TEXT NOT NULL CHECK(unit IN ('KRW','PTS')),
                     recorded_at TEXT NOT NULL, PRIMARY KEY(session_id,action_id),
@@ -87,6 +88,17 @@ class ReviewStore:
                     sequence INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL,
                     action TEXT NOT NULL, detail TEXT NOT NULL, occurred_at TEXT NOT NULL);
             ''')
+            columns = {
+                row[1] for row in db.execute("pragma table_info(review_effects)")
+            }
+            if "cancellation_event_id" not in columns:
+                db.execute(
+                    "alter table review_effects add column cancellation_event_id text"
+                )
+                db.execute(
+                    "update review_effects set cancellation_event_id='legacy' "
+                    "where cancellation_event_id is null"
+                )
         finally:
             db.close()
         Path(self.path).chmod(0o600)
@@ -188,6 +200,7 @@ class ReviewStore:
         actions = []
         for action in evaluation.get('financial_actions', []):
             data = {
+                'cancellation_event_id': action['cancellation_event_id'],
                 'target_event_id': action['target_event_id'],
                 'repair': action['repair'],
                 'amount': accounting_amount(action['amount']),
@@ -228,12 +241,30 @@ class ReviewStore:
             observed=max(now,last+timedelta(microseconds=1))
             reversals=[]
             for action in stored:
-                db.execute('INSERT INTO review_effects VALUES(?,?,?,?,?,?,?)',(sid,action['action_id'],
-                    action['target_event_id'],action['repair'],action['amount'],action['unit'],now.isoformat()))
+                db.execute(
+                    'INSERT INTO review_effects('
+                    'session_id,action_id,cancellation_event_id,target_event_id,repair,amount,unit,recorded_at'
+                    ') VALUES(?,?,?,?,?,?,?,?)',
+                    (
+                        sid,
+                        action['action_id'],
+                        action['cancellation_event_id'],
+                        action['target_event_id'],
+                        action['repair'],
+                        action['amount'],
+                        action['unit'],
+                        now.isoformat(),
+                    ),
+                )
                 reversals.append(EventEnvelope(event_id='simulated-'+action['action_id'],aggregate_id='sample-order',
                     event_type='SettlementReversed' if action['repair']=='REVERSE_SETTLEMENT' else 'RewardReversed',
                     occurred_at=observed,received_at=now,causation_id=action['target_event_id'],
-                    payload={'amount':str(action['amount']),'currency':action['unit'],'simulation':True}))
+                    payload={
+                        'amount':str(action['amount']),
+                        'currency':action['unit'],
+                        'cancellation_event_id':action['cancellation_event_id'],
+                        'simulation':True,
+                    }))
             self._add_events(db,sid,reversals)
             db.execute('UPDATE review_plans SET applied=1 WHERE id=?',(pid,))
             self._audit(db,sid,'SIMULATED_CORRECTION_RECORDED',pid)
