@@ -164,6 +164,7 @@ def plan_financial_repairs(
                 continue
             actions.append(
                 FinancialRepairAction(
+                    cancellation_event_id=cancel.event_id,
                     target_event_id=target_id,
                     repair=repair,
                     amount=remaining,
@@ -206,14 +207,46 @@ def plan_financial_repairs(
         if unit != expected_unit:
             blockers.append("invalid_partial_allocation_unit")
             continue
-        if amount > remaining:
+        reverse_type = (
+            "SettlementReversed" if repair == "REVERSE_SETTLEMENT" else "RewardReversed"
+        )
+        already_for_cancel = 0
+        for reversal in events:
+            if reversal.event_type != reverse_type:
+                continue
+            if _reversal_target(reversal) != target:
+                continue
+            if reversal.payload.get("cancellation_event_id") != cancel.event_id:
+                continue
+            try:
+                already_for_cancel += (
+                    accounting_amount(reversal.payload["amount"])
+                    if "amount" in reversal.payload
+                    else amount
+                )
+            except ValueError:
+                blockers.append("ambiguous_reversal_attribution")
+
+        outstanding = amount - already_for_cancel
+        if outstanding < 0:
+            blockers.append("partial_allocation_over_reversed")
+            continue
+        if outstanding == 0:
+            if expected_unit == "KRW":
+                krw_total += amount
+            else:
+                pts_total += amount
+            continue
+        if outstanding > remaining:
             blockers.append("partial_allocation_exceeds_open_balance")
             continue
+
         actions.append(
             FinancialRepairAction(
+                cancellation_event_id=cancel.event_id,
                 target_event_id=target,
                 repair=repair,
-                amount=amount,
+                amount=outstanding,
                 unit=expected_unit,
             )
         )
