@@ -32,11 +32,13 @@ class PostgresCommitmentRepository(
               (id, store_id, pickup_at, units, order_amount, lease_token, payment_authorized, state, version,
                idempotency_key, request_fingerprint,
                pact_promised_at, pact_latest_at, pact_compensation_points, pact_version,
-               pact_status, pact_compensation_granted, updated_at)
+               pact_status, pact_compensation_granted,
+               cancellation_request_id, cancellation_requested_at, updated_at)
             values (:id, :store, :pickup, :units, :amount, :lease, :payment, :state, :version,
                     :idempotency, :fingerprint,
                     :pactPromised, :pactLatest, :pactPoints, :pactVersion,
-                    :pactStatus, :pactGranted, now())
+                    :pactStatus, :pactGranted,
+                    :cancelRequestId, :cancelRequestedAt, now())
             on conflict (id) do update set
               pickup_at = excluded.pickup_at,
               lease_token = excluded.lease_token,
@@ -49,6 +51,8 @@ class PostgresCommitmentRepository(
               pact_version = excluded.pact_version,
               pact_status = excluded.pact_status,
               pact_compensation_granted = excluded.pact_compensation_granted,
+              cancellation_request_id = excluded.cancellation_request_id,
+              cancellation_requested_at = excluded.cancellation_requested_at,
               updated_at = now()
             where pickup_commitments.version < excluded.version
             """.trimIndent()
@@ -64,6 +68,16 @@ class PostgresCommitmentRepository(
             .bind("version", c.version)
             .bind("idempotency", c.idempotencyKey)
             .bind("fingerprint", c.requestFingerprint)
+
+        if (c.cancellationRequestId == null) {
+            spec = spec
+                .bindNull("cancelRequestId", UUID::class.java)
+                .bindNull("cancelRequestedAt", OffsetDateTime::class.java)
+        } else {
+            spec = spec
+                .bind("cancelRequestId", c.cancellationRequestId)
+                .bind("cancelRequestedAt", OffsetDateTime.ofInstant(c.cancellationRequestedAt!!, ZoneOffset.UTC))
+        }
 
         val pact = c.pact
         if (pact == null) {
@@ -132,7 +146,8 @@ class PostgresCommitmentRepository(
             """select id, store_id, pickup_at, units, order_amount, lease_token, payment_authorized, state, version,
                       idempotency_key, request_fingerprint,
                       pact_promised_at, pact_latest_at, pact_compensation_points, pact_version,
-                      pact_status, pact_compensation_granted
+                      pact_status, pact_compensation_granted,
+                      cancellation_request_id, cancellation_requested_at
                from pickup_commitments where $predicate"""
         )
             .bind("value", value)
@@ -158,7 +173,9 @@ class PostgresCommitmentRepository(
                     version = row.get("version", java.lang.Long::class.java)!!.toLong(),
                     idempotencyKey = row.get("idempotency_key", String::class.java)!!,
                     requestFingerprint = row.get("request_fingerprint", String::class.java)!!,
-                    pact = pact
+                    pact = pact,
+                    cancellationRequestId = row.get("cancellation_request_id", UUID::class.java),
+                    cancellationRequestedAt = row.get("cancellation_requested_at", OffsetDateTime::class.java)?.toInstant()
                 )
             }
             .one()
