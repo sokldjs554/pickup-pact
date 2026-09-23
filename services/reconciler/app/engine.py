@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from collections import defaultdict
+import hashlib
+import json
 
 from .models import EventEnvelope, ReconcileRequest, ReconcileResult, Snapshot
 from .evidence_order import causal_order
@@ -26,6 +28,14 @@ _EVENT_PRIORITY = {
 }
 
 _REPAIR_ORDER = ["NO_OP_DUPLICATE","REBUILD_PROJECTION","REVERSE_SETTLEMENT","REVERSE_REWARD","RESLOT_REVIEW","MANUAL_REVIEW"]
+
+
+def _semantic_event_fingerprint(event: EventEnvelope) -> str:
+    payload = event.model_dump(mode="json")
+    payload.pop("received_at", None)
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
 
 
 def _unique_by_event_id(events: list[EventEnvelope]) -> tuple[list[EventEnvelope], list[str], bool]:
@@ -247,6 +257,10 @@ def reconcile(request: ReconcileRequest) -> ReconcileResult:
         evidence_event_ids=sorted(evidence),
         financial_actions=financial_actions,
         source_event_ids=sorted({event.event_id for event in unique}),
+        source_event_fingerprints={
+            event.event_id: _semantic_event_fingerprint(event)
+            for event in sorted(unique, key=lambda row: row.event_id)
+        },
         decision=decision,
         blocking_reasons=blockers,
         missing_event_ids=ordered.missing_ids,
