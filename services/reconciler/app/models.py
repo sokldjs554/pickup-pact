@@ -69,6 +69,7 @@ class ReconcileRequest(BaseModel):
 
 
 class FinancialRepairAction(BaseModel):
+    cancellation_event_id: str = Field(min_length=1)
     target_event_id: str = Field(min_length=1)
     repair: Literal["REVERSE_SETTLEMENT", "REVERSE_REWARD"]
     amount: int = Field(gt=0)
