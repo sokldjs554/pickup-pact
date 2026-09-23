@@ -182,13 +182,28 @@ def reconcile(request: ReconcileRequest) -> ReconcileResult:
         if financial_actions:
             evidence.update(event.event_id for event in cancels)
             evidence.update(action.target_event_id for action in financial_actions)
+            posting_by_id = {event.event_id: event for event in settlements + rewards}
             for action in financial_actions:
                 repairs.add(action.repair)
-                anomaly = (
-                    "cancelled_order_has_open_settlement"
-                    if action.repair == "REVERSE_SETTLEMENT"
-                    else "cancelled_order_has_open_order_reward"
+                posting = posting_by_id.get(action.target_event_id)
+                prior_cancel = bool(posting) and any(
+                    ordered.precedes(cancel.event_id, posting.event_id)
+                    or (
+                        not ordered.precedes(posting.event_id, cancel.event_id)
+                        and cancel.occurred_at < posting.occurred_at
+                    )
+                    for cancel in cancels
                 )
+                if action.repair == "REVERSE_SETTLEMENT":
+                    anomaly = (
+                        "settlement_posted_after_prior_cancellation"
+                        if prior_cancel else "cancelled_order_has_open_settlement"
+                    )
+                else:
+                    anomaly = (
+                        "reward_granted_after_prior_cancellation"
+                        if prior_cancel else "cancelled_order_has_open_order_reward"
+                    )
                 if anomaly not in anomalies:
                     anomalies.append(anomaly)
 
