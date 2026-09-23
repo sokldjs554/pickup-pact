@@ -70,10 +70,15 @@ create table if not exists ledger_batches (
   semantic_fingerprint text not null,
   aggregate_id text not null,
   reason text not null,
+  source_event_id text,
   created_at timestamptz not null default now()
 );
+alter table ledger_batches add column if not exists source_event_id text;
 create index if not exists idx_ledger_batches_aggregate_created
   on ledger_batches(aggregate_id, created_at desc);
+create index if not exists idx_ledger_batches_source
+  on ledger_batches(source_event_id)
+  where source_event_id is not null;
 
 create table if not exists ledger_entries (
   id bigserial primary key,
