@@ -383,7 +383,7 @@ paths:
               $ref: "#/components/schemas/ReconcileRequest"
       responses:
         "200": {description: Rebuilt projection}
-        "409": {description: Evidence unresolved; projection persistence is rejected}
+        "409": {description: Evidence unresolved or stale evidence omitted source events already represented by the projection}
         "422": {description: Invalid evidence packet}
 
   /api/v1/projections/{aggregateId}:
