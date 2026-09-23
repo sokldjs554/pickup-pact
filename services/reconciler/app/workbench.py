@@ -29,7 +29,7 @@ class ApprovedAction(Input):
 
 class ApproveRequest(PlanRequest):
     evidence_hash: str = Field(pattern='^[a-f0-9]{64}$')
-    actions: list[ApprovedAction] = Field(min_length=1,max_length=2)
+    actions: list[ApprovedAction] = Field(min_length=1,max_length=20)
 
 
 class EffectView(ApprovedAction):
