@@ -18,12 +18,20 @@ public final class LedgerDomainSmoke {
             throw new AssertionError("conflicting amount fingerprint collision");
         }
 
+        var reverse = LedgerPostingPolicy.reverseSettlement(
+                "reverse-1", "order-1", new BigDecimal("3000"), "evt-1"
+        );
+        if (!"evt-1".equals(reverse.sourceEventId())) {
+            throw new AssertionError("reversal source identity missing");
+        }
+
         try {
             new LedgerBatch(
                     "evt-bad",
                     "fingerprint",
                     "order-1",
                     "TEST",
+                    null,
                     List.of(
                             new LedgerEntry("a", LedgerDirection.DEBIT, BigDecimal.TEN, "KRW", Instant.EPOCH),
                             new LedgerEntry("b", LedgerDirection.CREDIT, BigDecimal.ONE, "KRW", Instant.EPOCH)
