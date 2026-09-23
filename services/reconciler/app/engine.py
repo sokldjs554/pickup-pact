@@ -196,6 +196,7 @@ def reconcile(request: ReconcileRequest) -> ReconcileResult:
         repairs=[repair for repair in _REPAIR_ORDER if repair in repairs],
         duplicate_event_ids=duplicate_ids,
         evidence_event_ids=sorted(evidence),
+        source_event_ids=sorted({event.event_id for event in unique}),
         decision=decision,
         blocking_reasons=blockers,
         missing_event_ids=ordered.missing_ids,
