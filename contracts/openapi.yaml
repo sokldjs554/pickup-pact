@@ -542,6 +542,8 @@ components:
             - PickupSlotHeld
             - PaymentAuthorized
             - CommitmentConfirmed
+            - CancellationRequested
+            - CancellationRejected
             - CommitmentCancelled
             - SettlementPosted
             - RewardGranted
