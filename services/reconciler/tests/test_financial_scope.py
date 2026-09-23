@@ -21,29 +21,38 @@ def assert_blocked(req, reason):
 
 def test_partial_cancellation_without_explicit_allocation_is_blocked():
     req = request()
-    req.events[3].payload = {'scope': 'PARTIAL', 'amount': '3000'}
+    req.events[3] = req.events[3].model_copy(update={
+        'event_id': 'partial-cancel',
+        'event_type': 'PartialCancellationApplied',
+        'payload': {'scope': 'PARTIAL', 'amount': '3000'},
+    })
     assert_blocked(req, 'partial_cancellation_allocation_required')
 
 
 def test_partial_cancellation_executes_only_explicit_source_allocation():
     req = request()
-    req.events[3].payload = {
-        'scope': 'PARTIAL',
-        'amount': '3000',
-        'allocations': [
-            {'target_event_id': 'settle', 'amount': '3000', 'unit': 'KRW'},
-        ],
-    }
+    req.events[3] = req.events[3].model_copy(update={
+        'event_id': 'partial-cancel',
+        'event_type': 'PartialCancellationApplied',
+        'payload': {
+            'scope': 'PARTIAL',
+            'amount': '3000',
+            'allocations': [
+                {'target_event_id': 'settle', 'amount': '3000', 'unit': 'KRW'},
+            ],
+        },
+    })
     result = reconcile(req)
     assert result.decision == 'AUTO'
     assert [a.model_dump() for a in result.financial_actions] == [{
-        'cancellation_event_id': 'cancel',
+        'cancellation_event_id': 'partial-cancel',
         'target_event_id': 'settle',
         'repair': 'REVERSE_SETTLEMENT',
         'amount': 3000,
         'unit': 'KRW',
     }]
     assert 'REVERSE_REWARD' not in result.repairs
+    assert result.canonical_state.status == 'CONFIRMED'
 
 
 def test_full_cancellation_with_multiple_postings_returns_one_action_per_open_posting():
@@ -66,13 +75,17 @@ def test_full_cancellation_with_multiple_postings_returns_one_action_per_open_po
 
 def test_partial_allocation_cannot_exceed_open_balance():
     req = request()
-    req.events[3].payload = {
-        'scope': 'PARTIAL',
-        'amount': '10000',
-        'allocations': [
-            {'target_event_id': 'settle', 'amount': '10000', 'unit': 'KRW'},
-        ],
-    }
+    req.events[3] = req.events[3].model_copy(update={
+        'event_id': 'partial-cancel',
+        'event_type': 'PartialCancellationApplied',
+        'payload': {
+            'scope': 'PARTIAL',
+            'amount': '10000',
+            'allocations': [
+                {'target_event_id': 'settle', 'amount': '10000', 'unit': 'KRW'},
+            ],
+        },
+    })
     assert_blocked(req, 'partial_allocation_exceeds_open_balance')
 
 
