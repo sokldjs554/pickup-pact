@@ -321,7 +321,7 @@ paths:
         "200":
           description: Exact redelivery recognized as a no-op
         "409":
-          description: Same event ID reused with conflicting financial meaning
+          description: Same event ID reused with conflicting meaning, or reversal source/balance conflict
 
   /api/v1/ledger/orders/{aggregateId}:
     get:
@@ -511,6 +511,9 @@ components:
         reason:
           type: string
           enum: [SETTLEMENT, REVERSE_SETTLEMENT, REWARD, REVERSE_REWARD]
+        sourceEventId:
+          type: [string, "null"]
+          description: Original posting referenced by a reversal
         amount: {type: number, exclusiveMinimum: 0}
         unit:
           type: string
@@ -529,6 +532,9 @@ components:
         amount:
           type: number
           exclusiveMinimum: 0
+        sourceEventId:
+          type: [string, "null"]
+          description: Required for REVERSE_SETTLEMENT and REVERSE_REWARD; identifies the original posting
 
     EventEnvelope:
       type: object
