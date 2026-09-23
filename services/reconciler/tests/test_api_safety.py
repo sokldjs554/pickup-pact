@@ -58,6 +58,25 @@ def test_http_wait_returns_missing_evidence_without_financial_action():
     assert body["repairs"] == ["MANUAL_REVIEW"]
 
 
+def test_reconcile_exposes_complete_source_event_set_for_projection_fence():
+    result = reconcile(ReconcileRequest(events=prefix()))
+    assert result.source_event_ids == ["confirmed", "hold", "pay"]
+
+
+def test_http_projection_rebuild_surfaces_stale_source_fence(monkeypatch):
+    from app import persistence
+
+    def stale(_result):
+        raise persistence.StaleProjectionEvidence("older evidence set")
+
+    monkeypatch.setattr(persistence, "rebuild_projection", stale)
+    request = ReconcileRequest(events=prefix())
+    response = client.post("/api/v1/projections/rebuild", json=request.model_dump(mode="json"))
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"]["error"] == "stale_projection_evidence"
+    assert response.json()["detail"]["source_event_ids"] == ["confirmed", "hold", "pay"]
+
+
 def test_cancellation_request_is_not_accepted_as_a_committed_cancellation():
     request = ReconcileRequest(events=prefix()).model_dump(mode="json")
     pending = event("request", "CommitmentCancelled", 3).model_dump(mode="json")
