@@ -127,6 +127,9 @@ assert "idx_pickup_commitments_store_schedule" in schema
 assert "uq_pickup_commitments_idempotency" in schema
 assert "pact_promised_at" in schema and "pact_status" in schema
 assert "order_amount" in schema
+assert "cancellation_request_id" in schema
+assert "source_event_id" in schema
+assert "source_event_fingerprints" in schema
 assert "cancellation_request_id" in schema and "cancellation_requested_at" in schema
 assert "source_event_ids" in schema and "source_event_count" in schema
 for table in [
@@ -139,6 +142,7 @@ for table in [
 ]:
     assert table in schema, f"merchant schema missing: {table}"
 assert "required: [eventId, aggregateId, type, amount]" in asyncapi
+assert "sourceEventId" in asyncapi
 assert "PickupPactIssued" in openapi and "PickupPactIssued" in asyncapi
 assert "PickupPactRenegotiated" in openapi and "PickupPactRenegotiated" in asyncapi
 assert "PickupPactBreached" in openapi and "PickupPactBreached" in asyncapi
@@ -152,6 +156,9 @@ merchant_k8s = (ROOT / "infra/k8s/merchant-fulfillment.yaml").read_text()
 assert "name: merchant-fulfillment" in merchant_k8s
 assert "/actuator/health/readiness" in merchant_k8s
 assert "/api/v1/commitments/{id}/reschedule" in openapi
+assert "CancellationRequested" in asyncapi and "CancellationRejected" in asyncapi
+assert "sourceEventId" in openapi
+assert "stale_projection_evidence" in (ROOT / "services/reconciler/app/main.py").read_text()
 assert "/api/v1/commitments/{id}/breach-pact" in openapi
 assert "/api/v1/merchant/stores/{storeId}/deliveries" in openapi
 assert "/api/v1/merchant/orders/{orderId}/start" in openapi
