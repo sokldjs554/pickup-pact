@@ -65,7 +65,7 @@ python -m pytest -q services/reconciler/tests
 python -m scripts.repair_audit.run
 ```
 
-## 이번에 검증하지 않은 것 / 병합 전 확인할 것
+## 최초 감사 당시 미검증 범위 / 후속 구현은 아래 절 참조
 
 - 이 작업 환경에는 Maven·Docker 및 외부 네트워크 실행 환경이 없다. 전체 JVM/Kafka/PostgreSQL/Render 회귀 검증을 했다고 말하지 않는다.
 - 새 causation_id 규칙은 원인 **이벤트 ID**를 전제로 한다. 기존 producer가 명령 ID나 패킷 외 ID를 넣는 경우를 계약 검토하고 이행해야 한다.
@@ -86,4 +86,4 @@ https://www.sqlite.org/atomiccommit.html
 
 위 로컬 38개 검증과 검토용 브랜치 상태는 최초 감사 시점의 기록이다. 후속 작업은 [복구 작업대 문서](repair-workbench.md)와 해당 커밋의 CI artifact를 기준으로 확인한다. 전체 소스를 CI archive로 확보한 뒤 기존 고객·점주 데모와 통합했고, 원격 Chromium의 실제 HTTP 실행도 추가했다. 최초 로컬 환경 제약이나 테스트 수를 현재 최종 상태로 오해하지 않는다.
 
-부분취소·복수 전표 등은 안전하게 차단하는 범위이며, 실제 금액 배분 정책을 구현했다는 뜻이 아니다. SQLite의 승인 버전 검사와 기존 PostgreSQL projection의 전역/오래된 결과 차단도 구분한다.
+위의 부분취소·복수 전표 차단 설명은 최초 감사 시점의 범위다. 후속 브랜치는 명시 allocation이 있는 부분취소, 원전표별 복수 잔액, merchant 취소 권위와 PostgreSQL 이벤트 ID/fingerprint fence를 구현했다. 출처가 없는 과거 역분개나 불완전한 projection은 안전하게 거절한다. 현재 범위는 [복구 작업대](repair-workbench.md)와 README를 따르며, 최종 통과 여부는 최신 커밋의 실제 CI·배포 검증으로 확인한다. SQLite 승인 버전 검사와 PostgreSQL projection fence는 별도 경계이며 전역 분산 버전 제어로 설명하지 않는다.
