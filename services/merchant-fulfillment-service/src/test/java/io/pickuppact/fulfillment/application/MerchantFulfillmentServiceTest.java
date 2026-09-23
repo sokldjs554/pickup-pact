@@ -49,7 +49,8 @@ class MerchantFulfillmentServiceTest {
         verify(repository).appendOutbox(
                 eq(orderId),
                 eq("MerchantCancellationApproved"),
-                argThat(payload -> requestId.toString().equals(payload.get("request_id"))),
+                argThat(payload -> payload instanceof java.util.Map<?, ?>
+                        && requestId.toString().equals(((java.util.Map<?, ?>) payload).get("request_id"))),
                 any()
         );
         verify(repository, never()).recordAnomaly(any(), any(), anyString(), any());
@@ -84,10 +85,9 @@ class MerchantFulfillmentServiceTest {
         verify(repository).appendOutbox(
                 eq(orderId),
                 eq("MerchantCancellationRejected"),
-                argThat(payload ->
-                        requestId.toString().equals(payload.get("request_id"))
-                                && "PREPARATION_ALREADY_STARTED".equals(payload.get("reason"))
-                ),
+                argThat(payload -> payload instanceof java.util.Map<?, ?>
+                        && requestId.toString().equals(((java.util.Map<?, ?>) payload).get("request_id"))
+                        && "PREPARATION_ALREADY_STARTED".equals(((java.util.Map<?, ?>) payload).get("reason"))),
                 any()
         );
         verify(repository).recordAnomaly(
