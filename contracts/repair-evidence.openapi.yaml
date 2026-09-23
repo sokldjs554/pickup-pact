@@ -94,6 +94,14 @@ components:
           items: {type: string, enum: [NO_OP_DUPLICATE, REBUILD_PROJECTION, REVERSE_SETTLEMENT, REVERSE_REWARD, RESLOT_REVIEW, MANUAL_REVIEW]}
         duplicate_event_ids: {type: array, items: {type: string}}
         evidence_event_ids: {type: array, items: {type: string}}
+    FinancialRepairAction:
+      type: object
+      required: [target_event_id, repair, amount, unit]
+      properties:
+        target_event_id: {type: string, minLength: 1}
+        repair: {type: string, enum: [REVERSE_SETTLEMENT, REVERSE_REWARD]}
+        amount: {type: integer, minimum: 1}
+        unit: {type: string, enum: [KRW, PTS]}
     Snapshot:
       type: object
       properties:
