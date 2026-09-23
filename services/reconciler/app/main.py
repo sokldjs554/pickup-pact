@@ -114,7 +114,7 @@ def incidents_api(aggregate_id: str) -> dict:
 
 @app.post("/api/v1/projections/rebuild")
 def rebuild_projection_api(request: ReconcileRequest) -> dict:
-    from .persistence import rebuild_projection
+    from .persistence import StaleProjectionEvidence, rebuild_projection
 
     result = reconcile(request)
     if result.decision != "AUTO" or "MANUAL_REVIEW" in result.repairs:
@@ -127,7 +127,17 @@ def rebuild_projection_api(request: ReconcileRequest) -> dict:
                 "missing_event_ids": result.missing_event_ids,
             },
         )
-    projection = rebuild_projection(result)
+    try:
+        projection = rebuild_projection(result)
+    except StaleProjectionEvidence as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "stale_projection_evidence",
+                "message": str(exc),
+                "source_event_ids": result.source_event_ids,
+            },
+        ) from exc
     return {
         "aggregate_id": result.aggregate_id,
         "source": "canonical-event-time",
