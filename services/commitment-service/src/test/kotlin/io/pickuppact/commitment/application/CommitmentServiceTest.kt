@@ -360,6 +360,61 @@ class CommitmentServiceTest {
     }
 
     @Test
+    fun confirmedCancellationWaitsForMerchantApprovalBeforeRelease() {
+        val capacity = FakeCapacity()
+        val repository = FakeRepository()
+        val service = service(capacity, repository)
+        val held = service.hold(
+            HoldCommand(quoteToken(units = 1), Instant.now().plusSeconds(600), "idem-confirmed-cancel")
+        ).block()!!
+        service.authorizePayment(held.id, "auth-confirmed-cancel").block()
+        service.confirm(held.id).block()
+
+        val pending = service.cancel(held.id).block()!!
+        val retry = service.cancel(held.id).block()!!
+
+        assertEquals(CommitmentState.CONFIRMED, pending.state)
+        assertEquals(pending.cancellationRequestId, retry.cancellationRequestId)
+        assertTrue(pending.cancellationRequestId != null)
+        assertEquals(1, repository.events.count { it == "CancellationRequested" })
+        assertTrue(capacity.releaseAttempts.isEmpty())
+
+        val approved = service.approveCancellationFromMerchant(
+            held.id,
+            pending.cancellationRequestId!!,
+            Instant.now()
+        ).block()!!
+
+        assertEquals(CommitmentState.CANCELLED, approved.state)
+        assertEquals(1, repository.events.count { it == "CommitmentCancelled" })
+        assertEquals(listOf("lease-test"), capacity.releaseAttempts)
+    }
+
+    @Test
+    fun merchantCancellationRejectionRestoresActiveCommitmentWithoutRelease() {
+        val capacity = FakeCapacity()
+        val repository = FakeRepository()
+        val service = service(capacity, repository)
+        val held = service.hold(
+            HoldCommand(quoteToken(units = 1), Instant.now().plusSeconds(600), "idem-rejected-cancel")
+        ).block()!!
+        service.authorizePayment(held.id, "auth-rejected-cancel").block()
+        service.confirm(held.id).block()
+
+        val pending = service.cancel(held.id).block()!!
+        val restored = service.rejectCancellationFromMerchant(
+            held.id,
+            pending.cancellationRequestId!!,
+            "PREPARATION_ALREADY_STARTED"
+        ).block()!!
+
+        assertEquals(CommitmentState.CONFIRMED, restored.state)
+        assertEquals(null, restored.cancellationRequestId)
+        assertEquals(1, repository.events.count { it == "CancellationRejected" })
+        assertTrue(capacity.releaseAttempts.isEmpty())
+    }
+
+    @Test
     fun cancellationRetryDoesNotDuplicateCancellationEvent() {
         val capacity = FakeCapacity()
         val repository = FakeRepository()

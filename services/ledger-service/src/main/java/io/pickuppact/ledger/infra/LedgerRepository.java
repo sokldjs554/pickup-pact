@@ -27,17 +27,95 @@ public class LedgerRepository {
         return rows.stream().findFirst();
     }
 
+    public boolean reversalAllowed(LedgerBatch batch) {
+        if (!batch.reversal()) return true;
+        if (batch.sourceEventId() == null || batch.sourceEventId().isBlank()) return false;
+
+        var sourceRows = jdbc.query(
+                """
+                select aggregate_id, reason
+                from ledger_batches
+                where event_id = ?
+                for update
+                """,
+                (rs, rowNum) -> new String[]{rs.getString("aggregate_id"), rs.getString("reason")},
+                batch.sourceEventId()
+        );
+        if (sourceRows.size() != 1) return false;
+
+        var source = sourceRows.getFirst();
+        String expectedReason = batch.reason().equals("REVERSE_SETTLEMENT")
+                ? "SETTLEMENT"
+                : "REWARD";
+        if (!source[0].equals(batch.aggregateId()) || !source[1].equals(expectedReason)) {
+            return false;
+        }
+
+        // Retained pre-allocation reversals have no trustworthy source. Their
+        // amount cannot be subtracted from an arbitrary posting, or ignored.
+        // Hold the source lock while checking this order/type boundary.
+        Boolean unattributedReversal = jdbc.queryForObject(
+                """
+                select exists (
+                  select 1 from ledger_batches
+                  where aggregate_id = ?
+                    and reason = ?
+                    and nullif(btrim(source_event_id), '') is null
+                )
+                """,
+                Boolean.class,
+                batch.aggregateId(),
+                batch.reason()
+        );
+        if (!Boolean.FALSE.equals(unattributedReversal)) return false;
+
+        var sourceAmount = jdbc.queryForObject(
+                "select min(amount) from ledger_entries where event_id = ?",
+                java.math.BigDecimal.class,
+                batch.sourceEventId()
+        );
+        var sourceUnit = jdbc.queryForObject(
+                "select min(currency) from ledger_entries where event_id = ?",
+                String.class,
+                batch.sourceEventId()
+        );
+        if (sourceAmount == null || sourceUnit == null || !sourceUnit.equals(batch.unit())) {
+            return false;
+        }
+
+        var alreadyReversed = jdbc.queryForObject(
+                """
+                select coalesce(sum(amount), 0)
+                from (
+                  select min(e.amount) as amount
+                  from ledger_batches b
+                  join ledger_entries e on e.event_id = b.event_id
+                  where b.source_event_id = ?
+                    and b.reason = ?
+                  group by b.event_id
+                ) reversed
+                """,
+                java.math.BigDecimal.class,
+                batch.sourceEventId(),
+                batch.reason()
+        );
+        if (alreadyReversed == null) alreadyReversed = java.math.BigDecimal.ZERO;
+        var remaining = sourceAmount.subtract(alreadyReversed);
+        return remaining.signum() > 0 && batch.amount().compareTo(remaining) <= 0;
+    }
+
     public boolean appendIfAbsent(LedgerBatch batch) {
         int inserted = jdbc.update(
                 """
-                insert into ledger_batches(event_id, semantic_fingerprint, aggregate_id, reason)
-                values(?,?,?,?)
+                insert into ledger_batches(event_id, semantic_fingerprint, aggregate_id, reason, source_event_id)
+                values(?,?,?,?,?)
                 on conflict (event_id) do nothing
                 """,
                 batch.eventId(),
                 batch.semanticFingerprint(),
                 batch.aggregateId(),
-                batch.reason()
+                batch.reason(),
+                batch.sourceEventId()
         );
         if (inserted == 0) return false;
 
@@ -78,13 +156,13 @@ public class LedgerRepository {
     public List<LedgerBatchSummary> history(String aggregateId, int limit) {
         return jdbc.query(
                 """
-                select b.event_id, b.aggregate_id, b.reason, b.created_at,
+                select b.event_id, b.aggregate_id, b.reason, b.source_event_id, b.created_at,
                        min(e.amount) as amount,
                        min(e.currency) as unit
                 from ledger_batches b
                 join ledger_entries e on e.event_id = b.event_id
                 where b.aggregate_id = ?
-                group by b.event_id, b.aggregate_id, b.reason, b.created_at
+                group by b.event_id, b.aggregate_id, b.reason, b.source_event_id, b.created_at
                 order by b.created_at desc, b.event_id desc
                 limit ?
                 """,
@@ -92,6 +170,7 @@ public class LedgerRepository {
                         rs.getString("event_id"),
                         rs.getString("aggregate_id"),
                         rs.getString("reason"),
+                        rs.getString("source_event_id"),
                         rs.getBigDecimal("amount"),
                         rs.getString("unit"),
                         rs.getTimestamp("created_at").toInstant()

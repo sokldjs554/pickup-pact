@@ -196,23 +196,46 @@ def commitment_flow(pass_no: int) -> None:
     assert tracked["state"] == "CONFIRMED", tracked
     assert tracked["pact"]["status"] == "ACTIVE", tracked
 
-    cancelled = expect(
+    cancellation_requested = expect(
         httpx.post(
             f"{COMMITMENT}/api/v1/commitments/{commitment_id}/cancel",
             timeout=15,
         ),
         200,
     )
-    assert cancelled["state"] == "CANCELLED", cancelled
+    assert cancellation_requested["state"] == "CONFIRMED", cancellation_requested
+    assert cancellation_requested["cancellationRequestId"], cancellation_requested
+    assert redis_client.exists(slot_key) == 1, cancellation_requested
+
+    def merchant_approved_cancellation():
+        merchant = httpx.get(
+            f"{MERCHANT}/api/v1/merchant/orders/{commitment_id}",
+            timeout=10,
+        )
+        commitment = httpx.get(
+            f"{COMMITMENT}/api/v1/commitments/{commitment_id}",
+            timeout=10,
+        )
+        return (
+            merchant.status_code == 200
+            and merchant.json()["state"] == "CANCELLED"
+            and commitment.status_code == 200
+            and commitment.json()["state"] == "CANCELLED"
+        )
+
+    wait_until(
+        merchant_approved_cancellation,
+        timeout_s=30,
+        label="merchant-authorized confirmed cancellation",
+    )
+    cancelled = expect(
+        httpx.get(f"{COMMITMENT}/api/v1/commitments/{commitment_id}", timeout=15),
+        200,
+    )
     assert cancelled["pact"]["status"] == "CANCELLED", cancelled
-    assert redis_client.exists(slot_key) == 0, {
-        "slot_key": slot_key,
-        "cancelled": cancelled,
-    }
-    assert redis_client.exists(lease_key) == 0, {
-        "lease_key": lease_key,
-        "cancelled": cancelled,
-    }
+    assert cancelled["cancellationRequestId"] is None, cancelled
+    assert redis_client.exists(slot_key) == 0, cancelled
+    assert redis_client.exists(lease_key) == 0, cancelled
 
     retry = expect(
         httpx.post(
@@ -253,7 +276,7 @@ def commitment_flow(pass_no: int) -> None:
                     (commitment_id,),
                 )
                 published, total = cursor.fetchone()
-                return total == 5 and published == total
+                return total == 6 and published == total
 
     wait_until(
         outbox_published,
@@ -278,6 +301,7 @@ def commitment_flow(pass_no: int) -> None:
         "PaymentAuthorized",
         "CommitmentConfirmed",
         "PickupPactIssued",
+        "CancellationRequested",
         "CommitmentCancelled",
     ], ordered_types
 
@@ -778,16 +802,35 @@ def merchant_fulfillment_flow(pass_no: int) -> None:
 
     wait_until(schedule_review_visible, timeout_s=30, label="post-preparation reschedule review")
 
-    expect(
+    pending_cancel = expect(
         httpx.post(f"{COMMITMENT}/api/v1/commitments/{order_id}/cancel", timeout=15),
         200,
     )
+    assert pending_cancel["state"] == "CONFIRMED", pending_cancel
+    assert pending_cancel["cancellationRequestId"], pending_cancel
 
-    def cancellation_review_visible():
-        state = httpx.get(f"{MERCHANT}/api/v1/merchant/orders/{order_id}", timeout=10)
-        return state.status_code == 200 and state.json()["state"] == "CANCELLATION_REVIEW"
+    def cancellation_rejected_after_preparation():
+        merchant = httpx.get(f"{MERCHANT}/api/v1/merchant/orders/{order_id}", timeout=10)
+        commitment = httpx.get(f"{COMMITMENT}/api/v1/commitments/{order_id}", timeout=10)
+        anomalies = httpx.get(
+            f"{MERCHANT}/api/v1/merchant/orders/{order_id}/anomalies",
+            timeout=10,
+        )
+        return (
+            merchant.status_code == 200
+            and merchant.json()["state"] == "READY"
+            and commitment.status_code == 200
+            and commitment.json()["state"] == "CONFIRMED"
+            and commitment.json().get("cancellationRequestId") is None
+            and anomalies.status_code == 200
+            and any(item["code"] == "CANCEL_AFTER_PREPARATION" for item in anomalies.json())
+        )
 
-    wait_until(cancellation_review_visible, timeout_s=30, label="post-preparation cancellation review")
+    wait_until(
+        cancellation_rejected_after_preparation,
+        timeout_s=30,
+        label="merchant rejects cancellation after preparation",
+    )
 
     # Second order proves READY_LATE -> fulfillment event -> Pickup Pact -> 500 PTS.
     late_order_id, _ = confirmed_order("late", sku="americano")
@@ -874,6 +917,222 @@ def merchant_fulfillment_flow(pass_no: int) -> None:
     )
 
 
+def cancellation_authority_race_flow(pass_no: int) -> None:
+    from threading import Barrier
+
+    store_id = f"cancel-race-store-{pass_no}"
+
+    for iteration in range(4):
+        quote = expect(
+            httpx.post(
+                f"{COMMITMENT}/api/v1/commitments/quotes",
+                json={
+                    "storeId": store_id,
+                    "items": [{"sku": "cafe-latte", "quantity": 1}],
+                    "count": 1,
+                },
+                timeout=15,
+            ),
+            200,
+        )
+        pickup_at = quote["slots"][0]["pickupAt"]
+        held = expect(
+            httpx.post(
+                f"{COMMITMENT}/api/v1/commitments/hold",
+                headers={
+                    "Idempotency-Key":
+                        f"cancel-race-{pass_no}-{iteration}-{uuid.uuid4().hex[:8]}"
+                },
+                json={"quoteToken": quote["quoteToken"], "pickupAt": pickup_at},
+                timeout=15,
+            ),
+            200,
+        )
+        order_id = held["id"]
+        expect(
+            httpx.post(
+                f"{COMMITMENT}/api/v1/commitments/{order_id}/authorize-payment",
+                json={"authorizationId": f"cancel-race-auth-{pass_no}-{iteration}"},
+                timeout=15,
+            ),
+            200,
+        )
+        expect(
+            httpx.post(
+                f"{COMMITMENT}/api/v1/commitments/{order_id}/confirm",
+                timeout=15,
+            ),
+            200,
+        )
+
+        wait_until(
+            lambda: (
+                (response := httpx.get(
+                    f"{MERCHANT}/api/v1/merchant/orders/{order_id}",
+                    timeout=10,
+                )).status_code == 200
+                and response.json()["state"] == "RECEIVED"
+            ),
+            timeout_s=30,
+            label=f"merchant race order intake {iteration}",
+        )
+        expect(
+            httpx.post(
+                f"{MERCHANT}/api/v1/merchant/orders/{order_id}/accept",
+                timeout=15,
+            ),
+            200,
+        )
+
+        # Open the JIT window so a start command is genuinely executable.
+        with postgres_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    update merchant_orders
+                    set earliest_start_at=now()-interval '1 minute',
+                        target_ready_at=now()+interval '5 minutes',
+                        latest_ready_at=now()+interval '10 minutes'
+                    where order_id=%s::uuid
+                    """,
+                    (order_id,),
+                )
+            connection.commit()
+
+        barrier = Barrier(2)
+
+        def start_now() -> httpx.Response:
+            barrier.wait()
+            return httpx.post(
+                f"{MERCHANT}/api/v1/merchant/orders/{order_id}/start",
+                timeout=20,
+            )
+
+        def cancel_now() -> httpx.Response:
+            barrier.wait()
+            return httpx.post(
+                f"{COMMITMENT}/api/v1/commitments/{order_id}/cancel",
+                timeout=20,
+            )
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            start_future = pool.submit(start_now)
+            cancel_future = pool.submit(cancel_now)
+            start_response = start_future.result(timeout=25)
+            cancel_response = cancel_future.result(timeout=25)
+
+        assert start_response.status_code in {200, 409}, start_response.text
+        assert cancel_response.status_code == 200, cancel_response.text
+
+        final_pair: tuple[dict, dict] | None = None
+
+        def authority_converged() -> bool:
+            nonlocal final_pair
+            merchant_response = httpx.get(
+                f"{MERCHANT}/api/v1/merchant/orders/{order_id}",
+                timeout=10,
+            )
+            commitment_response = httpx.get(
+                f"{COMMITMENT}/api/v1/commitments/{order_id}",
+                timeout=10,
+            )
+            if merchant_response.status_code != 200 or commitment_response.status_code != 200:
+                return False
+            merchant = merchant_response.json()
+            commitment = commitment_response.json()
+            if commitment.get("cancellationRequestId") is not None:
+                return False
+            pair = (commitment["state"], merchant["state"])
+            if pair not in {
+                ("CANCELLED", "CANCELLED"),
+                ("CONFIRMED", "PREPARING"),
+            }:
+                return False
+            final_pair = (commitment, merchant)
+            return True
+
+        wait_until(
+            authority_converged,
+            timeout_s=30,
+            label=f"single cancellation authority convergence {iteration}",
+        )
+        commitment, merchant = final_pair
+        final_states = (commitment["state"], merchant["state"])
+
+        with postgres_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    select event_type
+                    from outbox_events
+                    where aggregate_id=%s::uuid
+                      and event_type in (
+                        'CancellationRequested',
+                        'CancellationRejected',
+                        'CommitmentCancelled'
+                      )
+                    order by event_sequence
+                    """,
+                    (order_id,),
+                )
+                commitment_decisions = [row[0] for row in cursor.fetchall()]
+                cursor.execute(
+                    """
+                    select event_type
+                    from fulfillment_outbox_events
+                    where aggregate_id=%s::uuid
+                      and event_type in (
+                        'MerchantCancellationApproved',
+                        'MerchantCancellationRejected'
+                      )
+                    order by event_sequence
+                    """,
+                    (order_id,),
+                )
+                merchant_decisions = [row[0] for row in cursor.fetchall()]
+
+        assert commitment_decisions[0] == "CancellationRequested", commitment_decisions
+        assert len(merchant_decisions) == 1, merchant_decisions
+
+        if final_states == ("CANCELLED", "CANCELLED"):
+            assert commitment_decisions == [
+                "CancellationRequested",
+                "CommitmentCancelled",
+            ], commitment_decisions
+            assert merchant_decisions == ["MerchantCancellationApproved"], merchant_decisions
+        else:
+            assert commitment_decisions == [
+                "CancellationRequested",
+                "CancellationRejected",
+            ], commitment_decisions
+            assert merchant_decisions == ["MerchantCancellationRejected"], merchant_decisions
+
+            # Clean up the winning preparation path without creating another
+            # cancellation decision.
+            expect(
+                httpx.post(
+                    f"{MERCHANT}/api/v1/merchant/orders/{order_id}/ready",
+                    timeout=15,
+                ),
+                200,
+            )
+            expect(
+                httpx.post(
+                    f"{MERCHANT}/api/v1/merchant/orders/{order_id}/pickup",
+                    timeout=15,
+                ),
+                200,
+            )
+            claimed = expect(
+                httpx.post(
+                    f"{COMMITMENT}/api/v1/commitments/{order_id}/claim-pickup",
+                    timeout=15,
+                ),
+                200,
+            )
+            assert claimed["state"] == "PICKED_UP", claimed
+
+
 def ledger_flow(pass_no: int) -> None:
     event_id = f"integration-ledger-{pass_no}-{uuid.uuid4().hex[:8]}"
     payload = {
@@ -926,6 +1185,100 @@ def ledger_flow(pass_no: int) -> None:
         and item["incomingFingerprint"] != item["existingFingerprint"]
         for item in conflicts
     ), conflicts
+
+    allocation_order = f"integration-allocation-{pass_no}-{uuid.uuid4().hex[:8]}"
+    first_source = f"{allocation_order}-settle-1"
+    second_source = f"{allocation_order}-settle-2"
+
+    for source_id, amount in ((first_source, 9000), (second_source, 2000)):
+        expect(
+            httpx.post(
+                f"{LEDGER}/api/v1/ledger/postings",
+                json={
+                    "eventId": source_id,
+                    "aggregateId": allocation_order,
+                    "type": "SETTLEMENT",
+                    "amount": amount,
+                },
+                timeout=15,
+            ),
+            202,
+        )
+
+    partial = expect(
+        httpx.post(
+            f"{LEDGER}/api/v1/ledger/postings",
+            json={
+                "eventId": f"{allocation_order}-reverse-3000",
+                "aggregateId": allocation_order,
+                "type": "REVERSE_SETTLEMENT",
+                "amount": 3000,
+                "sourceEventId": first_source,
+            },
+            timeout=15,
+        ),
+        202,
+    )
+    assert partial["result"] == "POSTED", partial
+
+    too_much = expect(
+        httpx.post(
+            f"{LEDGER}/api/v1/ledger/postings",
+            json={
+                "eventId": f"{allocation_order}-reverse-too-much",
+                "aggregateId": allocation_order,
+                "type": "REVERSE_SETTLEMENT",
+                "amount": 7000,
+                "sourceEventId": first_source,
+            },
+            timeout=15,
+        ),
+        409,
+    )
+    assert too_much["result"] == "SOURCE_POSTING_CONFLICT", too_much
+
+    expect(
+        httpx.post(
+            f"{LEDGER}/api/v1/ledger/postings",
+            json={
+                "eventId": f"{allocation_order}-reverse-rest",
+                "aggregateId": allocation_order,
+                "type": "REVERSE_SETTLEMENT",
+                "amount": 6000,
+                "sourceEventId": first_source,
+            },
+            timeout=15,
+        ),
+        202,
+    )
+    expect(
+        httpx.post(
+            f"{LEDGER}/api/v1/ledger/postings",
+            json={
+                "eventId": f"{allocation_order}-reverse-second",
+                "aggregateId": allocation_order,
+                "type": "REVERSE_SETTLEMENT",
+                "amount": 2000,
+                "sourceEventId": second_source,
+            },
+            timeout=15,
+        ),
+        202,
+    )
+
+    allocation_history = expect(
+        httpx.get(
+            f"{LEDGER}/api/v1/ledger/orders/{allocation_order}?limit=20",
+            timeout=15,
+        ),
+        200,
+    )
+    reversals = [row for row in allocation_history if row["reason"] == "REVERSE_SETTLEMENT"]
+    assert sorted((row["sourceEventId"], int(row["amount"])) for row in reversals) == [
+        (first_source, 3000),
+        (first_source, 6000),
+        (second_source, 2000),
+    ], allocation_history
 
 
 def kafka_ledger_flow(pass_no: int) -> None:
@@ -1138,6 +1491,49 @@ def reconciler_flow(pass_no: int) -> None:
     )
     assert stored_projection["projection"]["status"] == "CANCELLED", stored_projection
     assert len(stored_projection["projection"]["canonical_hash"]) == 64, stored_projection
+    assert stored_projection["projection"]["source_event_count"] == len(packet["events"]), stored_projection
+
+    stale_packet = {"events": packet["events"][:-1]}
+    stale_rebuild = httpx.post(
+        f"{RECONCILER}/api/v1/projections/rebuild",
+        json=stale_packet,
+        timeout=20,
+    )
+    assert stale_rebuild.status_code == 409, stale_rebuild.text
+    assert stale_rebuild.json()["detail"]["error"] == "stale_projection_evidence", stale_rebuild.text
+
+    semantic_mutation = json.loads(json.dumps(packet))
+    semantic_mutation["events"][4]["payload"]["amount"] = "11999"
+    changed_rebuild = httpx.post(
+        f"{RECONCILER}/api/v1/projections/rebuild",
+        json=semantic_mutation,
+        timeout=20,
+    )
+    assert changed_rebuild.status_code == 409, changed_rebuild.text
+    assert changed_rebuild.json()["detail"]["error"] == "stale_projection_evidence", changed_rebuild.text
+
+    superset_packet = {
+        "events": [
+            *packet["events"],
+            {
+                "event_id": f"{aggregate}-capacity-proof",
+                "aggregate_id": aggregate,
+                "event_type": "CapacityRevised",
+                "occurred_at": (datetime.now(UTC) + timedelta(seconds=30)).isoformat(),
+                "received_at": (datetime.now(UTC) + timedelta(seconds=30)).isoformat(),
+                "payload": {"revision": 2, "available_units": 40},
+            },
+        ]
+    }
+    superset_rebuild = expect(
+        httpx.post(
+            f"{RECONCILER}/api/v1/projections/rebuild",
+            json=superset_packet,
+            timeout=20,
+        ),
+        200,
+    )
+    assert superset_rebuild["projection"]["source_event_count"] == len(packet["events"]) + 1
 
 
 def ops_console_flow() -> None:
@@ -1176,6 +1572,7 @@ def one_pass(pass_no: int) -> None:
     idempotency_concurrency_flow(pass_no)
     pact_financial_flow(pass_no)
     merchant_fulfillment_flow(pass_no)
+    cancellation_authority_race_flow(pass_no)
     ledger_flow(pass_no)
     kafka_ledger_flow(pass_no)
     reconciler_flow(pass_no)

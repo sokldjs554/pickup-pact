@@ -109,6 +109,11 @@ jobs:
           python scripts/integration_smoke.py --passes 2
           docker compose ps
 
+      - name: Retained-data upgrade boundaries — two passes
+        run: |
+          set -euo pipefail
+          PYTHONPATH=.:services/reconciler python scripts/verify_upgrade_boundaries.py --passes 2
+
       - name: Capture PostgreSQL execution plan evidence
         run: |
           set -euo pipefail
@@ -146,4 +151,5 @@ jobs:
             /tmp/pass1-policy.json
             /tmp/pass2-policy.json
             /tmp/postgres-plan-evidence.json
+            /tmp/upgrade-boundary-evidence.json
           retention-days: 14

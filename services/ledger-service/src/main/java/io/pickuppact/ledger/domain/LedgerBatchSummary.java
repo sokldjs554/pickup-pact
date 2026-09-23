@@ -7,6 +7,7 @@ public record LedgerBatchSummary(
         String eventId,
         String aggregateId,
         String reason,
+        String sourceEventId,
         BigDecimal amount,
         String unit,
         Instant createdAt

@@ -9,6 +9,10 @@ from datetime import UTC, datetime
 from .models import EventEnvelope, ReconcileResult
 
 
+class StaleProjectionEvidence(ValueError):
+    """Incoming rebuild omitted evidence already represented by the projection."""
+
+
 def _stable_digest(payload: object) -> str:
     return hashlib.sha256(
         json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode()
@@ -117,6 +121,22 @@ def record_reconciliation(result: ReconcileResult) -> str:
             "anomalies": result.anomalies,
             "repairs": result.repairs,
             "evidence_event_ids": result.evidence_event_ids,
+            # A boolean snapshot and event IDs alone collapse different amounts
+            # and changed payloads into the same persisted audit run.
+            "source_event_fingerprints": result.source_event_fingerprints,
+            "financial_actions": [
+                action.model_dump(mode="json")
+                for action in sorted(
+                    result.financial_actions,
+                    key=lambda action: (
+                        action.cancellation_event_id, action.target_event_id,
+                        action.repair, action.amount, action.unit,
+                    ),
+                )
+            ],
+            "decision": result.decision,
+            "blocking_reasons": result.blocking_reasons,
+            "missing_event_ids": result.missing_event_ids,
         }
     )
     run_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"pickup-pact:{run_fingerprint}"))
@@ -144,12 +164,21 @@ def record_reconciliation(result: ReconcileResult) -> str:
 
 
 def rebuild_projection(result: ReconcileResult) -> dict:
-    """Rebuild only from executable evidence; reject before touching storage."""
+    """Rebuild only from executable, append-only evidence.
+
+    A later request may add evidence, but it cannot omit event IDs already
+    represented by the stored projection. This prevents a stale replay from
+    overwriting a newer read model merely because it arrived later. Retained
+    rows without complete provenance cannot prove this relation and fail closed;
+    a caller cannot bootstrap their provenance using its own partial evidence.
+    """
     if result.decision != "AUTO" or "MANUAL_REVIEW" in result.repairs:
         raise ValueError("reconciliation evidence is not executable")
     import psycopg
 
     snapshot = result.canonical_state.model_dump(mode="json")
+    source_event_ids = sorted(set(result.source_event_ids))
+    source_event_fingerprints = dict(sorted(result.source_event_fingerprints.items()))
     canonical_hash = _stable_digest(snapshot)
     with psycopg.connect(os.environ["POSTGRES_DSN"]) as connection:
         with connection.cursor() as cursor:
@@ -158,9 +187,10 @@ def rebuild_projection(result: ReconcileResult) -> dict:
                 insert into commitment_projection(
                   aggregate_id, status, payment_authorized, settled, rewarded,
                   capacity_revision, settlement_post_count, reward_post_count,
-                  canonical_hash, rebuilt_at
+                  canonical_hash, source_event_ids, source_event_fingerprints,
+                  source_event_count, rebuilt_at
                 )
-                values (%s,%s,%s,%s,%s,%s,%s,%s,%s,now())
+                values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s,now())
                 on conflict (aggregate_id) do update set
                   status = excluded.status,
                   payment_authorized = excluded.payment_authorized,
@@ -170,7 +200,15 @@ def rebuild_projection(result: ReconcileResult) -> dict:
                   settlement_post_count = excluded.settlement_post_count,
                   reward_post_count = excluded.reward_post_count,
                   canonical_hash = excluded.canonical_hash,
+                  source_event_ids = excluded.source_event_ids,
+                  source_event_fingerprints = excluded.source_event_fingerprints,
+                  source_event_count = excluded.source_event_count,
                   rebuilt_at = now()
+                where commitment_projection.source_event_count > 0
+                  and commitment_projection.source_event_count = cardinality(commitment_projection.source_event_ids)
+                  and commitment_projection.source_event_fingerprints ?& commitment_projection.source_event_ids
+                  and commitment_projection.source_event_ids <@ excluded.source_event_ids
+                  and commitment_projection.source_event_fingerprints <@ excluded.source_event_fingerprints
                 """,
                 (
                     result.aggregate_id,
@@ -182,9 +220,22 @@ def rebuild_projection(result: ReconcileResult) -> dict:
                     snapshot["settlement_post_count"],
                     snapshot["reward_post_count"],
                     canonical_hash,
+                    source_event_ids,
+                    json.dumps(source_event_fingerprints, sort_keys=True, separators=(",", ":")),
+                    len(source_event_ids),
                 ),
             )
-    return {**snapshot, "canonical_hash": canonical_hash}
+            if cursor.rowcount == 0:
+                raise StaleProjectionEvidence(
+                    "projection rebuild omitted or changed evidence already represented by the stored projection"
+                )
+    return {
+        **snapshot,
+        "canonical_hash": canonical_hash,
+        "source_event_ids": source_event_ids,
+        "source_event_fingerprints": source_event_fingerprints,
+        "source_event_count": len(source_event_ids),
+    }
 
 
 def get_projection(aggregate_id: str) -> dict | None:
@@ -200,7 +251,8 @@ def get_projection(aggregate_id: str) -> dict | None:
                 """
                 select aggregate_id, status, payment_authorized, settled, rewarded,
                        capacity_revision, settlement_post_count, reward_post_count,
-                       canonical_hash, rebuilt_at
+                       canonical_hash, source_event_ids, source_event_fingerprints,
+                       source_event_count, rebuilt_at
                 from commitment_projection
                 where aggregate_id = %s
                 """,

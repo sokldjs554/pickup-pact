@@ -10,5 +10,6 @@ public record LedgerPostingRequest(
         @NotBlank String eventId,
         @NotBlank String aggregateId,
         @NotNull LedgerPostingType type,
-        @NotNull @DecimalMin(value = "0.0001") BigDecimal amount
+        @NotNull @DecimalMin(value = "0.0001") BigDecimal amount,
+        String sourceEventId
 ) {}

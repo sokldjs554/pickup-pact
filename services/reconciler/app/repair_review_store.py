@@ -46,8 +46,19 @@ def sample_events(case: str) -> list[EventEnvelope]:
         return root+[cancel,post,post.model_copy(update={'payload':{'amount':'1','currency':'KRW'}})]
     if case == 'terminal_conflict': return root+[cancel,post,ev('claim','PickupClaimed',6,'confirm')]
     if case == 'missing_parent': return root+[cancel,post.model_copy(update={'causation_id':'late'})]
-    if case == 'partial_cancel': return root+[cancel.model_copy(update={'payload':{'scope':'PARTIAL','amount':'3000'}}),post]
-    if case == 'multiple_postings': return root+[cancel,post,ev('settle2','SettlementPosted',6,'cancel',{'amount':'2000','currency':'KRW'})]
+    if case == 'partial_cancel':
+        partial = ev('partial-cancel','PartialCancellationApplied',3,'confirm',{
+            'scope':'PARTIAL',
+            'amount':'3000',
+            'allocations':[{'target_event_id':'settle','amount':'3000','unit':'KRW'}],
+        },20)
+        return root+[
+            partial,
+            post.model_copy(update={'causation_id':'partial-cancel'}),
+            reward.model_copy(update={'causation_id':'confirm'}),
+        ]
+    if case == 'multiple_postings':
+        return root+[cancel,post,ev('settle2','SettlementPosted',6,'cancel',{'amount':'2000','currency':'KRW'})]
     raise ValueError('unknown sample case')
 
 
@@ -72,6 +83,7 @@ class ReviewStore:
                     actions TEXT NOT NULL, applied INTEGER NOT NULL DEFAULT 0);
                 CREATE TABLE IF NOT EXISTS review_effects (
                     session_id TEXT NOT NULL REFERENCES review_sessions(id), action_id TEXT NOT NULL,
+                    cancellation_event_id TEXT,
                     target_event_id TEXT NOT NULL, repair TEXT NOT NULL,
                     amount INTEGER NOT NULL CHECK(amount>0), unit TEXT NOT NULL CHECK(unit IN ('KRW','PTS')),
                     recorded_at TEXT NOT NULL, PRIMARY KEY(session_id,action_id),
@@ -80,6 +92,17 @@ class ReviewStore:
                     sequence INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL,
                     action TEXT NOT NULL, detail TEXT NOT NULL, occurred_at TEXT NOT NULL);
             ''')
+            columns = {
+                row[1] for row in db.execute("pragma table_info(review_effects)")
+            }
+            if "cancellation_event_id" not in columns:
+                db.execute(
+                    "alter table review_effects add column cancellation_event_id text"
+                )
+                db.execute(
+                    "update review_effects set cancellation_event_id='legacy' "
+                    "where cancellation_event_id is null"
+                )
         finally:
             db.close()
         Path(self.path).chmod(0o600)
@@ -179,15 +202,14 @@ class ReviewStore:
         if evaluation['decision'] != 'AUTO' or 'MANUAL_REVIEW' in evaluation['repairs']:
             raise ReviewConflict('evidence is not executable')
         actions = []
-        for repair,kind,unit in [('REVERSE_SETTLEMENT','SettlementPosted','KRW'),('REVERSE_REWARD','RewardGranted','PTS')]:
-            if repair not in evaluation['repairs']: continue
-            posts = [e for e in view['events'] if e['event_type']==kind]
-            if len(posts)!=1: raise ReviewConflict('single posting evidence required')
-            post = posts[0]
-            amount = accounting_amount(post['payload'].get('amount'))
-            if post['payload'].get('currency',unit)!=unit or post['payload'].get('unit',unit)!=unit:
-                raise ReviewConflict('accounting unit mismatch')
-            data={'target_event_id':post['event_id'],'repair':repair,'amount':amount,'unit':unit}
+        for action in evaluation.get('financial_actions', []):
+            data = {
+                'cancellation_event_id': action['cancellation_event_id'],
+                'target_event_id': action['target_event_id'],
+                'repair': action['repair'],
+                'amount': accounting_amount(action['amount']),
+                'unit': action['unit'],
+            }
             actions.append({'action_id':digest({'session':view['id'],**data}),**data})
         if not actions: raise ReviewConflict('no financial correction is required')
         return actions
@@ -223,12 +245,30 @@ class ReviewStore:
             observed=max(now,last+timedelta(microseconds=1))
             reversals=[]
             for action in stored:
-                db.execute('INSERT INTO review_effects VALUES(?,?,?,?,?,?,?)',(sid,action['action_id'],
-                    action['target_event_id'],action['repair'],action['amount'],action['unit'],now.isoformat()))
+                db.execute(
+                    'INSERT INTO review_effects('
+                    'session_id,action_id,cancellation_event_id,target_event_id,repair,amount,unit,recorded_at'
+                    ') VALUES(?,?,?,?,?,?,?,?)',
+                    (
+                        sid,
+                        action['action_id'],
+                        action['cancellation_event_id'],
+                        action['target_event_id'],
+                        action['repair'],
+                        action['amount'],
+                        action['unit'],
+                        now.isoformat(),
+                    ),
+                )
                 reversals.append(EventEnvelope(event_id='simulated-'+action['action_id'],aggregate_id='sample-order',
                     event_type='SettlementReversed' if action['repair']=='REVERSE_SETTLEMENT' else 'RewardReversed',
                     occurred_at=observed,received_at=now,causation_id=action['target_event_id'],
-                    payload={'amount':str(action['amount']),'currency':action['unit'],'simulation':True}))
+                    payload={
+                        'amount':str(action['amount']),
+                        'currency':action['unit'],
+                        'cancellation_event_id':action['cancellation_event_id'],
+                        'simulation':True,
+                    }))
             self._add_events(db,sid,reversals)
             db.execute('UPDATE review_plans SET applied=1 WHERE id=?',(pid,))
             self._audit(db,sid,'SIMULATED_CORRECTION_RECORDED',pid)

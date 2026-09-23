@@ -51,6 +51,25 @@ class MerchantOrderTest {
     }
 
     @Test
+    void merchantAuthorityApprovesBeforePreparationAndRejectsAfterStart() {
+        var accepted = order().accept(Instant.parse("2026-09-23T03:20:00Z"));
+        var approved = accepted.decideCancellation(Instant.parse("2026-09-23T03:24:00Z"));
+        assertTrue(approved.approved());
+        assertEquals(FulfillmentState.CANCELLED, approved.order().state());
+        assertEquals("APPROVED_BEFORE_PREPARATION", approved.reason());
+
+        var preparing = order()
+                .accept(Instant.parse("2026-09-23T03:20:00Z"))
+                .start(Instant.parse("2026-09-23T03:26:00Z"))
+                .order();
+        var rejected = preparing.decideCancellation(Instant.parse("2026-09-23T03:27:00Z"));
+        assertFalse(rejected.approved());
+        assertEquals(FulfillmentState.PREPARING, rejected.order().state());
+        assertEquals("PREPARATION_ALREADY_STARTED", rejected.reason());
+        assertEquals(FulfillmentAnomalyCode.CANCEL_AFTER_PREPARATION, rejected.anomaly());
+    }
+
+    @Test
     void cancellationBeforePreparationIsAutomatic() {
         var accepted = order().accept(Instant.parse("2026-09-23T03:20:00Z"));
         var cancelled = accepted.requestCancellation(Instant.parse("2026-09-23T03:24:00Z"));

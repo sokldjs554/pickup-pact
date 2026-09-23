@@ -65,7 +65,40 @@ class PickupCommitmentTest {
         assertEquals(CommitmentState.PICKED_UP, pickedUp.state)
         assertEquals(1, pickedUp.version)
         assertThrows(IllegalStateException::class.java) { pickedUp.claimPickup() }
-        assertThrows(IllegalStateException::class.java) { pickedUp.cancel() }
+        assertThrows(IllegalStateException::class.java) { pickedUp.cancelHeld() }
+    }
+
+    @Test
+    fun confirmedCancellationNeedsMatchingMerchantDecision() {
+        val confirmed = PickupCommitment(
+            UUID.randomUUID(),
+            "store-1",
+            Instant.now().plusSeconds(600),
+            1,
+            "lease-cancel-authority",
+            true,
+            CommitmentState.CONFIRMED,
+            pact = PickupPactPolicy.issue(Instant.now().plusSeconds(600))
+        )
+        val requestId = UUID.randomUUID()
+        val requested = confirmed.requestCancellation(requestId, Instant.now())
+
+        assertEquals(CommitmentState.CONFIRMED, requested.state)
+        assertEquals(requestId, requested.cancellationRequestId)
+        assertThrows(IllegalStateException::class.java) {
+            requested.approveCancellation(UUID.randomUUID())
+        }
+        assertThrows(IllegalStateException::class.java) { requested.claimPickup() }
+
+        val rejected = requested.rejectCancellation(requestId)
+        assertEquals(CommitmentState.CONFIRMED, rejected.state)
+        assertEquals(null, rejected.cancellationRequestId)
+
+        val secondRequest = rejected.requestCancellation(requestId, Instant.now())
+        val cancelled = secondRequest.approveCancellation(requestId)
+        assertEquals(CommitmentState.CANCELLED, cancelled.state)
+        assertEquals(PickupPactStatus.CANCELLED, cancelled.pact!!.status)
+        assertEquals(null, cancelled.cancellationRequestId)
     }
 
     @Test

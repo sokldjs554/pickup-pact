@@ -18,14 +18,28 @@ class FulfillmentEventConsumer(
     )
     fun consume(raw: String) {
         val envelope = objectMapper.readTree(raw)
-        if (envelope.path("event_type").asText() != "FulfillmentAnomalyDetected") return
-
+        val eventType = envelope.path("event_type").asText()
         val payload = envelope.path("payload")
-        if (payload.path("code").asText() != "READY_LATE") return
-
         val orderId = UUID.fromString(envelope.path("aggregate_id").asText())
-        val observedAt = Instant.parse(payload.path("observed_at").asText())
 
-        service.breachPactFromFulfillment(orderId, observedAt).block()
+        when (eventType) {
+            "FulfillmentAnomalyDetected" -> {
+                if (payload.path("code").asText() != "READY_LATE") return
+                val observedAt = Instant.parse(payload.path("observed_at").asText())
+                service.breachPactFromFulfillment(orderId, observedAt).block()
+            }
+
+            "MerchantCancellationApproved" -> {
+                val requestId = UUID.fromString(payload.path("request_id").asText())
+                val decidedAt = Instant.parse(payload.path("decided_at").asText())
+                service.approveCancellationFromMerchant(orderId, requestId, decidedAt).block()
+            }
+
+            "MerchantCancellationRejected" -> {
+                val requestId = UUID.fromString(payload.path("request_id").asText())
+                val reason = payload.path("reason").asText("merchant_rejected")
+                service.rejectCancellationFromMerchant(orderId, requestId, reason).block()
+            }
+        }
     }
 }

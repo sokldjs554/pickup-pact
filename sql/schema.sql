@@ -16,6 +16,8 @@ create table if not exists pickup_commitments (
   pact_version integer,
   pact_status text,
   pact_compensation_granted boolean not null default false,
+  cancellation_request_id uuid,
+  cancellation_requested_at timestamptz,
   updated_at timestamptz not null default now()
 );
 
@@ -28,6 +30,8 @@ alter table pickup_commitments add column if not exists pact_compensation_points
 alter table pickup_commitments add column if not exists pact_version integer;
 alter table pickup_commitments add column if not exists pact_status text;
 alter table pickup_commitments add column if not exists pact_compensation_granted boolean not null default false;
+alter table pickup_commitments add column if not exists cancellation_request_id uuid;
+alter table pickup_commitments add column if not exists cancellation_requested_at timestamptz;
 
 update pickup_commitments
 set idempotency_key = coalesce(idempotency_key, 'legacy-' || id::text),
@@ -66,10 +70,15 @@ create table if not exists ledger_batches (
   semantic_fingerprint text not null,
   aggregate_id text not null,
   reason text not null,
+  source_event_id text,
   created_at timestamptz not null default now()
 );
+alter table ledger_batches add column if not exists source_event_id text;
 create index if not exists idx_ledger_batches_aggregate_created
   on ledger_batches(aggregate_id, created_at desc);
+create index if not exists idx_ledger_batches_source
+  on ledger_batches(source_event_id)
+  where source_event_id is not null;
 
 create table if not exists ledger_entries (
   id bigserial primary key,
@@ -118,9 +127,16 @@ create table if not exists commitment_projection (
   settlement_post_count integer not null,
   reward_post_count integer not null,
   canonical_hash char(64) not null,
+  source_event_ids text[] not null default '{}',
+  source_event_fingerprints jsonb not null default '{}'::jsonb,
+  source_event_count integer not null default 0,
   rebuilt_at timestamptz not null default now()
 );
 
+
+alter table commitment_projection add column if not exists source_event_ids text[] not null default '{}';
+alter table commitment_projection add column if not exists source_event_fingerprints jsonb not null default '{}'::jsonb;
+alter table commitment_projection add column if not exists source_event_count integer not null default 0;
 
 create table if not exists merchant_orders (
   order_id uuid primary key,

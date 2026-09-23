@@ -80,6 +80,29 @@ public record MerchantOrder(
         return new ReadyTransition(next, quality, anomaly);
     }
 
+    public CancellationDecision decideCancellation(Instant now) {
+        return switch (state) {
+            case RECEIVED, ACCEPTED -> new CancellationDecision(
+                    copy(FulfillmentState.CANCELLED, acceptedAt, startedAt, readyAt, pickedUpAt, now),
+                    true,
+                    "APPROVED_BEFORE_PREPARATION",
+                    null
+            );
+            case PREPARING, READY, PICKED_UP, CANCELLATION_REVIEW -> new CancellationDecision(
+                    this,
+                    false,
+                    "PREPARATION_ALREADY_STARTED",
+                    FulfillmentAnomalyCode.CANCEL_AFTER_PREPARATION
+            );
+            case CANCELLED -> new CancellationDecision(
+                    this,
+                    true,
+                    "ALREADY_CANCELLED",
+                    null
+            );
+        };
+    }
+
     public CancelTransition requestCancellation(Instant now) {
         if (state == FulfillmentState.CANCELLED || state == FulfillmentState.CANCELLATION_REVIEW) {
             return new CancelTransition(this, state == FulfillmentState.CANCELLATION_REVIEW
@@ -130,4 +153,10 @@ public record MerchantOrder(
             FulfillmentAnomalyCode anomaly
     ) {}
     public record CancelTransition(MerchantOrder order, FulfillmentAnomalyCode anomaly) {}
+    public record CancellationDecision(
+            MerchantOrder order,
+            boolean approved,
+            String reason,
+            FulfillmentAnomalyCode anomaly
+    ) {}
 }

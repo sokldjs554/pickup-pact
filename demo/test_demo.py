@@ -236,7 +236,30 @@ def test_merchant_late_ready_auto_compensates_pickup_pact_in_points():
     assert reward_batches[-1]["currency"] == "PTS"
 
 
-def test_customer_cancel_after_merchant_preparation_requires_review():
+def test_customer_cancel_before_merchant_preparation_is_authoritatively_approved():
+    session_id = create_session()
+    create_order(session_id, units=2, total=9000)
+    client.post(
+        f"/api/demo/sessions/{session_id}/payment",
+        json={"authorization_id": "merchant-cancel-before"},
+    )
+    client.post(f"/api/demo/sessions/{session_id}/confirm")
+
+    cancelled = client.post(
+        f"/api/demo/sessions/{session_id}/cancel",
+        json={"delay_seconds": 0},
+    )
+    assert cancelled.status_code == 200
+    body = cancelled.json()
+    assert body["decision"] == "APPROVED"
+    assert body["request_event"]["event_type"] == "CancellationRequested"
+    assert body["event"]["event_type"] == "CommitmentCancelled"
+    assert body["state"]["order"]["status"] == "CANCELLED"
+    assert body["state"]["merchant_fulfillment"]["status"] == "CANCELLED"
+    assert body["state"]["capacity"]["reserved_units"] == 0
+
+
+def test_customer_cancel_after_merchant_preparation_is_rejected_without_state_split():
     session_id = create_session()
     create_order(session_id, units=2, total=9000)
     client.post(
@@ -255,9 +278,15 @@ def test_customer_cancel_after_merchant_preparation_requires_review():
         json={"delay_seconds": 0},
     )
     assert cancelled.status_code == 200
-    merchant = cancelled.json()["state"]["merchant_fulfillment"]
-    assert merchant["status"] == "CANCELLATION_REVIEW"
+    body = cancelled.json()
+    assert body["decision"] == "REJECTED"
+    assert body["event"]["event_type"] == "CancellationRejected"
+    assert body["state"]["order"]["status"] == "CONFIRMED"
+    merchant = body["state"]["merchant_fulfillment"]
+    assert merchant["status"] == "PREPARING"
     assert "CANCEL_AFTER_PREPARATION" in merchant["anomalies"]
+    assert body["state"]["capacity"]["reserved_units"] == 2
+    assert body["state"]["pickup_pact"]["status"] == "ACTIVE"
 
 
 def test_landing_page_exposes_guided_and_expert_layers():

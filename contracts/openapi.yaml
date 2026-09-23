@@ -166,13 +166,13 @@ paths:
 
   /api/v1/commitments/{id}/cancel:
     post:
-      summary: Cancel a commitment and release leased capacity
+      summary: Cancel HELD immediately or request merchant-authorized cancellation for confirmed work
       parameters:
         - $ref: "#/components/parameters/CommitmentId"
       responses:
-        "200": {description: Cancelled commitment}
+        "200": {description: HELD cancelled immediately, or confirmed commitment returned with a pending merchant cancellation request}
         "404": {description: Commitment not found}
-        "409": {description: Invalid commitment state}
+        "409": {description: Picked-up commitment or invalid cancellation state}
 
   /api/v1/merchant/orders/{orderId}:
     get:
@@ -321,7 +321,7 @@ paths:
         "200":
           description: Exact redelivery recognized as a no-op
         "409":
-          description: Same event ID reused with conflicting financial meaning
+          description: Same event ID reused with conflicting meaning, or reversal source/balance conflict
 
   /api/v1/ledger/orders/{aggregateId}:
     get:
@@ -383,7 +383,7 @@ paths:
               $ref: "#/components/schemas/ReconcileRequest"
       responses:
         "200": {description: Rebuilt projection}
-        "409": {description: Evidence unresolved; projection persistence is rejected}
+        "409": {description: Evidence unresolved or stale evidence omitted source events already represented by the projection}
         "422": {description: Invalid evidence packet}
 
   /api/v1/projections/{aggregateId}:
@@ -511,6 +511,9 @@ components:
         reason:
           type: string
           enum: [SETTLEMENT, REVERSE_SETTLEMENT, REWARD, REVERSE_REWARD]
+        sourceEventId:
+          type: [string, "null"]
+          description: Original posting referenced by a reversal
         amount: {type: number, exclusiveMinimum: 0}
         unit:
           type: string
@@ -529,6 +532,9 @@ components:
         amount:
           type: number
           exclusiveMinimum: 0
+        sourceEventId:
+          type: [string, "null"]
+          description: Required for REVERSE_SETTLEMENT and REVERSE_REWARD; identifies the original posting
 
     EventEnvelope:
       type: object
@@ -542,7 +548,10 @@ components:
             - PickupSlotHeld
             - PaymentAuthorized
             - CommitmentConfirmed
+            - CancellationRequested
+            - CancellationRejected
             - CommitmentCancelled
+            - PartialCancellationApplied
             - SettlementPosted
             - RewardGranted
             - CapacityRevised

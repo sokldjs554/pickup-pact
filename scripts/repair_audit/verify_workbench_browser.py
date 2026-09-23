@@ -75,11 +75,27 @@ def run(output: Path, repeat: int, *, base_url: str | None = None, app_entry: st
                     expect(page.locator('#decision')).to_have_text('계획 생성 가능')
                     page.locator('#preview').click(); expect(page.locator('#approve')).to_be_enabled()
                     page.locator('#approve').click(); expect(page.locator('#effectCount')).to_have_text('1개')
-                    for case in ['conflicting_identity','terminal_conflict','partial_cancel','multiple_postings']:
+                    for case in ['conflicting_identity','terminal_conflict']:
                         page.locator(f'[data-case={case}]').click()
                         expect(page.locator('#decision')).to_have_text('자동 복구 차단')
                         expect(page.locator('#preview')).to_be_disabled()
                         expect(page.locator('#approve')).to_be_disabled()
+
+                    page.locator('[data-case=partial_cancel]').click()
+                    expect(page.locator('#decision')).to_have_text('계획 생성 가능')
+                    page.locator('#preview').click()
+                    expect(page.locator('#planContent')).to_contain_text('3,000 KRW')
+                    page.locator('#approve').click()
+                    expect(page.locator('#effectCount')).to_have_text('1개')
+
+                    page.locator('[data-case=multiple_postings]').click()
+                    expect(page.locator('#decision')).to_have_text('계획 생성 가능')
+                    page.locator('#preview').click()
+                    expect(page.locator('#planContent')).to_contain_text('9,000 KRW')
+                    expect(page.locator('#planContent')).to_contain_text('2,000 KRW')
+                    page.locator('#approve').click()
+                    expect(page.locator('#effectCount')).to_have_text('2개')
+
                     page.locator('[data-case=delayed_cancel]').click()
                     expect(page.locator('#decision')).to_have_text('계획 생성 가능')
                     page.locator('#preview').click(); expect(page.locator('#approve')).to_be_enabled()
@@ -102,7 +118,7 @@ def run(output: Path, repeat: int, *, base_url: str | None = None, app_entry: st
                     page.screenshot(path=str(output/f'{mode}-pass{pass_no}.png'),full_page=True)
                     results.append({'pass':pass_no,'viewport':mode,'browser':browser.version,
                         'checks':['real_http','approval','duplicate','reload','missing_then_resolved',
-                                  'four_blocked_cases','stale_approval_rejected','no_external_requests','no_horizontal_overflow'],
+                                  'two_blocked_cases','partial_allocation','multiple_postings','stale_approval_rejected','no_external_requests','no_horizontal_overflow'],
                         'page_errors':errors,'http_requests':len(requests),'result':'passed','server_entry':app_entry or ('deployed' if base_url else 'standalone'),
                         'verified_commit':expected_commit})
                     context.close()

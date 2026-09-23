@@ -17,7 +17,9 @@ data class PickupCommitment(
     val totalAmount: Int = 0,
     val idempotencyKey: String = "",
     val requestFingerprint: String = "",
-    val pact: PickupPact? = null
+    val pact: PickupPact? = null,
+    val cancellationRequestId: UUID? = null,
+    val cancellationRequestedAt: Instant? = null
 ) {
     init {
         require(units > 0) { "units must be positive" }
@@ -42,6 +44,7 @@ data class PickupCommitment(
     }
 
     fun renegotiate(newPickupAt: Instant, newLeaseToken: String): PickupCommitment {
+        check(cancellationRequestId == null) { "pickup cannot be rescheduled while cancellation is pending" }
         check(state in setOf(CommitmentState.CONFIRMED, CommitmentState.AT_RISK)) {
             "only confirmed or at-risk commitments can be renegotiated"
         }
@@ -64,6 +67,7 @@ data class PickupCommitment(
     }
 
     fun claimPickup(): PickupCommitment {
+        check(cancellationRequestId == null) { "pickup cannot be claimed while cancellation is pending" }
         check(state == CommitmentState.CONFIRMED) { "pickup can only be claimed from CONFIRMED" }
         return copy(
             state = CommitmentState.PICKED_UP,
@@ -72,12 +76,54 @@ data class PickupCommitment(
         )
     }
 
-    fun cancel(): PickupCommitment {
-        check(state != CommitmentState.CANCELLED) { "already cancelled" }
-        check(state != CommitmentState.PICKED_UP) { "picked up commitment cannot be cancelled" }
+    fun cancelHeld(): PickupCommitment {
+        check(state == CommitmentState.HELD) { "only HELD commitments can cancel without merchant authority" }
         return copy(
             state = CommitmentState.CANCELLED,
             pact = pact?.cancel(),
+            cancellationRequestId = null,
+            cancellationRequestedAt = null,
+            version = version + 1
+        )
+    }
+
+    fun requestCancellation(requestId: UUID, requestedAt: Instant): PickupCommitment {
+        check(state in setOf(CommitmentState.CONFIRMED, CommitmentState.AT_RISK)) {
+            "merchant authority is required only for active confirmed commitments"
+        }
+        if (cancellationRequestId != null) {
+            check(cancellationRequestId == requestId) { "another cancellation request is already pending" }
+            return this
+        }
+        return copy(
+            cancellationRequestId = requestId,
+            cancellationRequestedAt = requestedAt,
+            version = version + 1
+        )
+    }
+
+    fun approveCancellation(requestId: UUID): PickupCommitment {
+        check(cancellationRequestId == requestId) { "stale or unknown cancellation approval" }
+        check(state in setOf(CommitmentState.CONFIRMED, CommitmentState.AT_RISK)) {
+            "only active confirmed commitments can be cancelled"
+        }
+        return copy(
+            state = CommitmentState.CANCELLED,
+            pact = pact?.cancel(),
+            cancellationRequestId = null,
+            cancellationRequestedAt = null,
+            version = version + 1
+        )
+    }
+
+    fun rejectCancellation(requestId: UUID): PickupCommitment {
+        check(cancellationRequestId == requestId) { "stale or unknown cancellation rejection" }
+        check(state in setOf(CommitmentState.CONFIRMED, CommitmentState.AT_RISK)) {
+            "only active confirmed commitments can reject cancellation"
+        }
+        return copy(
+            cancellationRequestId = null,
+            cancellationRequestedAt = null,
             version = version + 1
         )
     }
