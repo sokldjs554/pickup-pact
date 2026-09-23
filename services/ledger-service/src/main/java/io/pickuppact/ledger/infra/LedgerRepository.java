@@ -51,6 +51,24 @@ public class LedgerRepository {
             return false;
         }
 
+        // Retained pre-allocation reversals have no trustworthy source. Their
+        // amount cannot be subtracted from an arbitrary posting, or ignored.
+        // Hold the source lock while checking this order/type boundary.
+        Boolean unattributedReversal = jdbc.queryForObject(
+                """
+                select exists (
+                  select 1 from ledger_batches
+                  where aggregate_id = ?
+                    and reason = ?
+                    and nullif(btrim(source_event_id), '') is null
+                )
+                """,
+                Boolean.class,
+                batch.aggregateId(),
+                batch.reason()
+        );
+        if (!Boolean.FALSE.equals(unattributedReversal)) return false;
+
         var sourceAmount = jdbc.queryForObject(
                 "select min(amount) from ledger_entries where event_id = ?",
                 java.math.BigDecimal.class,
