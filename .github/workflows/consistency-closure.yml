@@ -9,7 +9,7 @@ permissions:
 jobs:
   postgres-fences:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 15
     services:
       postgres:
         image: postgres:16-alpine
@@ -17,6 +17,8 @@ jobs:
           POSTGRES_USER: pickuppact
           POSTGRES_PASSWORD: pickuppact
           POSTGRES_DB: closure
+          PGUSER: pickuppact
+          PGDATABASE: closure
         ports: ['5432:5432']
         options: >-
           --health-cmd pg_isready
@@ -38,7 +40,33 @@ jobs:
           set -euo pipefail
           mkdir -p /tmp/closure
           for pass in 1 2 3; do
-            python -m pytest -q tests/postgres | tee /tmp/closure/postgres-$pass.log
+            python -m pytest -q tests/postgres/test_projection_fence.py | tee /tmp/closure/postgres-$pass.log
+          done
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Package ledger and run real refund HTTP tests
+        env:
+          POSTGRES_JDBC_URL: jdbc:postgresql://127.0.0.1:5432/closure
+          POSTGRES_USER: pickuppact
+          POSTGRES_PASSWORD: pickuppact
+          SPRING_KAFKA_LISTENER_AUTO_STARTUP: 'false'
+          LEDGER_TEST_URL: http://127.0.0.1:8081
+        run: |
+          set -euo pipefail
+          mvn -B -f services/ledger-service/pom.xml test package > /tmp/closure/ledger-build.log 2>&1
+          java -jar services/ledger-service/target/ledger-service-0.1.0-SNAPSHOT.jar > /tmp/closure/ledger-server.log 2>&1 &
+          pid=$!
+          trap 'kill "$pid" || true' EXIT
+          ready=0
+          for attempt in $(seq 1 90); do
+            if curl --fail --silent "$LEDGER_TEST_URL/actuator/health" >/dev/null; then ready=1; break; fi
+            sleep 1
+          done
+          test "$ready" = 1
+          for pass in 1 2 3; do
+            python -m pytest -q tests/postgres/test_refund_http.py | tee /tmp/closure/refunds-$pass.log
           done
       - name: Preserve tested source
         if: ${{ always() && steps.checkout.outcome == 'success' }}
