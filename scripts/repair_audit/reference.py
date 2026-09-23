@@ -129,6 +129,13 @@ def reference_plan(request: ReconcileRequest) -> Outcome:
     return Outcome("AUTO", frozenset(allowed), status)
 
 
+def candidate_plan(request: ReconcileRequest) -> Outcome:
+    from app.engine import reconcile
+    result = reconcile(request)
+    return Outcome(result.decision, frozenset(FINANCIAL & set(result.repairs)),
+                   result.canonical_state.status)
+
+
 class DurableExecutor:
     """One full-cancel intent per order/type; not a partial-refund engine.
 
