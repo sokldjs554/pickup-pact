@@ -43,6 +43,10 @@ public class MerchantFulfillmentService {
                 receiveConfirmed(orderId, occurredAt, payload);
                 yield IntakeResult.APPLIED;
             }
+            case "CancellationRequested" -> {
+                applyCancellationRequest(orderId, occurredAt, payload);
+                yield IntakeResult.APPLIED;
+            }
             case "CommitmentCancelled" -> {
                 applyCancellation(orderId, occurredAt);
                 yield IntakeResult.APPLIED;
@@ -198,6 +202,72 @@ public class MerchantFulfillmentService {
         repository.appendOutbox(orderId, "MerchantOrderReceived", delivery, occurredAt);
     }
 
+    private void applyCancellationRequest(UUID orderId, Instant occurredAt, JsonNode payload) {
+        MerchantOrder current = required(orderId);
+        UUID requestId = UUID.fromString(requiredText(payload, "request_id"));
+        var decision = current.decideCancellation(occurredAt);
+
+        if (decision.order().version() != current.version()) {
+            repository.update(decision.order());
+        }
+
+        if (decision.approved()) {
+            repository.enqueueDelivery(
+                    orderId,
+                    current.storeId(),
+                    "ORDER_CANCELLED",
+                    Map.of(
+                            "order_id", orderId.toString(),
+                            "request_id", requestId.toString(),
+                            "cancelled_at", occurredAt.toString()
+                    )
+            );
+            repository.appendOutbox(
+                    orderId,
+                    "MerchantCancellationApproved",
+                    Map.of(
+                            "store_id", current.storeId(),
+                            "request_id", requestId.toString(),
+                            "decided_at", occurredAt.toString(),
+                            "reason", decision.reason()
+                    ),
+                    occurredAt
+            );
+            return;
+        }
+
+        if (decision.anomaly() != null) {
+            recordAnomaly(
+                    current,
+                    decision.anomaly(),
+                    "cancellation rejected because preparation had already started",
+                    occurredAt
+            );
+        }
+        repository.enqueueDelivery(
+                orderId,
+                current.storeId(),
+                "CANCELLATION_REJECTED",
+                Map.of(
+                        "order_id", orderId.toString(),
+                        "request_id", requestId.toString(),
+                        "reason", decision.reason()
+                )
+        );
+        repository.appendOutbox(
+                orderId,
+                "MerchantCancellationRejected",
+                Map.of(
+                        "store_id", current.storeId(),
+                        "request_id", requestId.toString(),
+                        "decided_at", occurredAt.toString(),
+                        "reason", decision.reason(),
+                        "merchant_state", current.state().name()
+                ),
+                occurredAt
+        );
+    }
+
     private void applyCancellation(UUID orderId, Instant occurredAt) {
         var maybeOrder = repository.find(orderId);
         if (maybeOrder.isEmpty()) {
@@ -207,6 +277,7 @@ public class MerchantFulfillmentService {
             return;
         }
         MerchantOrder current = maybeOrder.get();
+        if (current.state() == FulfillmentState.CANCELLED) return;
         var transition = current.requestCancellation(occurredAt);
         if (transition.order().version() != current.version()) {
             repository.update(transition.order());
@@ -317,6 +388,7 @@ public class MerchantFulfillmentService {
 
     private static boolean isRelevant(String eventType) {
         return eventType.equals("CommitmentConfirmed")
+                || eventType.equals("CancellationRequested")
                 || eventType.equals("CommitmentCancelled")
                 || eventType.equals("PickupRescheduled");
     }
