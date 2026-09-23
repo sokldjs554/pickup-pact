@@ -160,6 +160,7 @@ def rebuild_projection(result: ReconcileResult) -> dict:
 
     snapshot = result.canonical_state.model_dump(mode="json")
     source_event_ids = sorted(set(result.source_event_ids))
+    source_event_fingerprints = dict(sorted(result.source_event_fingerprints.items()))
     canonical_hash = _stable_digest(snapshot)
     with psycopg.connect(os.environ["POSTGRES_DSN"]) as connection:
         with connection.cursor() as cursor:
@@ -168,9 +169,10 @@ def rebuild_projection(result: ReconcileResult) -> dict:
                 insert into commitment_projection(
                   aggregate_id, status, payment_authorized, settled, rewarded,
                   capacity_revision, settlement_post_count, reward_post_count,
-                  canonical_hash, source_event_ids, source_event_count, rebuilt_at
+                  canonical_hash, source_event_ids, source_event_fingerprints,
+                  source_event_count, rebuilt_at
                 )
-                values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,now())
+                values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s,now())
                 on conflict (aggregate_id) do update set
                   status = excluded.status,
                   payment_authorized = excluded.payment_authorized,
@@ -181,9 +183,11 @@ def rebuild_projection(result: ReconcileResult) -> dict:
                   reward_post_count = excluded.reward_post_count,
                   canonical_hash = excluded.canonical_hash,
                   source_event_ids = excluded.source_event_ids,
+                  source_event_fingerprints = excluded.source_event_fingerprints,
                   source_event_count = excluded.source_event_count,
                   rebuilt_at = now()
                 where commitment_projection.source_event_ids <@ excluded.source_event_ids
+                  and commitment_projection.source_event_fingerprints <@ excluded.source_event_fingerprints
                 """,
                 (
                     result.aggregate_id,
@@ -196,17 +200,19 @@ def rebuild_projection(result: ReconcileResult) -> dict:
                     snapshot["reward_post_count"],
                     canonical_hash,
                     source_event_ids,
+                    json.dumps(source_event_fingerprints, sort_keys=True, separators=(",", ":")),
                     len(source_event_ids),
                 ),
             )
             if cursor.rowcount == 0:
                 raise StaleProjectionEvidence(
-                    "projection rebuild omitted event IDs already represented by the stored projection"
+                    "projection rebuild omitted or changed evidence already represented by the stored projection"
                 )
     return {
         **snapshot,
         "canonical_hash": canonical_hash,
         "source_event_ids": source_event_ids,
+        "source_event_fingerprints": source_event_fingerprints,
         "source_event_count": len(source_event_ids),
     }
 
@@ -224,7 +230,8 @@ def get_projection(aggregate_id: str) -> dict | None:
                 """
                 select aggregate_id, status, payment_authorized, settled, rewarded,
                        capacity_revision, settlement_post_count, reward_post_count,
-                       canonical_hash, source_event_ids, source_event_count, rebuilt_at
+                       canonical_hash, source_event_ids, source_event_fingerprints,
+                       source_event_count, rebuilt_at
                 from commitment_projection
                 where aggregate_id = %s
                 """,
