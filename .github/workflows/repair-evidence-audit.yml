@@ -1,0 +1,48 @@
+name: repair-evidence-audit
+on:
+  pull_request:
+    paths:
+      - 'services/reconciler/**'
+      - 'scripts/repair_audit/**'
+      - 'artifacts/repair-audit/original_engine.py'
+      - '.github/workflows/repair-evidence-audit.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  counterexamples:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PYTHONPATH: .:services/reconciler
+      AI_PROVIDER: offline
+      PERSIST_RECONCILIATION: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install bounded audit dependencies
+        run: python -m pip install 'pydantic>=2,<3' 'fastapi>=0.115,<1' 'httpx>=0.27,<1' 'pytest>=8,<10'
+      - name: Counterexamples and process-crash recovery, repeated
+        shell: bash
+        run: |
+          set -euo pipefail
+          for pass in 1 2 3; do
+            python -m pytest -q services/reconciler/tests | tee /tmp/audit-tests-$pass.log
+            python -m scripts.repair_audit.run --output /tmp/audit-comparison-$pass.json
+          done
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          hashes={json.loads(Path(f'/tmp/audit-comparison-{n}.json').read_text())['semantic_sha256'] for n in (1,2,3)}
+          assert len(hashes)==1, hashes
+          print('Semantic results reproduced:', next(iter(hashes)))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: repair-evidence-audit
+          path: |
+            /tmp/audit-tests-*.log
+            /tmp/audit-comparison-*.json

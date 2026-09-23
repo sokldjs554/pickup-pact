@@ -144,7 +144,9 @@ def record_reconciliation(result: ReconcileResult) -> str:
 
 
 def rebuild_projection(result: ReconcileResult) -> dict:
-    """Explicitly rebuild the CQRS read model from the canonical event-time snapshot."""
+    """Rebuild only from executable evidence; reject before touching storage."""
+    if result.decision != "AUTO" or "MANUAL_REVIEW" in result.repairs:
+        raise ValueError("reconciliation evidence is not executable")
     import psycopg
 
     snapshot = result.canonical_state.model_dump(mode="json")

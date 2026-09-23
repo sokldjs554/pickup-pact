@@ -1,0 +1,100 @@
+openapi: 3.1.0
+info:
+  title: Pickup Pact Reconciliation Evidence Gate
+  version: 0.1.0
+  description: >-
+    Service-scoped contract for the draft repair-safety patch. A cancellation
+    request is not a committed cancellation. causation_id, when supplied here,
+    refers to an antecedent event in the supplied aggregate evidence.
+paths:
+  /api/v1/reconcile:
+    post:
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ReconcileRequest'}
+      responses:
+        '200':
+          description: Decision only; WAIT or MANUAL never authorizes automatic mutation
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ReconcileResult'}
+        '422': {description: Invalid evidence packet or multiple aggregates}
+  /api/v1/projections/rebuild:
+    post:
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ReconcileRequest'}
+      responses:
+        '200': {description: Projection rebuilt from executable evidence}
+        '409':
+          description: Evidence unresolved; persistence is not called
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [detail]
+                properties:
+                  detail:
+                    type: object
+                    required: [error, decision, blocking_reasons, missing_event_ids]
+                    properties:
+                      error: {type: string, const: unresolved_reconciliation_evidence}
+                      decision: {type: string, enum: [WAIT_FOR_EVIDENCE, MANUAL_REVIEW]}
+                      blocking_reasons: {type: array, items: {type: string}}
+                      missing_event_ids: {type: array, items: {type: string}}
+        '422': {description: Invalid evidence packet}
+components:
+  schemas:
+    ReconcileRequest:
+      type: object
+      required: [events]
+      properties:
+        events:
+          type: array
+          minItems: 1
+          items: {$ref: '#/components/schemas/EventEnvelope'}
+    EventEnvelope:
+      type: object
+      required: [event_id, aggregate_id, event_type, occurred_at, received_at]
+      properties:
+        event_id: {type: string, minLength: 1}
+        aggregate_id: {type: string, minLength: 1}
+        event_type:
+          type: string
+          enum: [PickupSlotHeld, PaymentAuthorized, CommitmentConfirmed, CommitmentCancelled, SettlementPosted, RewardGranted, CapacityRevised, PickupRescheduled, PickupPactIssued, PickupPactRenegotiated, PickupPactBreached, PickupClaimed, SettlementReversed, RewardReversed]
+        occurred_at: {type: string, format: date-time}
+        received_at: {type: string, format: date-time}
+        correlation_id: {type: [string, 'null']}
+        causation_id: {type: [string, 'null']}
+        schema_version: {type: integer, minimum: 1, default: 1}
+        payload: {type: object}
+    ReconcileResult:
+      type: object
+      required: [aggregate_id, receive_order_state, canonical_state, anomalies, repairs, duplicate_event_ids, evidence_event_ids, decision, blocking_reasons, missing_event_ids]
+      properties:
+        aggregate_id: {type: string}
+        receive_order_state: {$ref: '#/components/schemas/Snapshot'}
+        canonical_state: {$ref: '#/components/schemas/Snapshot'}
+        decision: {type: string, enum: [AUTO, WAIT_FOR_EVIDENCE, MANUAL_REVIEW]}
+        blocking_reasons: {type: array, items: {type: string}}
+        missing_event_ids: {type: array, items: {type: string}}
+        anomalies: {type: array, items: {type: string}}
+        repairs:
+          type: array
+          items: {type: string, enum: [NO_OP_DUPLICATE, REBUILD_PROJECTION, REVERSE_SETTLEMENT, REVERSE_REWARD, RESLOT_REVIEW, MANUAL_REVIEW]}
+        duplicate_event_ids: {type: array, items: {type: string}}
+        evidence_event_ids: {type: array, items: {type: string}}
+    Snapshot:
+      type: object
+      properties:
+        status: {type: string, description: UNRESOLVED is diagnostic only and must not be persisted as an automatic rebuild}
+        payment_authorized: {type: boolean}
+        settled: {type: boolean}
+        rewarded: {type: boolean}
+        capacity_revision: {type: integer}
+        settlement_post_count: {type: integer}
+        reward_post_count: {type: integer}

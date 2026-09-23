@@ -73,3 +73,6 @@ class ReconcileResult(BaseModel):
     repairs: list[RepairType]
     duplicate_event_ids: list[str]
     evidence_event_ids: list[str]
+    decision: Literal["AUTO", "WAIT_FOR_EVIDENCE", "MANUAL_REVIEW"] = "AUTO"
+    blocking_reasons: list[str] = Field(default_factory=list)
+    missing_event_ids: list[str] = Field(default_factory=list)

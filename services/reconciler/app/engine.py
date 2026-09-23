@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import defaultdict
 
 from .models import EventEnvelope, ReconcileRequest, ReconcileResult, Snapshot
+from .evidence_order import causal_order
 
 _EVENT_PRIORITY = {
     "PickupSlotHeld": 10,
@@ -73,26 +74,121 @@ def _fold(events: list[EventEnvelope], *, count_duplicates: bool = False) -> tup
 
 
 def reconcile(request: ReconcileRequest) -> ReconcileResult:
-    original=request.events; unique,duplicate_ids,conflicting_duplicate=_unique_by_event_id(original)
+    original = request.events
+    unique, duplicate_ids, conflicting_duplicate = _unique_by_event_id(original)
     receive_order = [
-        event
-        for _, event in sorted(
-            enumerate(original),
-            key=lambda pair: (pair[1].received_at, pair[0]),
+        event for _, event in sorted(
+            enumerate(original), key=lambda pair: (pair[1].received_at, pair[0])
         )
     ]
-    receive_state, receive_anomalies = _fold(receive_order, count_duplicates=True)
-    canonical_order=sorted(unique,key=lambda e:(e.occurred_at,_EVENT_PRIORITY.get(e.event_type,999),e.event_id)); canonical_state,canonical_anomalies=_fold(canonical_order)
-    anomalies=[]; evidence=set(); repairs=set()
-    if duplicate_ids: anomalies.append("duplicate_event_delivery"); evidence.update(duplicate_ids); repairs.add("NO_OP_DUPLICATE")
-    if conflicting_duplicate: anomalies.append("conflicting_duplicate_payload"); repairs.add("MANUAL_REVIEW")
-    if receive_state != canonical_state: anomalies.append("receive_order_projection_drift"); repairs.add("REBUILD_PROJECTION")
-    anomalies.extend(x for x in canonical_anomalies if x not in anomalies); anomalies.extend(x for x in receive_anomalies if x not in anomalies)
-    cancels=[e for e in canonical_order if e.event_type=="CommitmentCancelled"]; settlements=[e for e in canonical_order if e.event_type=="SettlementPosted"]; rewards=[e for e in canonical_order if e.event_type=="RewardGranted"]
+    # Retained for compatibility as a deliberately naive diagnostic projection.
+    # It is NOT a benchmark baseline and never authorizes a financial repair.
+    receive_state, _ = _fold(receive_order, count_duplicates=True)
+    ordered = causal_order(
+        unique,
+        key=lambda e: (e.occurred_at, _EVENT_PRIORITY.get(e.event_type, 999), e.event_id),
+    )
+    canonical_state, canonical_anomalies = _fold(ordered.events)
+    anomalies: list[str] = []
+    evidence: set[str] = set()
+    repairs: set[str] = set()
+    manual: list[str] = []
+
+    if duplicate_ids:
+        anomalies.append("duplicate_event_delivery")
+        evidence.update(duplicate_ids)
+        repairs.add("NO_OP_DUPLICATE")
+    if conflicting_duplicate:
+        manual.append("conflicting_duplicate_payload")
+    if ordered.cyclic_ids:
+        manual.append("causal_cycle")
+        evidence.update(ordered.cyclic_ids)
+    if ordered.missing_ids:
+        anomalies.append("missing_causal_evidence")
+        evidence.update(e.event_id for e in unique if e.causation_id in ordered.missing_ids)
+    if ordered.clock_conflict_ids:
+        anomalies.append("event_time_causality_conflict")
+        evidence.update(ordered.clock_conflict_ids)
+    if receive_state != canonical_state:
+        anomalies.append("receive_order_projection_drift")
+        repairs.add("REBUILD_PROJECTION")
+    # A receive-time payment gap is not a canonical payment failure once the
+    # authorization evidence is present and ordered before confirmation.
+    anomalies.extend(x for x in canonical_anomalies if x not in anomalies)
+
+    cancels = [e for e in unique if e.event_type == "CommitmentCancelled"]
+    claims = [e for e in unique if e.event_type == "PickupClaimed"]
+    settlements = [e for e in unique if e.event_type == "SettlementPosted"]
+    rewards = [e for e in unique if e.event_type == "RewardGranted"]
+    if cancels and claims:
+        # Both are committed terminal facts. Timestamp order cannot arbitrate
+        # an invalid cross-context transition; this requires authoritative review.
+        manual.append("conflicting_terminal_facts")
+        evidence.update(e.event_id for e in cancels + claims)
+
+    def after_cancel(cancel: EventEnvelope, posting: EventEnvelope) -> bool:
+        if ordered.precedes(cancel.event_id, posting.event_id):
+            return True
+        if ordered.precedes(posting.event_id, cancel.event_id):
+            return False
+        if cancel.occurred_at == posting.occurred_at:
+            if "ambiguous_financial_order" not in manual:
+                manual.append("ambiguous_financial_order")
+            evidence.update((cancel.event_id, posting.event_id))
+            return False
+        # Legacy event-time policy for unrelated events: this assumes comparable
+        # producer clocks. No arbitrary cross-system clock-order guarantee.
+        return cancel.occurred_at < posting.occurred_at
+
     if cancels:
-        cancel=min(cancels,key=lambda e:e.occurred_at); bad_settlements=[e for e in settlements if cancel.occurred_at<=e.occurred_at]; bad_rewards=[e for e in rewards if cancel.occurred_at<=e.occurred_at]
-        if bad_settlements and canonical_state.settled: anomalies.append("settlement_posted_after_prior_cancellation"); evidence.update([cancel.event_id,*[e.event_id for e in bad_settlements]]); repairs.add("REVERSE_SETTLEMENT")
-        if bad_rewards and canonical_state.rewarded: anomalies.append("reward_granted_after_prior_cancellation"); evidence.update([cancel.event_id,*[e.event_id for e in bad_rewards]]); repairs.add("REVERSE_REWARD")
-    if "confirmed_promise_exceeds_revised_capacity" in anomalies: repairs.add("RESLOT_REVIEW"); evidence.update(e.event_id for e in canonical_order if e.event_type=="CapacityRevised")
-    if "confirmed_without_payment_authorization" in anomalies: repairs.add("MANUAL_REVIEW"); evidence.update(e.event_id for e in canonical_order if e.event_type=="CommitmentConfirmed")
-    return ReconcileResult(aggregate_id=original[0].aggregate_id,receive_order_state=receive_state,canonical_state=canonical_state,anomalies=anomalies,repairs=[r for r in _REPAIR_ORDER if r in repairs],duplicate_event_ids=duplicate_ids,evidence_event_ids=sorted(evidence))
+        for postings, active, anomaly, repair in (
+            (settlements, canonical_state.settled,
+             "settlement_posted_after_prior_cancellation", "REVERSE_SETTLEMENT"),
+            (rewards, canonical_state.rewarded,
+             "reward_granted_after_prior_cancellation", "REVERSE_REWARD"),
+        ):
+            invalid = [post for post in postings if any(after_cancel(c, post) for c in cancels)]
+            if invalid and active:
+                anomalies.append(anomaly)
+                evidence.update(e.event_id for e in cancels + invalid)
+                repairs.add(repair)
+
+    if "confirmed_promise_exceeds_revised_capacity" in canonical_anomalies:
+        repairs.add("RESLOT_REVIEW")
+        evidence.update(e.event_id for e in unique if e.event_type == "CapacityRevised")
+    if "confirmed_without_payment_authorization" in canonical_anomalies:
+        manual.append("confirmed_without_payment_authorization")
+        evidence.update(e.event_id for e in unique if e.event_type == "CommitmentConfirmed")
+
+    decision = "AUTO"
+    blockers = list(dict.fromkeys(manual))
+    if blockers:
+        decision = "MANUAL_REVIEW"
+    elif ordered.missing_ids:
+        decision = "WAIT_FOR_EVIDENCE"
+    if ordered.missing_ids:
+        blockers.append("missing_causal_evidence")
+    for blocker in blockers:
+        if blocker not in anomalies:
+            anomalies.append(blocker)
+
+    if decision != "AUTO":
+        # Fail closed: a manual/wait marker must NEVER coexist with executable
+        # financial or projection-rebuild instructions. Preserve the old
+        # MANUAL_REVIEW repair for legacy consumers; decision distinguishes wait.
+        repairs.intersection_update({"NO_OP_DUPLICATE"})
+        repairs.add("MANUAL_REVIEW")
+        canonical_state = canonical_state.model_copy(update={"status": "UNRESOLVED"})
+
+    return ReconcileResult(
+        aggregate_id=original[0].aggregate_id,
+        receive_order_state=receive_state,
+        canonical_state=canonical_state,
+        anomalies=anomalies,
+        repairs=[repair for repair in _REPAIR_ORDER if repair in repairs],
+        duplicate_event_ids=duplicate_ids,
+        evidence_event_ids=sorted(evidence),
+        decision=decision,
+        blocking_reasons=blockers,
+        missing_event_ids=ordered.missing_ids,
+    )
