@@ -27,6 +27,7 @@ def test_partial_cancellation_without_explicit_allocation_is_blocked():
         'payload': {'scope': 'PARTIAL', 'amount': '3000'},
     })
     req.events[4] = req.events[4].model_copy(update={'causation_id': 'partial-cancel'})
+    req.events[5] = req.events[5].model_copy(update={'causation_id': 'confirm'})
     assert_blocked(req, 'partial_cancellation_allocation_required')
 
 
@@ -44,6 +45,7 @@ def test_partial_cancellation_executes_only_explicit_source_allocation():
         },
     })
     req.events[4] = req.events[4].model_copy(update={'causation_id': 'partial-cancel'})
+    req.events[5] = req.events[5].model_copy(update={'causation_id': 'confirm'})
     result = reconcile(req)
     assert result.decision == 'AUTO'
     assert [a.model_dump() for a in result.financial_actions] == [{
@@ -89,6 +91,7 @@ def test_partial_allocation_cannot_exceed_open_balance():
         },
     })
     req.events[4] = req.events[4].model_copy(update={'causation_id': 'partial-cancel'})
+    req.events[5] = req.events[5].model_copy(update={'causation_id': 'confirm'})
     assert_blocked(req, 'partial_allocation_exceeds_open_balance')
 
 
