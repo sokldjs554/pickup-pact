@@ -35,7 +35,7 @@ jobs:
 
       - name: Start demo backend
         run: |
-          uvicorn demo.main:app --host 127.0.0.1 --port 10000 >/tmp/pickup-pact-demo.log 2>&1 &
+          uvicorn demo.review_app:app --host 127.0.0.1 --port 10000 >/tmp/pickup-pact-demo.log 2>&1 &
           echo $! >/tmp/pickup-pact-demo.pid
           for attempt in $(seq 1 30); do
             if curl --fail --silent http://127.0.0.1:10000/health >/dev/null; then

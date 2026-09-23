@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import AwareDatetime, BaseModel, Field, model_validator
 
 EventType = Literal[
     "PickupSlotHeld",
@@ -36,12 +36,23 @@ class EventEnvelope(BaseModel):
     event_id: str = Field(min_length=1)
     aggregate_id: str = Field(min_length=1)
     event_type: EventType
-    occurred_at: datetime
-    received_at: datetime
+    occurred_at: AwareDatetime
+    received_at: AwareDatetime
     correlation_id: str | None = None
     causation_id: str | None = None
     schema_version: int = Field(default=1, ge=1)
     payload: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def validate_capacity_fields(self) -> "EventEnvelope":
+        for key in ("capacity_units", "available_units", "revision"):
+            if key not in self.payload:
+                continue
+            value = self.payload[key]
+            minimum = 0 if key == "available_units" else 1
+            if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
+                raise ValueError(f"{key} must be an integer >= {minimum}")
+        return self
 
 
 class ReconcileRequest(BaseModel):
@@ -73,3 +84,6 @@ class ReconcileResult(BaseModel):
     repairs: list[RepairType]
     duplicate_event_ids: list[str]
     evidence_event_ids: list[str]
+    decision: Literal["AUTO", "WAIT_FOR_EVIDENCE", "MANUAL_REVIEW"] = "AUTO"
+    blocking_reasons: list[str] = Field(default_factory=list)
+    missing_event_ids: list[str] = Field(default_factory=list)

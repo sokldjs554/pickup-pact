@@ -7,7 +7,7 @@ python-test:
 	python3 -m pytest -q services/reconciler/tests
 
 demo-test:
-	python3 -m pytest -q demo/test_demo.py
+	python3 -m pytest -q demo/test_demo.py demo/test_repair_integration.py
 
 ops-test:
 	python3 -m pytest -q services/ops-console/tests
@@ -26,7 +26,7 @@ evidence:
 
 docker-check:
 	docker compose config >/dev/null
-	docker compose build commitment ledger reconciler ops-console
+	docker compose build commitment merchant-fulfillment ledger reconciler ops-console
 	docker build -f Dockerfile.demo -t pickup-pact-demo:local-check .
 
 test: verify python-test demo-test ops-test jvm-test evidence

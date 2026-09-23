@@ -1,259 +1,107 @@
 # Pickup Pact
 
-**패스오더 같은 스마트오더의 ‘원하는 시간 픽업’을 다시 만드는 대신, 결제 완료 주문이 점주 앱에 누락·중복 없이 전달되고 JIT 제조·조리완료·수령·정산까지 고객 약속이 깨지지 않도록 보호하는 Merchant Fulfillment Reliability 백엔드 프로젝트입니다.**
+**주문 취소·정산 증거가 늦게 오거나 서로 모순될 때, 자동 복구를 허용할지·기다릴지·차단할지 판단하고 승인된 전표만 모의 원장에 기록하는 백엔드 검증 프로젝트입니다.**
 
-**Live Demo:** <https://pickup-pact-demo.onrender.com>  
-**Public demo engine:** `services/reconciler/app/engine.py` · 합성 데이터만 사용
+[취소·정산 복구 작업대](https://pickup-pact-demo.onrender.com/repair-lab) · [기존 주문·매장 데모](https://pickup-pact-demo.onrender.com) · [실행·검증 방법](docs/repair-workbench.md)
 
-### 핵심 문제
+공개 주소의 현재 배포 커밋은 `/health`의 `release_commit`으로 확인합니다. PR 브랜치 변경은 병합·배포 전까지 공개 화면에 반영되지 않습니다.
 
-고객이 13:30 픽업을 선택했다는 사실만 저장해서는 제품 약속이 완성되지 않습니다. **결제된 주문이 점주 앱에 실제로 도착했는지, 재접속·Kafka 재전달에도 POS/알림이 한 번만 발생하는지, 너무 일찍 만들어 품질이 떨어지지 않는지, 늦은 조리완료가 고객 보상까지 이어지는지**가 매장 실행 단계의 핵심 문제입니다.
+## 먼저 확인할 범위
 
-Pickup Pact는 주문 확정 이벤트를 별도 **Merchant Fulfillment bounded context**로 전달합니다. 이 context는 DB inbox로 Kafka 재전달을 dedupe하고, ACK 전 delivery를 재접속 시 다시 제공하며, `(order_id, effect_type)` unique boundary로 POS 출력·신규주문 알림을 정확히 한 번의 비즈니스 effect로 만듭니다. 픽업 시각과 workload에서는 제조 시작 가능 시각·목표 READY·최종 보장 시각을 역산합니다.
+**실제 결제·환불을 실행하지 않습니다.** 공개 화면은 고정된 합성 주문을 사용하는 검증 환경입니다. 패스오더 운영 데이터·비공개 아키텍처·실제 지연 보상 정책을 재현했다고 주장하지 않습니다.
 
-Capacity reservation과 signed quote는 이 약속을 받을 수 있는지 결정하는 **admission layer**이고, 아래 Pickup Pact Guarantee는 실행 결과가 약속을 넘었을 때 책임지는 **customer promise layer**입니다.
+예약 픽업·제조 시점 관리·적립 기능 자체는 이미 상용 서비스에 있습니다. 이 저장소는 해당 기능의 시장 독창성이나 다른 지원자보다 우수함을 주장하지 않습니다. 무엇을 재현했고 어디서 잘못 판단했으며 어떤 조건에서 자동 처리를 거부하는지를 코드와 반복 실행 결과로 보여줍니다.
 
-### Pickup Pact Guarantee
+## 실제로 눌러보는 흐름
 
-고객이 선택한 슬롯의 주문을 확정하면 단순 ETA가 아니라 **선택 시각~+3분 보장 · 초과 시 500P 자동 보상**이라는 `PickupPactIssued` 계약을 발급합니다. 이후 매장 처리량이 줄어 새 시간이 필요해지면 기존 약속을 덮어쓰지 않고 고객 동의와 함께 `PickupPactRenegotiated` v2를 남깁니다. 새 보장까지 넘기면 `PickupPactBreached`와 500P `RewardGranted`가 자동 기록되고 Trust Receipt에 근거가 이어집니다.
+복구 작업대에서 **취소 전달 지연 → 계획 조회 → 전표·금액·단위 확인 → 승인 후 모의 기록 → 동일 승인 재전송**을 실행합니다.
 
-### 대표 장애 시나리오
+정산 9,000 KRW와 주문 적립 90 PTS는 서로 다른 전표입니다. 승인 시점의 증거 버전·해시와 서버에 저장한 계획이 맞을 때만 두 모의 조치를 기록합니다. 승인 뒤 응답을 잃어 같은 요청을 보내도 기존 결과를 반환합니다.
 
-고객이 **12:14:10에 9,000원짜리 12:30 픽업 주문을 취소**했지만 취소 메시지가 52초 늦게 도착합니다. 그 사이 점주 정산 9,000원과 고객 포인트 90P가 먼저 반영됩니다.
-
-Pickup Pact는 서버가 받은 순서만 믿지 않고 `occurred_at`과 `received_at`을 분리합니다. 그 결과 **취소가 실제로 정산보다 먼저 발생했다는 사실을 복원하고, 기존 금전 이력을 삭제하지 않은 채 정산 reversal과 포인트 회수 계획을 생성**합니다.
-
-이 주제를 선택한 이유는 주문/결제/정산/적립 같은 비즈니스 로직, Kafka 기반 비동기 처리, CQRS, Redis, 분산 트랜잭션과 데이터 정합성, 장애 추적이라는 페이타랩 백엔드 공고의 핵심 문제와 직접 연결되면서도 흔한 주문 CRUD/음식배달 MSA 클론과 다른 문제를 보여주기 위해서입니다.
-
-## 공개 데모: 손님용 스마트오더와 개발자 콘솔을 분리
-
-공개 URL의 기본 화면은 **가상 손님이 직접 사용하는 스마트오더 서비스**입니다. 개발자 콘솔이나 복구 시스템은 손님 화면에 노출하지 않습니다.
-
-### 손님용 스마트오더
-
-가상 매장과 메뉴를 실제 데모 API에서 불러옵니다. 방문자는 아래 흐름을 직접 눌러볼 수 있습니다.
-
-1. **매장 선택** — 근처 가상 카페 3곳 중 하나를 고릅니다.
-2. **메뉴 담기** — 아메리카노, 라떼, 샌드위치 등을 장바구니에 담습니다.
-3. **수량 변경 / 금액 확인** — 장바구니에서 수량과 총 금액이 실제로 바뀝니다.
-4. **픽업 시간 선택** — 브라우저는 SKU/수량만 보내고, 서버가 금액·제조 workload를 다시 계산해 현재 주문이 들어갈 수 있는 5분 슬롯을 반환합니다. 고객은 가능한 시간 중 하나를 직접 선택합니다.
-5. **주문하기** — core 경로는 signed quote + `Idempotency-Key`로 선택 슬롯 capacity를 HOLD한 뒤 주문 생성 → 결제 승인 → 픽업 확정을 수행합니다.
-6. **Pickup Pact 발급** — 확정 시 선택한 픽업 시간을 기준으로 v1 보장 구간과 500P 자동 보상 조건을 발급합니다.
-7. **주문 상태 확인** — 주문 접수 → 준비 중 → 픽업 준비 상태를 `내 주문`에서 확인합니다.
-8. **픽업 약속 보호·재합의** — 확정 이후 처리량이 줄면 capacity risk를 감지해 새 시간을 제안하고, 고객이 수락하면 `PickupRescheduled`와 v2 `PickupPactRenegotiated`가 남습니다. 새 보장까지 넘기면 `PickupPactBreached` 후 500P를 자동 적립합니다.
-9. **1회용 픽업 코드** — 픽업 준비가 되면 이름/전화번호 대신 주문별 4자리 코드를 보여줍니다. 정상 수령 시 `PickupClaimed`가 기록되고 같은 코드는 다시 사용할 수 없습니다.
-10. **Trust Receipt + 주문 내역** — 픽업 완료/취소 주문은 이력에 남고, 모바일 영수증에서 슬롯 선택·Pact 버전·자동 보상·결제·취소·포인트 결과를 한 번에 확인합니다.
-11. **주문 취소** — 손님은 단순한 취소 완료 화면만 봅니다. 데모 내부에서는 취소 메시지 지연과 잘못된 정산/포인트 상황을 재현하고 reconciliation + compensating repair를 자동 실행해 최종 순액을 맞춥니다.
-
-일반 사용자는 Kafka, CQRS, ledger, anomaly, repair command 같은 용어를 볼 필요가 없습니다. 해당 내용은 백엔드 검토용 **숨김 개발자 모드(`?dev=1`)** 에서만 확인합니다.
-
-이 프로젝트의 중심 차별점은 **Durable Merchant Intake + JIT Preparation + Pickup Pact Guarantee**입니다. 픽업 시간 선택 자체는 차별점으로 주장하지 않습니다. 대신 ACK 전 주문 재전달, exactly-once POS/알림 effect, 제조 시작 window, EARLY/LATE READY 판정, 제조 후 취소·시간변경 review, READY_LATE의 500P 자동 보상까지 하나의 fulfillment lifecycle로 연결합니다.
-
-### 기술 상세
-
-백엔드 면접관이나 개발자는 같은 세션에서 아래 운영 도구로 더 깊게 들어갈 수 있습니다.
-
-- **주문 흐름**: HOLD 주문, 결제 승인, 픽업 확정, 취소, 정상 정산/적립
-- **매장 운영**: durable delivery, reconnect/ACK, exact redelivery dedupe, POS/알림 effect, JIT 제조 시작, EARLY/LATE READY, 취소/시간변경 review
-- **매장 처리량**: reserved/available units, capacity revision, `AT_RISK`
-- **장애 주입**: 52초 지연 취소, exact Kafka redelivery, 동일 `event_id` 금액 충돌, 처리량 감소
-- **정합성 복구**: 실제 `services/reconciler/app/engine.py`, receive-time vs business-time, anomaly/evidence/repair proposal
-- **정산 · 감사**: settlement/reward/reversal ledger, net balance, projection rebuild, audit trail
-
-각 브라우저는 독립적인 demo session을 사용해 다른 방문자의 상태와 섞이지 않습니다. 공개 Render 인스턴스는 리뷰 편의를 위해 FastAPI + session-isolated in-memory sandbox로 동작합니다. Kafka/PostgreSQL/Redis/MongoDB/Elasticsearch 전체 topology가 공개 인스턴스에서 함께 실행된다고 주장하지 않습니다.
-
-대표 기술 흐름은 다음과 같습니다.
-
-```text
-정상 주문 확정
-  → 취소 메시지 52초 지연
-  → 그 사이 점주 정산 + 포인트 적립
-  → reconciliation
-  → REVERSE_SETTLEMENT + REVERSE_REWARD
-  → 샌드박스에 보상 계획 적용
-  → net settlement 0 / reward balance 0
-```
-
-로컬 실행:
-
-```bash
-pip install -r demo/requirements.txt
-pytest -q demo/test_demo.py
-uvicorn demo.main:app --host 0.0.0.0 --port 10000
-
-# 공개 데모와 같은 이미지
-docker build -f Dockerfile.demo -t pickup-pact-demo .
-docker run --rm -p 10000:10000 pickup-pact-demo
-```
-
-## 핵심 설계
-
-```mermaid
-flowchart LR
-    Client --> Commitment[Kotlin + Spring WebFlux<br/>Pickup Commitment]
-    Commitment --> Redis[(Redis<br/>atomic capacity lease)]
-    Commitment --> PG[(PostgreSQL<br/>aggregate + outbox)]
-    PG --> Relay[Transactional Outbox Relay]
-    Relay --> Kafka[(Kafka)]
-
-    Kafka --> Merchant[Java + Spring<br/>Merchant Fulfillment]
-    Merchant --> PG
-    Merchant --> FulfillmentKafka[(Fulfillment Events)]
-    FulfillmentKafka --> Commitment
-
-    Kafka --> Ledger[Java + Spring<br/>Double-entry Ledger]
-    Ledger --> PG
-
-    Kafka --> Reconciler[Python + FastAPI<br/>Temporal Reconciler]
-    Reconciler --> Mongo[(MongoDB<br/>raw evidence)]
-    Reconciler --> Elastic[(Elasticsearch<br/>incident index)]
-    Reconciler --> PG
-    Redis --> Celery[Celery Replay Worker]
-
-    Reconciler --> Repair[Deterministic Repair Plan]
-```
-
-### 시스템 불변식
-
-- 고객 admission은 **menu line items → server workload/price calculation → signed quote → 5분 slot 선택** 순서이며, HOLD API는 클라이언트가 직접 만든 capacity units를 신뢰하지 않습니다.
-- 동일 `Idempotency-Key` + 동일 요청의 HOLD 재시도는 같은 commitment를 반환하며 capacity를 다시 차감하지 않습니다.
-- 점주 주문은 `merchant_inbox_events.event_id`로 Kafka 재전달을 접고, ACK 전 delivery는 재접속 시 다시 읽을 수 있습니다.
-- POS 출력과 신규주문 알림은 `unique(order_id, effect_type)`으로 한 번의 비즈니스 effect만 생성합니다.
-- 제조 시작은 JIT window가 열리기 전에는 거절됩니다. READY가 너무 이르면 `READY_TOO_EARLY`, 보장 시각을 넘으면 `READY_LATE`를 남깁니다.
-- 제조가 시작된 뒤 취소·시간변경은 last-write-wins로 덮지 않고 review 상태/근거로 남깁니다.
-- `READY_LATE` fulfillment event는 Pickup Pact breach를 자동으로 일으키되 중복 신호는 보상을 두 번 만들지 않습니다.
-- 픽업 확정에는 **capacity lease + payment authorization**이 모두 필요합니다.
-- Redis Lua 경로에서는 동일 슬롯의 제조 capacity를 원자적으로 초과할 수 없습니다.
-- lease identity를 별도 Redis key로 저장해 취소/수령 API가 재시도되어도 같은 capacity를 두 번 반환하지 않습니다.
-- 같은 `event_id` + 같은 semantic fingerprint는 안전한 재전달로 간주해 financial side effect를 다시 만들지 않습니다.
-- 같은 `event_id` + 다른 fingerprint는 조용히 dedupe하지 않고 `ledger_conflicts`에 근거를 격리해 조회할 수 있습니다.
-- 취소가 뒤늦게 도착해도 이미 기록한 회계 이력을 삭제하지 않고 **compensating entry**를 생성합니다.
-- canonical state는 수신 순서가 아니라 business occurrence time과 근거 이벤트에서 재구성합니다.
-- `PickupPactBreached`는 동일 outbox row에서 결정적 REWARD 금융 이벤트로 파생되고, `PickupClaimed`는 SETTLEMENT 금융 이벤트로 파생됩니다. 보상은 **PTS**, 점주 정산은 **KRW**로 분리하며, 둘 다 Kafka consumer의 idempotent ledger 경계를 통과합니다.
-- AI는 사고 설명·테스트 생성·리뷰를 도울 수 있지만 금전 repair command를 직접 실행하지 못합니다.
-
-## 공고 스택 → 실제 구현
-
-| 공고 기술 | 프로젝트에서 맡은 역할 |
+| 샘플 상황 | 처리 |
 |---|---|
-| Kotlin / Spring WebFlux | Pickup Commitment aggregate와 reactive API |
-| Java / Spring | Merchant Fulfillment intake/JIT lifecycle + 이중 분개 Ledger, semantic idempotency, conflict quarantine |
-| Python / FastAPI | event-time reconciliation engine, 공개 데모 API |
-| Flask | 원본 ops-console 구현 경로의 운영 콘솔; 공개 데모는 배포 단순화를 위해 FastAPI 단일 프로세스로 구성 |
-| PostgreSQL | commitment/outbox, merchant inbox/delivery/effects/JIT state, ledger, reconciliation audit |
-| MongoDB | 재생 가능한 raw event evidence archive |
-| Redis | 매장별 capacity policy + Lua atomic lease + lease identity + Celery broker |
-| Elasticsearch | incident 검색/포렌식 index |
-| Kafka | commitment → merchant fulfillment → promise feedback + financial domain events |
-| Celery | 비동기 replay worker와 retry/backoff |
-| DDD / EDA / CQRS | Pickup Commitment + Merchant Fulfillment + Financial Ledger contexts, domain events, canonical projection rebuild/query |
-| Docker / Kubernetes | 서비스 이미지, Compose, K8s deployment |
-| AWS | RDS PostgreSQL · ElastiCache Redis · MSK Serverless Terraform blueprint |
-| Jenkins | JVM/Python/Docker 검증 pipeline |
-| Datadog / Elastic APM | anomaly monitor와 cross-service trace contract |
-| Claude Code / Cursor | `CLAUDE.md`, `.cursor/rules/project.mdc` |
-| ChatGPT / Claude / Gemini | provider-neutral incident review prompt/eval contract |
-| n8n / Make | CI regression triage automation template |
-| Slack / Jira / Notion | 자동화의 선택적 destination; 실제 계정 연동을 했다고 주장하지 않음 |
-| REST / OpenAPI / AsyncAPI | commitment tracking, ledger posting/history/conflict, reconciliation HTTP 및 event contract |
+| 확정 취소 뒤 정산·주문 적립 | 지원 범위와 증거가 맞으면 복구 계획 생성 |
+| 원인 이벤트가 아직 미도착 | `WAIT_FOR_EVIDENCE`, 필요한 ID를 보여주고 조치 금지 |
+| 같은 정산 ID에 다른 금액 | `MANUAL_REVIEW`, 충돌한 증거를 보존하고 조치 금지 |
+| 취소 확정과 수령 완료가 모두 존재 | 시각으로 승자를 정하지 않고 검토 |
+| 일부 취소·복수 정산 전표 | 금액 귀속을 추정하지 않고 자동 처리 금지 |
+| 계획 조회 후 새 충돌 증거 도착 | 과거 승인 요청을 HTTP 409로 거절 |
+| 동일 승인 동시·반복 요청 | 같은 전표의 모의 조치는 한 번만 기록 |
 
-상세 매핑: [docs/jd-traceability.md](docs/jd-traceability.md)
+현재 복구 정책은 **전체 취소·단일 정산/주문 적립 전표**에 한정됩니다. 부분환불과 여러 전표의 배분을 구현한 척하지 않고 명시적으로 차단합니다. 보상 성격의 포인트도 주문 적립과 같다고 가정해 자동 회수하지 않습니다.
 
-## 검증된 합성 실험
+## 구현의 경계
 
-초기 로컬 구현에서 seed 42로 **20,000 orders / 101,588 events**를 생성해 단순 receive-order 처리와 정합성 모델을 비교했습니다.
+- **증거 판정:** 기존 `services/reconciler/app/engine.py`를 사용합니다. 명시적인 원인 이벤트 ID를 우선하며, 누락·순환·내용 충돌은 자동 조치를 막습니다. 서로 무관한 생산자의 임의 시계 오차까지 해결하지는 않습니다.
+- **금액·단위:** 부정확한 금액, KRW/PTS 혼동, 부분 역분개, 잘못된 원본 전표 참조를 차단합니다.
+- **승인 계획:** 서버가 전표 ID·금액·단위·증거 해시·버전을 저장합니다. 클라이언트의 금액 수정이나 오래된 계획은 승인되지 않습니다.
+- **내구성:** SQLite 트랜잭션 안에서 계획 적용·모의 조치·모의 역분개 증거를 함께 커밋합니다. 같은 저장소 안의 버전 검사이며 분산 시스템 전체의 전역 버전 제어는 아닙니다.
+- **조회용 모델:** 미해결 증거는 기존 projection 재생성 API와 저장 함수 모두에서 거절됩니다. 기존 PostgreSQL projection의 오래된 성공 결과 덮어쓰기 방지까지 구현한 것은 아닙니다.
 
-| correctness fault | naive | Pickup Pact model |
-|---|---:|---:|
-| capacity oversubscribed units | 194 | **0** |
-| duplicate financial posts | 1,207 | **0** |
-| late-cancel stale financial orders | 381 | **0** |
-| deterministic repair commands | - | 762 |
+## 기존 시스템과의 관계
 
-5개 seed 총 100,000 orders에서도 세 오류 유형은 모델 경로에서 0이었습니다. 원본 결과는 [artifacts/consistency-benchmark.json](artifacts/consistency-benchmark.json), [artifacts/consistency-matrix.json](artifacts/consistency-matrix.json)에 보존했습니다.
+기존 코드도 유지합니다. Kotlin/Spring WebFlux의 signed quote·capacity HOLD, Java/Spring의 merchant fulfillment와 ledger, PostgreSQL/Redis/Kafka, Python/FastAPI reconciler, Flask 운영 콘솔, CQRS 재생, SQL 실행계획 검증이 있습니다.
 
-**이 수치는 합성 correctness 실험이며 production TPS/SLA 주장이 아닙니다.**
+공개 Render는 이 전체 Docker 구성을 실행하지 않습니다. 기존 주문·점주 화면은 세션별 메모리 모의 환경이고, 새 복구 작업대는 SQLite의 고정 샘플·모의 기록을 사용합니다. **`POS_PRINT`·알림은 중복 없는 의도 기록을 검증한 것이며 실제 프린터 출력·알림 발송의 정확히 한 번 실행을 증명한 것이 아닙니다.**
 
-## Pickup Policy Lab — 차별점 검증
+`demo/main.py`는 공개 앱을 조합합니다. 기존 고객·점주 구현은 내용 변경 없이 `demo/customer_app.py`로 분리했습니다. 기존 실행 명령 `uvicorn demo.main:app`도 새 `/repair-lab`을 제공합니다.
 
-`scripts/pickup_policy_lab.py`는 같은 합성 주문 20,000건을 **stale snapshot admission**과 **capacity-aware admission**에 각각 replay합니다.
+## 같은 조건의 비교
 
-| 정책 결과 | Baseline | Pickup Pact |
-|---|---:|---:|
-| baseline admitted / offerable within window | 19,751 | 20,000 |
-| baseline rejected / no feasible slot | 249 | 0 |
-| overbooked slots | 96 | 0 |
-| oversubscribed units | 213 | 0 |
-| later-slot re-offers required | — | 532 |
+원본 `801755bb`, 별도 보수적 기준 구현, 수정한 실제 엔진에 **13개 합성 상황 × 입력 순서 5가지**를 적용했습니다.
 
-Pickup Pact의 0 overbooking은 공짜가 아닙니다. 이 workload에서는 532건이 선택 슬롯에 바로 들어가지 못해 다음 가능한 5분 슬롯을 고객에게 다시 제안해야 했습니다. 따라서 포트폴리오에서는 **“항상 더 빠르다”가 아니라 “약속할 수 없는 시간을 과예약하지 않고, 필요하면 사용자에게 다음 가능한 시간을 제시한다”**는 trade-off로 설명합니다.
+| 지표 | 원본 | 보수적 기준 | 수정 엔진 |
+|---|---:|---:|---:|
+| 기대 판정·조치 집합 일치 | 25/65 | 65/65 | 65/65 |
+| 허용되지 않은 금융 조치 제안 | 30/65 | 0/65 | 0/65 |
+| 필요한 조치 누락 | 5/65 | 0/65 | 0/65 |
 
-이 결과는 결정적 합성 policy replay이며 실제 패스오더 주문량·매출·SLA를 의미하지 않습니다. 원본: [artifacts/pickup-policy-lab.json](artifacts/pickup-policy-lab.json)
+**기준과 수정본은 동률입니다.** 65종 운영 사고나 실제 환불 피해율이 아니라 13종의 입력 순서를 바꾼 판정 실험입니다. 신규 금액·승인·API 회귀 테스트는 이 표와 별도입니다. 비교 실행기는 원본 파일의 Git blob hash와 기대 판정도 검사합니다.
 
-## 저장소 구조
+## 실행
 
-```text
-demo/                         # 면접관용 FastAPI 운영 샌드박스 + session state
-services/
-  commitment-service/         # Kotlin + Spring WebFlux
-  merchant-fulfillment-service/ # Java + Spring · durable intake / ACK / JIT
-  ledger-service/             # Java + Spring
-  reconciler/                 # Python + FastAPI + Celery
-contracts/                    # OpenAPI / AsyncAPI
-sql/                          # PostgreSQL schema
-infra/
-  k8s/                        # Kubernetes
-  aws/terraform/              # RDS / ElastiCache / MSK blueprint
-  observability/              # Datadog / Elastic APM
-automation/                   # n8n / Make
-ai/                           # incident triage prompt + eval cases
-artifacts/                    # measured synthetic evidence
-```
-
-## 개발/검증
-
-Fast path:
+Python 3.12 이상을 사용합니다. 실제 API 키가 필요하지 않습니다.
 
 ```bash
-# interviewer demo
-pip install -r demo/requirements.txt
-pytest -q demo/test_demo.py
-uvicorn demo.main:app --host 0.0.0.0 --port 10000
+python -m pip install -r requirements-workbench.txt
+PYTHONPATH=.:services/reconciler python -m app.workbench --db .repair-review/review.sqlite --port 8765
 ```
 
-Core checks:
+브라우저에서 `http://127.0.0.1:8765/repair-lab`을 엽니다. Windows PowerShell은 `./run-workbench.ps1`, Linux는 `./run-workbench.sh`도 사용할 수 있습니다.
+
+기존 주문·매장 화면까지 함께 실행하려면:
 
 ```bash
-pip install -e "services/reconciler[dev]"
-pytest -q services/reconciler/tests
-mvn -B test
+python -m pip install -r demo/requirements.txt
+python -m uvicorn demo.main:app --host 127.0.0.1 --port 10000
 ```
 
-Full local topology:
+로컬에서 샘플 DB를 유지하려면 `REPAIR_REVIEW_DB`를 지정합니다. 공개 무료 Render의 `/tmp` DB는 재배포·인스턴스 교체 후 사라질 수 있습니다. 영구 저장 서비스라고 설명하지 않습니다.
+
+## 검증
 
 ```bash
-cp .env.example .env
-docker compose up --build
+PYTHONPATH=.:services/reconciler python -m pytest -q services/reconciler/tests demo/test_demo.py demo/test_repair_integration.py
+PYTHONPATH=.:services/reconciler python -m scripts.repair_audit.run --output comparison.json
+python -m pip install playwright
+python -m playwright install chromium
+PYTHONPATH=.:services/reconciler python -m scripts.repair_audit.verify_workbench_browser --app-entry demo.main:app --repeat 3
+mvn -B -DskipTests=false test
 ```
 
-GitHub Actions는 Python reconciler, interviewer demo tests/live smoke, Docker build, Kotlin/Java Maven tests, OpenAPI/AsyncAPI parse, Terraform validate를 검증합니다. Jenkinsfile도 같은 핵심 검증 경계를 사용합니다.
+`repair-workbench` CI는 전체 Python 테스트와 비교를 세 번 반복하고, 독립 실행과 통합 실행 각각 데스크톱·모바일을 실제 HTTP로 검증합니다. 코드 원본 ZIP, 커밋 ID, 로그·결과 JSON·캡처를 같은 실행의 artifact로 보관합니다. `ci`와 `release-gate`는 JVM·Docker topology·SQL·설정 검증을 별도로 수행합니다. 합성 승인 기록의 강제 종료 시험을 Kafka/실제 금융 장애 검증으로 대체해 설명하지 않습니다.
 
-## 왜 이 주제인가
+## 공고와 연결되는 증거
 
-공개 주문 백엔드 포트폴리오는 `order/payment/restaurant + Kafka + Saga/Outbox/CQRS` 조합이 이미 흔하고, 실제 패스오더 고객 앱에도 원하는 픽업 시간을 직접 고르는 기능이 이미 존재합니다. 그래서 이 프로젝트는 예약 UI를 차별점으로 삼지 않습니다. **결제된 주문이 점주 앱에 안정적으로 도착하고, 재접속·중복 이벤트·제조 시점·조리완료·취소 경합을 거쳐도 고객이 고른 시간 약속과 금융 정합성이 유지되는 문제**를 중심에 둡니다.
+| 공고 역량 | 확인할 코드·문서 |
+|---|---|
+| 복잡한 비즈니스 모델링 | 취소 요청과 확정 사실 구분, 금액·단위·전표 귀속 제한, `financial_scope.py` |
+| REST/OpenAPI | 구체적인 요청·응답 모델, 403/404/409/415/422, `test_contract_consistency.py` |
+| 데이터 정합성·재시도 | `repair_review_store.py`, 동시 승인·응답 손실·강제 종료 시험 |
+| Kafka/DDD/CQRS | 기존 commitment/merchant/ledger 서비스와 전체 Docker 검증 |
+| SQL 실행계획 | `scripts/capture_postgres_plan.py`, 합성 PostgreSQL 실행계획과 인덱스 비교 |
+| AI 결과의 반복 개선 | 기존 통과 테스트에 반례 추가, 실패 관찰, 수정·회귀 기록, `docs/ai-iteration-log.md` |
 
-특정 회사의 비공개 시스템을 추정하거나 복제하지 않았습니다. 공개 채용 요구와 일반적인 스마트오더 장애 조건에서 독립적으로 설계했습니다.
+실제 AWS·Datadog·ElasticAPM·n8n/Make 운영, PM/디자이너와의 팀 협업, 실물 POS·PG 실행은 문서·설정만으로 실무 경험이라고 주장하지 않습니다.
 
-제품 조사와 선택 근거: [docs/topic-research.md](docs/topic-research.md) · [docs/merchant-fulfillment.md](docs/merchant-fulfillment.md)
-
-## 범위와 한계
-
-- 실제 고객·점주·결제 데이터는 사용하지 않았습니다.
-- AWS/Kubernetes/Datadog/Elastic APM 설정은 실행 가능한 배포/관측 blueprint이며, 별도 실행 증거가 없는 외부 운영 환경을 실제 운영했다고 표현하지 않습니다.
-- Slack/Jira/Notion/n8n/Make는 integration artifact이며 실제 SaaS 계정 연결을 주장하지 않습니다.
-- 공개 데모는 빠른 검토를 위해 FastAPI 단일 프로세스로 배포하지만, anomaly/repair 계산은 실제 `services/reconciler/app/engine.py`를 사용합니다. 전체 Kafka/PostgreSQL/Redis/MongoDB/Elasticsearch topology가 공개 데모에서 함께 기동된다고 주장하지 않습니다.
-- AI 결과는 advisory-only이고 정산·포인트·환불 repair는 deterministic boundary에서만 생성합니다.
-
-## License
-
-All rights reserved. 별도의 오픈소스 라이선스를 부여하지 않습니다.
+자세한 범위: [복구 작업대](docs/repair-workbench.md) · [최초 반례와 비교](docs/repair-evidence-audit.md) · [아키텍처](docs/architecture.md) · [공고 대조](docs/jd-traceability.md)

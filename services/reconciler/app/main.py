@@ -117,6 +117,16 @@ def rebuild_projection_api(request: ReconcileRequest) -> dict:
     from .persistence import rebuild_projection
 
     result = reconcile(request)
+    if result.decision != "AUTO" or "MANUAL_REVIEW" in result.repairs:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "unresolved_reconciliation_evidence",
+                "decision": result.decision,
+                "blocking_reasons": result.blocking_reasons,
+                "missing_event_ids": result.missing_event_ids,
+            },
+        )
     projection = rebuild_projection(result)
     return {
         "aggregate_id": result.aggregate_id,

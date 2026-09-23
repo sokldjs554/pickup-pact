@@ -14,6 +14,10 @@ required = [
     ".github/workflows/live-demo-smoke.yml",
     ".github/workflows/ui-e2e.yml",
     "demo/index.html",
+    "demo/main.py",
+    "demo/customer_app.py",
+    "demo/test_repair_integration.py",
+    "services/reconciler/app/workbench.py",
     "demo/e2e/operator-flow.spec.js",
     "demo/VERIFICATION.md",
     "docker-compose.yml",
@@ -100,7 +104,7 @@ persistence = (ROOT / "services/reconciler/app/persistence.py").read_text()
 explain = (ROOT / "sql/explain/commitment_timeline.sql").read_text()
 architecture = (ROOT / "docs/architecture.md").read_text()
 domain_model = (ROOT / "docs/domain-model.md").read_text()
-demo = (ROOT / "demo/main.py").read_text()
+demo = (ROOT / "demo/main.py").read_text() + (ROOT / "demo/customer_app.py").read_text()
 live_demo_workflow = (ROOT / ".github/workflows/live-demo-smoke.yml").read_text()
 demo_dockerfile = (ROOT / "Dockerfile.demo").read_text()
 

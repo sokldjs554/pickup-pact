@@ -1,0 +1,47 @@
+name: repair-workbench
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  real-ui-and-recovery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PYTHONPATH: .:services/reconciler
+      AI_PROVIDER: offline
+      PERSIST_RECONCILIATION: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install -r requirements-workbench.txt -r services/ops-console/requirements.txt playwright
+      - run: python -m playwright install --with-deps chromium
+      - name: Repeat full Python suites and comparison three times
+        run: |
+          set -euo pipefail
+          mkdir -p verification/repair-workbench
+          for pass in 1 2 3; do
+            python -m pytest -q services/reconciler/tests demo/test_demo.py demo/test_repair_integration.py services/ops-console/tests | tee verification/repair-workbench/tests-$pass.log
+            python -m scripts.repair_audit.run --output verification/repair-workbench/comparison-$pass.json
+          done
+      - name: Real HTTP standalone desktop and mobile journeys
+        run: python -m scripts.repair_audit.verify_workbench_browser --output verification/repair-workbench/standalone --repeat 3
+      - name: Real HTTP integrated public entrypoint desktop and mobile journeys
+        run: python -m scripts.repair_audit.verify_workbench_browser --app-entry demo.main:app --output verification/repair-workbench/integrated --repeat 3
+      - name: Preserve exact tested source and commit identity
+        if: always()
+        run: |
+          mkdir -p verification/repair-workbench
+          git rev-parse HEAD > verification/repair-workbench/tested-commit.txt
+          git archive --format=zip --output=verification/repair-workbench/tested-source.zip HEAD
+          sha256sum verification/repair-workbench/tested-source.zip > verification/repair-workbench/tested-source.sha256
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: repair-workbench-evidence
+          path: verification/repair-workbench/

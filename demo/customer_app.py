@@ -1,0 +1,1007 @@
+from __future__ import annotations
+
+from datetime import UTC, datetime, timedelta
+import os
+from pathlib import Path
+from typing import Any
+from zoneinfo import ZoneInfo
+
+from fastapi import FastAPI, HTTPException, Query
+from fastapi.responses import HTMLResponse
+from pydantic import BaseModel, Field
+
+from services.reconciler.app.engine import reconcile as core_reconcile
+from services.reconciler.app.models import EventEnvelope, ReconcileRequest
+from demo.sandbox import demo_store
+
+app = FastAPI(
+    title="Pickup Pact Demo",
+    version="2.0.0",
+    description="Interviewer-facing smart-order consistency demo backed by the real reconciliation engine.",
+)
+
+INDEX = Path(__file__).with_name("index.html")
+
+DEMO_CUSTOMER = {
+    "id": "guest-ha-neul",
+    "name": "하늘",
+    "label": "체험 손님",
+}
+
+CUSTOMER_CATALOG: list[dict[str, Any]] = [
+    {
+        "id": "gangnam-pass-cafe",
+        "name": "패스카페 강남역점",
+        "category": "커피 · 디저트",
+        "pickup_minutes": 8,
+        "distance_m": 180,
+        "notice": "지금 주문하면 빠르게 픽업할 수 있어요.",
+        "menu": [
+            {"id": "americano", "name": "아메리카노", "description": "깔끔하고 진한 기본 커피", "price": 4500, "popular": True, "capacity_units": 1},
+            {"id": "cafe-latte", "name": "카페라떼", "description": "고소한 우유와 에스프레소", "price": 5000, "popular": True, "capacity_units": 2},
+            {"id": "vanilla-latte", "name": "바닐라라떼", "description": "부드럽고 달콤한 바닐라 라떼", "price": 5500, "popular": False, "capacity_units": 2},
+            {"id": "cold-brew", "name": "콜드브루", "description": "천천히 내려 부드러운 커피", "price": 5200, "popular": False, "capacity_units": 1},
+        ],
+    },
+    {
+        "id": "seolleung-morning-bean",
+        "name": "모닝빈 선릉점",
+        "category": "커피 · 베이커리",
+        "pickup_minutes": 11,
+        "distance_m": 420,
+        "notice": "샌드위치와 커피를 함께 주문할 수 있어요.",
+        "menu": [
+            {"id": "morning-americano", "name": "아메리카노", "description": "고소한 블렌드 원두", "price": 4300, "popular": True, "capacity_units": 1},
+            {"id": "flat-white", "name": "플랫화이트", "description": "진한 커피와 부드러운 우유", "price": 5300, "popular": False, "capacity_units": 2},
+            {"id": "ham-sandwich", "name": "햄치즈 샌드위치", "description": "간단하게 먹기 좋은 샌드위치", "price": 6800, "popular": True, "capacity_units": 3},
+        ],
+    },
+    {
+        "id": "yeoksam-coffee-on",
+        "name": "커피온 역삼점",
+        "category": "커피 · 티",
+        "pickup_minutes": 6,
+        "distance_m": 510,
+        "notice": "주문이 비교적 빨리 준비되는 매장이에요.",
+        "menu": [
+            {"id": "on-americano", "name": "아메리카노", "description": "산뜻한 산미의 아메리카노", "price": 4200, "popular": True, "capacity_units": 1},
+            {"id": "peach-iced-tea", "name": "복숭아 아이스티", "description": "달콤하고 시원한 아이스티", "price": 4000, "popular": False, "capacity_units": 1},
+            {"id": "matcha-latte", "name": "말차라떼", "description": "쌉쌀한 말차와 우유", "price": 5600, "popular": True, "capacity_units": 2},
+        ],
+    },
+]
+
+STORE_CAPACITY_PROFILES: dict[str, dict[str, Any]] = {
+    "gangnam-pass-cafe": {
+        "capacity_units": 12,
+        "reserved_pattern": [8, 10, 5, 2, 7, 1],
+    },
+    "seolleung-morning-bean": {
+        "capacity_units": 10,
+        "reserved_pattern": [7, 4, 8, 3, 6, 1],
+    },
+    "yeoksam-coffee-on": {
+        "capacity_units": 9,
+        "reserved_pattern": [6, 8, 3, 5, 1, 4],
+    },
+}
+
+SEOUL = ZoneInfo("Asia/Seoul")
+
+
+def _catalog_store(store_id: str) -> dict[str, Any]:
+    for store in CUSTOMER_CATALOG:
+        if store["id"] == store_id:
+            return store
+    raise KeyError(store_id)
+
+
+def _customer_order_calculation(
+    store_id: str,
+    line_items: list[dict[str, Any]],
+) -> dict[str, Any]:
+    store = _catalog_store(store_id)
+    menu = {item["id"]: item for item in store["menu"]}
+    if not line_items:
+        raise ValueError("at least one line item is required")
+
+    units = 0
+    total = 0
+    labels: list[str] = []
+    for line in line_items:
+        sku = str(line["sku"])
+        quantity = int(line["quantity"])
+        if quantity < 1 or quantity > 20:
+            raise ValueError("line item quantity must be between 1 and 20")
+        item = menu.get(sku)
+        if item is None:
+            raise ValueError(f"unknown menu sku for store: {sku}")
+        units += int(item["capacity_units"]) * quantity
+        total += int(item["price"]) * quantity
+        labels.append(item["name"] + (f" {quantity}개" if quantity > 1 else ""))
+
+    return {
+        "units": units,
+        "total": total,
+        "items": ", ".join(labels),
+    }
+
+
+def _ceil_to_five_minutes(value: datetime) -> datetime:
+    rounded = value.replace(second=0, microsecond=0)
+    remainder = rounded.minute % 5
+    if remainder:
+        rounded += timedelta(minutes=5 - remainder)
+    return rounded
+
+
+def _pickup_slot_state(store_id: str, pickup_at: datetime, units: int) -> dict[str, Any]:
+    _catalog_store(store_id)
+    profile = STORE_CAPACITY_PROFILES[store_id]
+    capacity_units = int(profile["capacity_units"])
+    reserved_pattern = list(profile["reserved_pattern"])
+    bucket = int(pickup_at.timestamp()) // 300
+    reserved_units = int(reserved_pattern[bucket % len(reserved_pattern)])
+    available_units = max(0, capacity_units - reserved_units)
+    can_fit = available_units >= units
+    if not can_fit:
+        status = "FULL"
+    elif available_units <= max(units, 2):
+        status = "LIMITED"
+    else:
+        status = "AVAILABLE"
+    return {
+        "pickup_at": pickup_at.strftime("%H:%M"),
+        "capacity_units": capacity_units,
+        "reserved_units": reserved_units,
+        "available_units": available_units,
+        "requested_units": units,
+        "can_fit": can_fit,
+        "status": status,
+    }
+
+
+def _pickup_slot_options(store_id: str, units: int) -> list[dict[str, Any]]:
+    store = _catalog_store(store_id)
+    first = _ceil_to_five_minutes(
+        datetime.now(SEOUL) + timedelta(minutes=int(store["pickup_minutes"]))
+    )
+    return [
+        _pickup_slot_state(store_id, first + timedelta(minutes=offset * 5), units)
+        for offset in range(6)
+    ]
+
+
+def _pickup_slot_for_clock(store_id: str, pickup_clock: str, units: int) -> dict[str, Any]:
+    hour, minute = (int(part) for part in pickup_clock.split(":", 1))
+    now = datetime.now(SEOUL)
+    pickup_at = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    if pickup_at <= now:
+        pickup_at += timedelta(days=1)
+    return _pickup_slot_state(store_id, pickup_at, units)
+
+
+EVENT_LABELS = {
+    "PickupSlotHeld": "픽업 슬롯 확보",
+    "PaymentAuthorized": "결제 승인",
+    "CommitmentConfirmed": "픽업 주문 확정",
+    "CommitmentCancelled": "고객 주문 취소",
+    "SettlementPosted": "점주 정산 반영",
+    "RewardGranted": "고객 포인트 적립",
+    "CapacityRevised": "매장 처리량 변경",
+    "PickupRescheduled": "픽업 시간 변경",
+    "PickupPactIssued": "픽업 보장 발급",
+    "PickupPactRenegotiated": "픽업 보장 재합의",
+    "PickupPactBreached": "픽업 보장 위반",
+    "PickupClaimed": "픽업 완료",
+    "SettlementReversed": "정산 취소 분개",
+    "RewardReversed": "포인트 회수",
+}
+
+ANOMALY_COPY = {
+    "duplicate_event_delivery": (
+        "같은 이벤트가 두 번 도착했습니다.",
+        "Kafka의 at-least-once 전달 때문에 동일한 금전 이벤트가 재전달되었습니다.",
+    ),
+    "conflicting_duplicate_payload": (
+        "같은 이벤트 ID인데 내용이 다릅니다.",
+        "안전한 재전달로 볼 수 없어 자동 반영을 중단하고 사람 검토가 필요합니다.",
+    ),
+    "receive_order_projection_drift": (
+        "서버가 받은 순서와 실제 발생 순서가 다릅니다.",
+        "수신 순서만 믿으면 주문·정산·적립 상태가 실제 업무 순서와 어긋납니다.",
+    ),
+    "confirmed_without_payment_authorization": (
+        "결제 승인 없이 픽업이 확정되었습니다.",
+        "픽업 약속을 확정하기 위한 선행 조건이 충족되지 않았습니다.",
+    ),
+    "confirmed_promise_exceeds_revised_capacity": (
+        "확정한 픽업 약속을 현재 매장 처리량으로 지킬 수 없습니다.",
+        "확정 뒤 매장 처리 가능 수량이 줄어 기존 픽업 약속이 위험 상태가 되었습니다.",
+    ),
+    "settlement_posted_after_prior_cancellation": (
+        "취소 뒤에 점주 정산이 반영되었습니다.",
+        "고객 취소가 실제로 먼저 발생했기 때문에 정산을 그대로 둘 수 없습니다.",
+    ),
+    "reward_granted_after_prior_cancellation": (
+        "취소 뒤에 포인트가 지급되었습니다.",
+        "취소된 주문에 지급된 포인트를 회수해야 합니다.",
+    ),
+}
+
+REPAIR_COPY = {
+    "NO_OP_DUPLICATE": (
+        "두 번째 금전 반영 차단",
+        "같은 이벤트를 다시 받아도 정산·적립을 한 번 더 만들지 않습니다.",
+    ),
+    "REBUILD_PROJECTION": (
+        "주문 조회 상태 재구성",
+        "실제 발생 순서를 기준으로 고객/점주 화면의 상태를 다시 계산합니다.",
+    ),
+    "REVERSE_SETTLEMENT": (
+        "점주 정산 보상 분개",
+        "기존 정산 기록은 삭제하지 않고 반대 분개를 새로 만들어 감사 이력을 유지합니다.",
+    ),
+    "REVERSE_REWARD": (
+        "잘못 지급된 포인트 회수",
+        "취소 이후 지급된 포인트를 보상 이벤트로 회수합니다.",
+    ),
+    "RESLOT_REVIEW": (
+        "대체 픽업 시간 검토",
+        "현재 처리량으로 지킬 수 있는 가장 가까운 슬롯을 다시 검토합니다.",
+    ),
+    "MANUAL_REVIEW": (
+        "자동 처리 중단",
+        "이벤트 의미가 충돌하므로 자동 보정 대신 근거를 묶어 운영자 검토로 보냅니다.",
+    ),
+}
+
+SCENARIOS: dict[str, dict[str, Any]] = {
+    "late-cancel": {
+        "title": "취소 메시지가 늦게 도착한 주문",
+        "tab_title": "취소 메시지 지연",
+        "tab_subtitle": "취소는 먼저, 서버 도착은 나중",
+        "customer": "12:30 픽업 · 아메리카노 2잔 · 9,000원",
+        "problem": "고객은 12:14:10에 취소했지만 취소 메시지는 52초 뒤에 도착했습니다. 그 사이 점주 정산과 포인트 적립이 먼저 처리되었습니다.",
+        "order": {
+            "order_id": "PP-1208",
+            "store": "패스카페 강남역점",
+            "items": "아메리카노 2잔",
+            "total": "9,000원",
+            "pickup_at": "12:30",
+            "customer_action": "12:14:10 주문 취소",
+        },
+        "business_impact": {
+            "customer": "취소한 주문의 포인트가 남아 잘못 사용할 수 있음",
+            "merchant": "취소 주문 대금 9,000원이 정산 대상으로 남음",
+            "service": "주문·정산·적립 상태가 서로 다른 사실을 가리킴",
+        },
+        "before": "주문 취소 / 정산 유지 / 90P 유지",
+        "after": "주문 취소 / 정산 취소 / 90P 회수",
+        "events": [
+            {
+                "event_id": "slot-101",
+                "aggregate_id": "order-late-cancel",
+                "event_type": "PickupSlotHeld",
+                "occurred_at": "2026-09-21T12:08:00+09:00",
+                "received_at": "2026-09-21T12:08:01+09:00",
+                "payload": {"capacity_units": 2, "pickup_at": "2026-09-21T12:30:00+09:00"},
+                "detail": "12:30 픽업 슬롯 2개 확보",
+            },
+            {
+                "event_id": "payment-102",
+                "aggregate_id": "order-late-cancel",
+                "event_type": "PaymentAuthorized",
+                "occurred_at": "2026-09-21T12:08:02+09:00",
+                "received_at": "2026-09-21T12:08:03+09:00",
+                "payload": {"amount": "9000"},
+                "detail": "결제 9,000원 승인",
+            },
+            {
+                "event_id": "confirm-103",
+                "aggregate_id": "order-late-cancel",
+                "event_type": "CommitmentConfirmed",
+                "occurred_at": "2026-09-21T12:08:04+09:00",
+                "received_at": "2026-09-21T12:08:05+09:00",
+                "payload": {"capacity_units": 2, "pickup_at": "2026-09-21T12:30:00+09:00"},
+                "detail": "고객에게 12:30 픽업 확정",
+            },
+            {
+                "event_id": "cancel-104",
+                "aggregate_id": "order-late-cancel",
+                "event_type": "CommitmentCancelled",
+                "occurred_at": "2026-09-21T12:14:10+09:00",
+                "received_at": "2026-09-21T12:15:02+09:00",
+                "payload": {"reason": "customer_request"},
+                "detail": "고객 취소 — 실제 발생 후 52초 늦게 서버 도착",
+            },
+            {
+                "event_id": "settlement-105",
+                "aggregate_id": "order-late-cancel",
+                "event_type": "SettlementPosted",
+                "occurred_at": "2026-09-21T12:14:36+09:00",
+                "received_at": "2026-09-21T12:14:36+09:00",
+                "payload": {"amount": "9000"},
+                "detail": "점주 정산 9,000원 반영",
+            },
+            {
+                "event_id": "reward-106",
+                "aggregate_id": "order-late-cancel",
+                "event_type": "RewardGranted",
+                "occurred_at": "2026-09-21T12:14:40+09:00",
+                "received_at": "2026-09-21T12:14:40+09:00",
+                "payload": {"amount": "90"},
+                "detail": "고객 포인트 90P 적립",
+            },
+        ],
+    },
+    "duplicate": {
+        "title": "같은 정산 이벤트가 두 번 도착한 주문",
+        "tab_title": "같은 정산 2번",
+        "tab_subtitle": "Kafka 중복 전달",
+        "customer": "13:00 픽업 · 카페라떼 1잔 · 5,500원",
+        "problem": "동일한 정산 이벤트가 재전달되었습니다. 중복을 막지 못하면 점주 정산이 두 번 반영될 수 있습니다.",
+        "order": {
+            "order_id": "PP-1300",
+            "store": "패스카페 역삼점",
+            "items": "카페라떼 1잔",
+            "total": "5,500원",
+            "pickup_at": "13:00",
+            "customer_action": "정상 픽업",
+        },
+        "business_impact": {
+            "customer": "고객 화면은 정상이어도 내부 금전 상태가 틀어질 수 있음",
+            "merchant": "동일 주문 정산이 두 번 잡힐 위험",
+            "service": "at-least-once 메시징의 중복 부작용 가능",
+        },
+        "before": "정산 이벤트 2회 수신",
+        "after": "금전 반영 1회만 유지",
+        "events": [
+            {
+                "event_id": "slot-201",
+                "aggregate_id": "order-duplicate",
+                "event_type": "PickupSlotHeld",
+                "occurred_at": "2026-09-21T12:44:00+09:00",
+                "received_at": "2026-09-21T12:44:00+09:00",
+                "payload": {"capacity_units": 1},
+                "detail": "13:00 픽업 슬롯 확보",
+            },
+            {
+                "event_id": "pay-202",
+                "aggregate_id": "order-duplicate",
+                "event_type": "PaymentAuthorized",
+                "occurred_at": "2026-09-21T12:44:01+09:00",
+                "received_at": "2026-09-21T12:44:01+09:00",
+                "payload": {"amount": "5500"},
+                "detail": "결제 5,500원 승인",
+            },
+            {
+                "event_id": "confirm-203",
+                "aggregate_id": "order-duplicate",
+                "event_type": "CommitmentConfirmed",
+                "occurred_at": "2026-09-21T12:44:02+09:00",
+                "received_at": "2026-09-21T12:44:02+09:00",
+                "payload": {"capacity_units": 1},
+                "detail": "13:00 픽업 확정",
+            },
+            {
+                "event_id": "settlement-77",
+                "aggregate_id": "order-duplicate",
+                "event_type": "SettlementPosted",
+                "occurred_at": "2026-09-21T12:44:05+09:00",
+                "received_at": "2026-09-21T12:44:06+09:00",
+                "payload": {"amount": "5500"},
+                "detail": "정산 5,500원 반영",
+            },
+            {
+                "event_id": "settlement-77",
+                "aggregate_id": "order-duplicate",
+                "event_type": "SettlementPosted",
+                "occurred_at": "2026-09-21T12:44:05+09:00",
+                "received_at": "2026-09-21T12:44:19+09:00",
+                "payload": {"amount": "5500"},
+                "detail": "동일 Kafka 이벤트 재전달",
+            },
+        ],
+    },
+    "capacity-drop": {
+        "title": "확정 뒤 매장 처리량이 줄어든 주문",
+        "tab_title": "매장 처리량 감소",
+        "tab_subtitle": "확정한 픽업 약속 위험",
+        "customer": "18:10 픽업 · 음료 4잔 · 22,000원",
+        "problem": "4잔을 만들 수 있다고 보고 주문을 확정했지만 머신 장애로 해당 시간대 처리 가능 수량이 2잔으로 줄었습니다.",
+        "order": {
+            "order_id": "PP-1810",
+            "store": "패스카페 성수점",
+            "items": "음료 4잔",
+            "total": "22,000원",
+            "pickup_at": "18:10",
+            "customer_action": "픽업 대기",
+        },
+        "business_impact": {
+            "customer": "약속한 시간에 음료를 받지 못할 가능성",
+            "merchant": "현장에서 주문 지연·문의가 집중될 수 있음",
+            "service": "확정 당시 상태와 현재 제조 가능량이 불일치",
+        },
+        "before": "18:10 픽업 확정",
+        "after": "AT_RISK / 대체 시간 검토",
+        "events": [
+            {
+                "event_id": "slot-301",
+                "aggregate_id": "order-capacity",
+                "event_type": "PickupSlotHeld",
+                "occurred_at": "2026-09-21T17:48:00+09:00",
+                "received_at": "2026-09-21T17:48:00+09:00",
+                "payload": {"capacity_units": 4},
+                "detail": "18:10 제조 슬롯 4잔 확보",
+            },
+            {
+                "event_id": "pay-302",
+                "aggregate_id": "order-capacity",
+                "event_type": "PaymentAuthorized",
+                "occurred_at": "2026-09-21T17:48:01+09:00",
+                "received_at": "2026-09-21T17:48:01+09:00",
+                "payload": {"amount": "22000"},
+                "detail": "결제 22,000원 승인",
+            },
+            {
+                "event_id": "confirm-303",
+                "aggregate_id": "order-capacity",
+                "event_type": "CommitmentConfirmed",
+                "occurred_at": "2026-09-21T17:48:03+09:00",
+                "received_at": "2026-09-21T17:48:04+09:00",
+                "payload": {"capacity_units": 4},
+                "detail": "18:10 픽업 4잔 확정",
+            },
+            {
+                "event_id": "capacity-304",
+                "aggregate_id": "order-capacity",
+                "event_type": "CapacityRevised",
+                "occurred_at": "2026-09-21T17:55:00+09:00",
+                "received_at": "2026-09-21T17:55:01+09:00",
+                "payload": {"revision": 2, "available_units": 2},
+                "detail": "머신 장애로 처리 가능량 4 → 2",
+            },
+        ],
+    },
+    "conflict": {
+        "title": "같은 이벤트 ID인데 금액이 다른 주문",
+        "tab_title": "같은 ID, 다른 금액",
+        "tab_subtitle": "단순 중복이 아닌 충돌",
+        "customer": "09:20 픽업 · 샌드위치 세트 · 11,500원",
+        "problem": "동일 event_id가 두 번 도착했지만 한 번은 11,500원, 다른 한 번은 13,500원입니다. 자동 dedupe하면 상류 오류를 숨길 수 있습니다.",
+        "order": {
+            "order_id": "PP-0920",
+            "store": "패스카페 시청점",
+            "items": "샌드위치 세트",
+            "total": "11,500원",
+            "pickup_at": "09:20",
+            "customer_action": "정상 픽업",
+        },
+        "business_impact": {
+            "customer": "잘못된 금액 처리 가능성",
+            "merchant": "정산 금액 신뢰성 훼손",
+            "service": "동일 ID의 의미 충돌을 조용히 버리면 장애 근거가 사라짐",
+        },
+        "before": "11,500원 / 13,500원 충돌",
+        "after": "자동 반영 중단 / 운영자 검토",
+        "events": [
+            {
+                "event_id": "slot-401",
+                "aggregate_id": "order-conflict",
+                "event_type": "PickupSlotHeld",
+                "occurred_at": "2026-09-21T09:00:50+09:00",
+                "received_at": "2026-09-21T09:00:50+09:00",
+                "payload": {"capacity_units": 1},
+                "detail": "09:20 픽업 슬롯 확보",
+            },
+            {
+                "event_id": "pay-402",
+                "aggregate_id": "order-conflict",
+                "event_type": "PaymentAuthorized",
+                "occurred_at": "2026-09-21T09:00:52+09:00",
+                "received_at": "2026-09-21T09:00:52+09:00",
+                "payload": {"amount": "11500"},
+                "detail": "결제 11,500원 승인",
+            },
+            {
+                "event_id": "confirm-403",
+                "aggregate_id": "order-conflict",
+                "event_type": "CommitmentConfirmed",
+                "occurred_at": "2026-09-21T09:00:55+09:00",
+                "received_at": "2026-09-21T09:00:55+09:00",
+                "payload": {"capacity_units": 1},
+                "detail": "09:20 픽업 확정",
+            },
+            {
+                "event_id": "settlement-X",
+                "aggregate_id": "order-conflict",
+                "event_type": "SettlementPosted",
+                "occurred_at": "2026-09-21T09:01:00+09:00",
+                "received_at": "2026-09-21T09:01:01+09:00",
+                "payload": {"amount": "11500"},
+                "detail": "정산 11,500원",
+            },
+            {
+                "event_id": "settlement-X",
+                "aggregate_id": "order-conflict",
+                "event_type": "SettlementPosted",
+                "occurred_at": "2026-09-21T09:01:00+09:00",
+                "received_at": "2026-09-21T09:01:18+09:00",
+                "payload": {"amount": "13500"},
+                "detail": "동일 ID지만 정산 금액 13,500원",
+            },
+        ],
+    },
+}
+
+
+def _event_time(value: datetime) -> str:
+    return value.astimezone().strftime("%H:%M:%S")
+
+
+def _build_request(scenario: dict[str, Any]) -> ReconcileRequest:
+    events = [
+        EventEnvelope(
+            event_id=item["event_id"],
+            aggregate_id=item["aggregate_id"],
+            event_type=item["event_type"],
+            occurred_at=item["occurred_at"],
+            received_at=item["received_at"],
+            payload=item["payload"],
+        )
+        for item in scenario["events"]
+    ]
+    return ReconcileRequest(events=events)
+
+
+def _ui_event(item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "event_id": item["event_id"],
+        "event_type": item["event_type"],
+        "label": EVENT_LABELS[item["event_type"]],
+        "occurred_at": datetime.fromisoformat(item["occurred_at"]).strftime("%H:%M:%S"),
+        "received_at": datetime.fromisoformat(item["received_at"]).strftime("%H:%M:%S"),
+        "detail": item["detail"],
+    }
+
+
+def _snapshot_label(result: Any) -> str:
+    state = result.canonical_state
+    parts = [state.status]
+    if state.settled:
+        parts.append("정산 반영")
+    if state.rewarded:
+        parts.append("포인트 반영")
+    return " / ".join(parts)
+
+
+def run_scenario(scenario_id: str) -> dict[str, Any]:
+    if scenario_id not in SCENARIOS:
+        raise KeyError(scenario_id)
+
+    scenario = SCENARIOS[scenario_id]
+    request = _build_request(scenario)
+    result = core_reconcile(request)
+
+    received_events = sorted(
+        scenario["events"],
+        key=lambda item: (datetime.fromisoformat(item["received_at"]), item["event_id"]),
+    )
+    business_events = sorted(
+        scenario["events"],
+        key=lambda item: (datetime.fromisoformat(item["occurred_at"]), item["event_id"]),
+    )
+
+    anomalies = []
+    for code in result.anomalies:
+        title, detail = ANOMALY_COPY.get(code, (code, ""))
+        anomalies.append({"code": code, "title": title, "detail": detail})
+
+    repairs = []
+    for code in result.repairs:
+        title, detail = REPAIR_COPY.get(code, (code, ""))
+        repairs.append({"code": code, "title": title, "detail": detail})
+
+    return {
+        "scenario_id": scenario_id,
+        "title": scenario["title"],
+        "tab_title": scenario["tab_title"],
+        "tab_subtitle": scenario["tab_subtitle"],
+        "customer": scenario["customer"],
+        "problem": scenario["problem"],
+        "order": scenario["order"],
+        "business_impact": scenario["business_impact"],
+        "before": scenario["before"],
+        "after": scenario["after"],
+        "received_order": [_ui_event(item) for item in received_events],
+        "business_order": [_ui_event(item) for item in business_events],
+        "anomalies": anomalies,
+        "repairs": repairs,
+        "core_state": _snapshot_label(result),
+        "duplicate_event_ids": result.duplicate_event_ids,
+        "evidence_event_ids": result.evidence_event_ids,
+        "engine": "services/reconciler/app/engine.py",
+        "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
+    }
+
+
+class DemoLineItem(BaseModel):
+    sku: str = Field(min_length=1, max_length=80)
+    quantity: int = Field(ge=1, le=20)
+
+
+class DemoPickupQuoteRequest(BaseModel):
+    line_items: list[DemoLineItem] = Field(min_length=1, max_length=20)
+
+
+class DemoOrderCreate(BaseModel):
+    store: str = Field(min_length=1, max_length=80)
+    store_id: str | None = Field(default=None, min_length=1, max_length=80)
+    line_items: list[DemoLineItem] | None = Field(default=None, max_length=20)
+    items: str | None = Field(default=None, min_length=1, max_length=160)
+    total: int | None = Field(default=None, gt=0, le=1_000_000)
+    pickup_at: str = Field(pattern=r"^\d{2}:\d{2}$")
+    units: int | None = Field(default=None, ge=1, le=50)
+
+
+class PaymentRequest(BaseModel):
+    authorization_id: str | None = Field(default=None, max_length=80)
+
+
+class CancelRequest(BaseModel):
+    delay_seconds: int = Field(default=0, ge=0, le=600)
+
+
+class AmountRequest(BaseModel):
+    amount: int | None = Field(default=None, gt=0, le=1_000_000)
+
+
+class CapacityRequest(BaseModel):
+    available_units: int = Field(ge=0, le=100)
+
+
+class PickupRescheduleRequest(BaseModel):
+    pickup_at: str | None = Field(default=None, pattern=r"^\d{2}:\d{2}$")
+
+
+class PickupClaimRequest(BaseModel):
+    pickup_code: str = Field(pattern=r"^\d{4}$")
+
+
+class MerchantTimingRequest(BaseModel):
+    timing: str = Field(default="ON_TIME", min_length=3, max_length=16)
+
+
+class RedeliveryRequest(BaseModel):
+    conflicting_amount: int | None = Field(default=None, gt=0, le=1_000_000)
+
+
+def _demo_error(exc: Exception) -> HTTPException:
+    if isinstance(exc, KeyError):
+        return HTTPException(status_code=404, detail="demo session not found")
+    return HTTPException(status_code=409, detail=str(exc))
+
+
+@app.get("/api/demo/customer")
+def demo_customer() -> dict[str, str]:
+    return DEMO_CUSTOMER.copy()
+
+
+@app.get("/api/demo/catalog")
+def demo_catalog() -> list[dict[str, Any]]:
+    return CUSTOMER_CATALOG
+
+
+@app.get("/api/demo/catalog/{store_id}/pickup-slots")
+def demo_pickup_slots(
+    store_id: str,
+    units: int = Query(default=1, ge=1, le=50),
+) -> list[dict[str, Any]]:
+    try:
+        return _pickup_slot_options(store_id, units)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="store not found") from exc
+
+
+@app.post("/api/demo/catalog/{store_id}/pickup-quote")
+def demo_pickup_quote(
+    store_id: str,
+    request: DemoPickupQuoteRequest,
+) -> dict[str, Any]:
+    try:
+        calculation = _customer_order_calculation(
+            store_id,
+            [item.model_dump() for item in request.line_items],
+        )
+        return {
+            **calculation,
+            "slots": _pickup_slot_options(store_id, calculation["units"]),
+        }
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="store not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/demo/sessions")
+def create_demo_session() -> dict[str, Any]:
+    return demo_store.create_session()
+
+
+@app.get("/api/demo/sessions/{session_id}")
+def get_demo_session(session_id: str) -> dict[str, Any]:
+    try:
+        return demo_store.snapshot(session_id)
+    except (KeyError, ValueError) as exc:
+        raise _demo_error(exc) from exc
+
+
+@app.post("/api/demo/sessions/{session_id}/reset")
+def reset_demo_session(session_id: str) -> dict[str, Any]:
+    try:
+        return demo_store.reset(session_id)
+    except (KeyError, ValueError) as exc:
+        raise _demo_error(exc) from exc
+
+
+@app.post("/api/demo/sessions/{session_id}/presets/{scenario_id}")
+def load_demo_preset(session_id: str, scenario_id: str) -> dict[str, Any]:
+    if scenario_id not in SCENARIOS:
+        raise HTTPException(status_code=404, detail="unknown preset")
+    try:
+        return demo_store.seed_from_scenario(session_id, scenario_id, SCENARIOS[scenario_id])
+    except (KeyError, ValueError) as exc:
+        raise _demo_error(exc) from exc
+
+
+@app.post("/api/demo/sessions/{session_id}/orders")
+def create_demo_order(session_id: str, request: DemoOrderCreate) -> dict[str, Any]:
+    try:
+        if request.store_id is not None and request.line_items is not None:
+            calculation = _customer_order_calculation(
+                request.store_id,
+                [item.model_dump() for item in request.line_items],
+            )
+            units = int(calculation["units"])
+            total = int(calculation["total"])
+            items = str(calculation["items"])
+            slot = _pickup_slot_for_clock(request.store_id, request.pickup_at, units)
+            if not slot["can_fit"]:
+                raise ValueError("selected pickup slot no longer has enough capacity")
+        else:
+            if request.items is None or request.total is None or request.units is None:
+                raise ValueError("legacy demo order requires items, total and units")
+            units = request.units
+            total = request.total
+            items = request.items
+            if request.store_id is not None:
+                slot = _pickup_slot_for_clock(request.store_id, request.pickup_at, units)
+                if not slot["can_fit"]:
+                    raise ValueError("selected pickup slot no longer has enough capacity")
+
+        return demo_store.create_order(
+            session_id,
+            store=request.store,
+            items=items,
+            total=total,
+            pickup_at=request.pickup_at,
+            units=units,
+        )
+    except (KeyError, ValueError) as exc:
+        raise _demo_error(exc) from exc
+
+
+@app.post("/api/demo/sessions/{session_id}/payment")
+def authorize_demo_payment(session_id: str, request: PaymentRequest) -> dict[str, Any]:
+    try:
+        return demo_store.authorize_payment(session_id, request.authorization_id)
+    except (KeyError, ValueError) as exc:
+        raise _demo_error(exc) from exc
+
+
+@app.post("/api/demo/sessions/{session_id}/confirm")
+def confirm_demo_order(session_id: str) -> dict[str, Any]:
+    try:
+        return demo_store.confirm(session_id)
+    except (KeyError, ValueError) as exc:
+        raise _demo_error(exc) from exc
+
+
+@app.get("/api/demo/sessions/{session_id}/merchant")
+def merchant_demo_state(session_id: str) -> dict[str, Any]:
+    try:
+        return demo_store.merchant_snapshot(session_id)
+    except (KeyError, ValueError) as exc:
+        raise _demo_error(exc) from exc
+
+
+@app.post("/api/demo/sessions/{session_id}/merchant/ack")
+def merchant_demo_ack(session_id: str) -> dict[str, Any]:
+    try:
+        return demo_store.merchant_ack(session_id)
+    except (KeyError, ValueError) as exc:
+        raise _demo_error(exc) from exc
+
+
+@app.post("/api/demo/sessions/{session_id}/merchant/redeliver")
+def merchant_demo_redeliver(session_id: str) -> dict[str, Any]:
+    try:
+        return demo_store.merchant_redeliver(session_id)
+    except (KeyError, ValueError) as exc:
+        raise _demo_error(exc) from exc
+
+
+@app.post("/api/demo/sessions/{session_id}/merchant/accept")
+def merchant_demo_accept(session_id: str) -> dict[str, Any]:
+    try:
+        return demo_store.merchant_accept(session_id)
+    except (KeyError, ValueError) as exc:
+        raise _demo_error(exc) from exc
+
+
+@app.post("/api/demo/sessions/{session_id}/merchant/start")
+def merchant_demo_start(
+    session_id: str,
+    request: MerchantTimingRequest,
+) -> dict[str, Any]:
+    try:
+        return demo_store.merchant_start(session_id, request.timing)
+    except (KeyError, ValueError) as exc:
+        raise _demo_error(exc) from exc
+
+
+@app.post("/api/demo/sessions/{session_id}/merchant/ready")
+def merchant_demo_ready(
+    session_id: str,
+    request: MerchantTimingRequest,
+) -> dict[str, Any]:
+    try:
+        return demo_store.merchant_ready(session_id, request.timing)
+    except (KeyError, ValueError) as exc:
+        raise _demo_error(exc) from exc
+
+
+@app.post("/api/demo/sessions/{session_id}/cancel")
+def cancel_demo_order(session_id: str, request: CancelRequest) -> dict[str, Any]:
+    try:
+        return demo_store.cancel(session_id, request.delay_seconds)
+    except (KeyError, ValueError) as exc:
+        raise _demo_error(exc) from exc
+
+
+@app.post("/api/demo/sessions/{session_id}/settlement")
+def settle_demo_order(session_id: str, request: AmountRequest) -> dict[str, Any]:
+    try:
+        return demo_store.settle(session_id, request.amount)
+    except (KeyError, ValueError) as exc:
+        raise _demo_error(exc) from exc
+
+
+@app.post("/api/demo/sessions/{session_id}/reward")
+def reward_demo_order(session_id: str, request: AmountRequest) -> dict[str, Any]:
+    try:
+        return demo_store.reward(session_id, request.amount)
+    except (KeyError, ValueError) as exc:
+        raise _demo_error(exc) from exc
+
+
+@app.post("/api/demo/sessions/{session_id}/capacity")
+def revise_demo_capacity(session_id: str, request: CapacityRequest) -> dict[str, Any]:
+    try:
+        return demo_store.revise_capacity(session_id, request.available_units)
+    except (KeyError, ValueError) as exc:
+        raise _demo_error(exc) from exc
+
+
+@app.post("/api/demo/sessions/{session_id}/pickup/reschedule")
+def accept_demo_pickup_reschedule(
+    session_id: str,
+    request: PickupRescheduleRequest,
+) -> dict[str, Any]:
+    try:
+        return demo_store.accept_pickup_reschedule(session_id, request.pickup_at)
+    except (KeyError, ValueError) as exc:
+        raise _demo_error(exc) from exc
+
+
+@app.post("/api/demo/sessions/{session_id}/pickup/pact/breach")
+def breach_demo_pickup_pact(session_id: str) -> dict[str, Any]:
+    try:
+        return demo_store.breach_pickup_pact(session_id)
+    except (KeyError, ValueError) as exc:
+        raise _demo_error(exc) from exc
+
+
+@app.post("/api/demo/sessions/{session_id}/pickup/claim")
+def claim_demo_pickup(session_id: str, request: PickupClaimRequest) -> dict[str, Any]:
+    try:
+        return demo_store.claim_pickup(session_id, request.pickup_code)
+    except (KeyError, ValueError) as exc:
+        raise _demo_error(exc) from exc
+
+
+@app.get("/api/demo/sessions/{session_id}/customer/history")
+def customer_order_history(session_id: str) -> list[dict[str, Any]]:
+    try:
+        return demo_store.customer_history(session_id)
+    except (KeyError, ValueError) as exc:
+        raise _demo_error(exc) from exc
+
+
+@app.get("/api/demo/sessions/{session_id}/customer/receipts/{order_id}")
+def customer_order_receipt(session_id: str, order_id: str) -> dict[str, Any]:
+    try:
+        return demo_store.customer_receipt(session_id, order_id)
+    except (KeyError, ValueError) as exc:
+        raise _demo_error(exc) from exc
+
+
+@app.post("/api/demo/sessions/{session_id}/customer/next-order")
+def customer_next_order(session_id: str) -> dict[str, Any]:
+    try:
+        return demo_store.next_customer_order(session_id)
+    except (KeyError, ValueError) as exc:
+        raise _demo_error(exc) from exc
+
+
+@app.post("/api/demo/sessions/{session_id}/redelivery")
+def redeliver_demo_event(session_id: str, request: RedeliveryRequest) -> dict[str, Any]:
+    try:
+        return demo_store.redeliver_last_financial(
+            session_id,
+            conflicting_amount=request.conflicting_amount,
+        )
+    except (KeyError, ValueError) as exc:
+        raise _demo_error(exc) from exc
+
+
+@app.post("/api/demo/sessions/{session_id}/reconcile")
+def reconcile_demo_session(session_id: str) -> dict[str, Any]:
+    try:
+        return demo_store.reconcile(session_id)
+    except (KeyError, ValueError) as exc:
+        raise _demo_error(exc) from exc
+
+
+@app.post("/api/demo/sessions/{session_id}/repairs/apply")
+def apply_demo_repairs(session_id: str) -> dict[str, Any]:
+    try:
+        return demo_store.apply_repairs(session_id)
+    except (KeyError, ValueError) as exc:
+        raise _demo_error(exc) from exc
+
+
+@app.get("/", response_class=HTMLResponse)
+def home() -> str:
+    return INDEX.read_text(encoding="utf-8")
+
+
+@app.get("/health")
+def health() -> dict[str, str]:
+    return {
+        "status": "ok",
+        "service": "pickup-pact-demo",
+        "engine": "services/reconciler/app/engine.py",
+        "release_commit": os.getenv("RENDER_GIT_COMMIT", "local"),
+    }
+
+
+@app.get("/api/scenarios")
+def list_scenarios() -> list[dict[str, str]]:
+    return [
+        {
+            "id": key,
+            "title": value["tab_title"],
+            "subtitle": value["tab_subtitle"],
+        }
+        for key, value in SCENARIOS.items()
+    ]
+
+
+@app.get("/api/scenarios/{scenario_id}")
+def scenario_endpoint(scenario_id: str) -> dict[str, Any]:
+    try:
+        return run_scenario(scenario_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="unknown scenario") from exc
