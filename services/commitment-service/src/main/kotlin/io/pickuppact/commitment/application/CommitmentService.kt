@@ -314,19 +314,93 @@ class CommitmentService(
     fun cancel(id: UUID): Mono<PickupCommitment> =
         repository.find(id)
             .flatMap { current ->
-                if (current.state == CommitmentState.CANCELLED) {
-                    capacity.release(current.leaseToken).thenReturn(current)
-                } else {
-                    val cancelled = current.cancel()
-                    repository.saveWithEvent(
-                        cancelled,
-                        "CommitmentCancelled",
-                        mapOf("reason" to "customer_request")
-                    ).flatMap { saved ->
-                        capacity.release(saved.leaseToken).thenReturn(saved)
+                when (current.state) {
+                    CommitmentState.CANCELLED ->
+                        capacity.release(current.leaseToken).thenReturn(current)
+
+                    CommitmentState.HELD -> {
+                        val cancelled = current.cancelHeld()
+                        repository.saveWithEvent(
+                            cancelled,
+                            "CommitmentCancelled",
+                            mapOf(
+                                "reason" to "customer_request",
+                                "authority" to "commitment_pre_confirmation"
+                            )
+                        ).flatMap { saved ->
+                            capacity.release(saved.leaseToken).thenReturn(saved)
+                        }
                     }
+
+                    CommitmentState.CONFIRMED, CommitmentState.AT_RISK -> {
+                        if (current.cancellationRequestId != null) {
+                            Mono.just(current)
+                        } else {
+                            val requestId = UUID.randomUUID()
+                            val requestedAt = Instant.now()
+                            val requested = current.requestCancellation(requestId, requestedAt)
+                            repository.saveWithEvent(
+                                requested,
+                                "CancellationRequested",
+                                mapOf(
+                                    "request_id" to requestId.toString(),
+                                    "requested_at" to requestedAt.toString(),
+                                    "reason" to "customer_request"
+                                )
+                            )
+                        }
+                    }
+
+                    CommitmentState.PICKED_UP ->
+                        Mono.error(IllegalStateException("picked up commitment cannot be cancelled"))
                 }
             }
+
+    fun approveCancellationFromMerchant(
+        id: UUID,
+        requestId: UUID,
+        decidedAt: Instant
+    ): Mono<PickupCommitment> =
+        repository.find(id).flatMap { current ->
+            if (current.state == CommitmentState.CANCELLED && current.cancellationRequestId == null) {
+                return@flatMap capacity.release(current.leaseToken).thenReturn(current)
+            }
+            val cancelled = current.approveCancellation(requestId)
+            repository.saveWithEvent(
+                cancelled,
+                "CommitmentCancelled",
+                mapOf(
+                    "reason" to "customer_request",
+                    "authority" to "merchant_fulfillment",
+                    "request_id" to requestId.toString(),
+                    "decided_at" to decidedAt.toString()
+                )
+            ).flatMap { saved ->
+                capacity.release(saved.leaseToken).thenReturn(saved)
+            }
+        }
+
+    fun rejectCancellationFromMerchant(
+        id: UUID,
+        requestId: UUID,
+        reason: String
+    ): Mono<PickupCommitment> =
+        repository.find(id).flatMap { current ->
+            if (current.cancellationRequestId == null) {
+                return@flatMap Mono.just(current)
+            }
+            val activeRequest = current.cancellationRequestId
+            check(activeRequest == requestId) { "stale cancellation rejection" }
+            val restored = current.rejectCancellation(requestId)
+            repository.saveWithEvent(
+                restored,
+                "CancellationRejected",
+                mapOf(
+                    "request_id" to requestId.toString(),
+                    "reason" to reason
+                )
+            )
+        }
 
     private fun requestFingerprint(quoteToken: String, pickupAt: Instant): String {
         val bytes = MessageDigest.getInstance("SHA-256")
