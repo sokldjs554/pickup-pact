@@ -196,23 +196,46 @@ def commitment_flow(pass_no: int) -> None:
     assert tracked["state"] == "CONFIRMED", tracked
     assert tracked["pact"]["status"] == "ACTIVE", tracked
 
-    cancelled = expect(
+    cancellation_requested = expect(
         httpx.post(
             f"{COMMITMENT}/api/v1/commitments/{commitment_id}/cancel",
             timeout=15,
         ),
         200,
     )
-    assert cancelled["state"] == "CANCELLED", cancelled
+    assert cancellation_requested["state"] == "CONFIRMED", cancellation_requested
+    assert cancellation_requested["cancellationRequestId"], cancellation_requested
+    assert redis_client.exists(slot_key) == 1, cancellation_requested
+
+    def merchant_approved_cancellation():
+        merchant = httpx.get(
+            f"{MERCHANT}/api/v1/merchant/orders/{commitment_id}",
+            timeout=10,
+        )
+        commitment = httpx.get(
+            f"{COMMITMENT}/api/v1/commitments/{commitment_id}",
+            timeout=10,
+        )
+        return (
+            merchant.status_code == 200
+            and merchant.json()["state"] == "CANCELLED"
+            and commitment.status_code == 200
+            and commitment.json()["state"] == "CANCELLED"
+        )
+
+    wait_until(
+        merchant_approved_cancellation,
+        timeout_s=30,
+        label="merchant-authorized confirmed cancellation",
+    )
+    cancelled = expect(
+        httpx.get(f"{COMMITMENT}/api/v1/commitments/{commitment_id}", timeout=15),
+        200,
+    )
     assert cancelled["pact"]["status"] == "CANCELLED", cancelled
-    assert redis_client.exists(slot_key) == 0, {
-        "slot_key": slot_key,
-        "cancelled": cancelled,
-    }
-    assert redis_client.exists(lease_key) == 0, {
-        "lease_key": lease_key,
-        "cancelled": cancelled,
-    }
+    assert cancelled["cancellationRequestId"] is None, cancelled
+    assert redis_client.exists(slot_key) == 0, cancelled
+    assert redis_client.exists(lease_key) == 0, cancelled
 
     retry = expect(
         httpx.post(
@@ -253,7 +276,7 @@ def commitment_flow(pass_no: int) -> None:
                     (commitment_id,),
                 )
                 published, total = cursor.fetchone()
-                return total == 5 and published == total
+                return total == 6 and published == total
 
     wait_until(
         outbox_published,
@@ -278,6 +301,7 @@ def commitment_flow(pass_no: int) -> None:
         "PaymentAuthorized",
         "CommitmentConfirmed",
         "PickupPactIssued",
+        "CancellationRequested",
         "CommitmentCancelled",
     ], ordered_types
 
@@ -778,16 +802,35 @@ def merchant_fulfillment_flow(pass_no: int) -> None:
 
     wait_until(schedule_review_visible, timeout_s=30, label="post-preparation reschedule review")
 
-    expect(
+    pending_cancel = expect(
         httpx.post(f"{COMMITMENT}/api/v1/commitments/{order_id}/cancel", timeout=15),
         200,
     )
+    assert pending_cancel["state"] == "CONFIRMED", pending_cancel
+    assert pending_cancel["cancellationRequestId"], pending_cancel
 
-    def cancellation_review_visible():
-        state = httpx.get(f"{MERCHANT}/api/v1/merchant/orders/{order_id}", timeout=10)
-        return state.status_code == 200 and state.json()["state"] == "CANCELLATION_REVIEW"
+    def cancellation_rejected_after_preparation():
+        merchant = httpx.get(f"{MERCHANT}/api/v1/merchant/orders/{order_id}", timeout=10)
+        commitment = httpx.get(f"{COMMITMENT}/api/v1/commitments/{order_id}", timeout=10)
+        anomalies = httpx.get(
+            f"{MERCHANT}/api/v1/merchant/orders/{order_id}/anomalies",
+            timeout=10,
+        )
+        return (
+            merchant.status_code == 200
+            and merchant.json()["state"] == "READY"
+            and commitment.status_code == 200
+            and commitment.json()["state"] == "CONFIRMED"
+            and commitment.json().get("cancellationRequestId") is None
+            and anomalies.status_code == 200
+            and any(item["code"] == "CANCEL_AFTER_PREPARATION" for item in anomalies.json())
+        )
 
-    wait_until(cancellation_review_visible, timeout_s=30, label="post-preparation cancellation review")
+    wait_until(
+        cancellation_rejected_after_preparation,
+        timeout_s=30,
+        label="merchant rejects cancellation after preparation",
+    )
 
     # Second order proves READY_LATE -> fulfillment event -> Pickup Pact -> 500 PTS.
     late_order_id, _ = confirmed_order("late", sku="americano")
@@ -1138,6 +1181,39 @@ def reconciler_flow(pass_no: int) -> None:
     )
     assert stored_projection["projection"]["status"] == "CANCELLED", stored_projection
     assert len(stored_projection["projection"]["canonical_hash"]) == 64, stored_projection
+    assert stored_projection["projection"]["source_event_count"] == len(packet["events"]), stored_projection
+
+    stale_packet = {"events": packet["events"][:-1]}
+    stale_rebuild = httpx.post(
+        f"{RECONCILER}/api/v1/projections/rebuild",
+        json=stale_packet,
+        timeout=20,
+    )
+    assert stale_rebuild.status_code == 409, stale_rebuild.text
+    assert stale_rebuild.json()["detail"]["error"] == "stale_projection_evidence", stale_rebuild.text
+
+    superset_packet = {
+        "events": [
+            *packet["events"],
+            {
+                "event_id": f"{aggregate}-capacity-proof",
+                "aggregate_id": aggregate,
+                "event_type": "CapacityRevised",
+                "occurred_at": (datetime.now(UTC) + timedelta(seconds=30)).isoformat(),
+                "received_at": (datetime.now(UTC) + timedelta(seconds=30)).isoformat(),
+                "payload": {"revision": 2, "available_units": 40},
+            },
+        ]
+    }
+    superset_rebuild = expect(
+        httpx.post(
+            f"{RECONCILER}/api/v1/projections/rebuild",
+            json=superset_packet,
+            timeout=20,
+        ),
+        200,
+    )
+    assert superset_rebuild["projection"]["source_event_count"] == len(packet["events"]) + 1
 
 
 def ops_console_flow() -> None:
