@@ -99,7 +99,7 @@ jobs:
         run: |
           set -euo pipefail
           docker compose config >/dev/null
-          docker compose build commitment ledger reconciler ops-console
+          docker compose build commitment merchant-fulfillment ledger reconciler ops-console
           docker build -f Dockerfile.demo -t pickup-pact-demo:release-gate .
 
       - name: Full Docker topology runtime smoke — two passes

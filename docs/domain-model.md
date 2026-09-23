@@ -43,6 +43,31 @@ The Redis adapter treats future preparation capacity as a **5-minute reservable 
 
 This matters when a request crosses storage boundaries. If the database transition to `CANCELLED` or `PICKED_UP` commits but Redis release fails, a retry sees the already-terminal commitment and retries only the idempotent release instead of emitting the domain event again. If PostgreSQL persistence fails while creating a hold, the application compensates the Redis admission.
 
+## Merchant Fulfillment context
+
+A confirmed commitment becomes a separate merchant-side aggregate instead of reusing the customer order state for store execution.
+
+States:
+
+`RECEIVED → ACCEPTED → PREPARING → READY → PICKED_UP`
+
+Cancellation before preparation can become `CANCELLED`. Cancellation after real preparation starts becomes `CANCELLATION_REVIEW`.
+
+The context owns:
+
+- inbox dedupe by commitment event ID;
+- durable merchant delivery ordered by sequence and retained until ACK;
+- exactly-once business effects for `NEW_ORDER_NOTIFICATION` and `POS_PRINT`;
+- a JIT preparation window derived from pickup time and workload;
+- `STARTED_LATE`, `READY_TOO_EARLY`, `READY_LATE`, `CANCEL_AFTER_PREPARATION`, and `RESCHEDULE_AFTER_PREPARATION` evidence;
+- a monotonic fulfillment outbox.
+
+A pickup-time change before preparation recomputes the schedule. The same change after preparation starts is not silently applied; it produces review evidence.
+
+`READY_LATE` is published through `pickup.fulfillment.events.v1`. The commitment context consumes that fact and breaches the active Pickup Pact using the fulfillment observation time. If the same late signal is delivered again after compensation, the operation is a no-op rather than another 500 PTS grant.
+
+Detailed design: [merchant-fulfillment.md](merchant-fulfillment.md)
+
 ## Financial Ledger context
 
 The financial model is append-only. Each settlement, reward, or reversal becomes a balanced debit/credit `LedgerBatch`.

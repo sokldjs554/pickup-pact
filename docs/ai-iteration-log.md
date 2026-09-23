@@ -112,3 +112,31 @@ Correction:
 - full-topology integration first proves early breach is rejected, then moves only the persisted test fixture deadline into the past and verifies the real outbox → Kafka → 500 PTS ledger path.
 
 The correction prevents callers from turning a future guarantee into an immediate reward while keeping the financial side effect deterministic and idempotent.
+
+
+## 10. Scheduled-pickup novelty → actual product research → merchant fulfillment reliability
+
+Problem found after a direct challenge to the project thesis: the earlier research had examined the target posting and common public backend projects deeply, but it had not given enough weight to the actual PassOrder customer and merchant product surfaces before calling scheduled pickup itself distinctive.
+
+Product research correction:
+- the public customer app already offers desired pickup-time selection;
+- the public merchant app emphasizes real-time order reception, accept/preparation-complete/cancel, auto acceptance, printer/POS integration, pickup-time/sold-out management and maintaining order connectivity when the app is closed;
+- the target backend posting emphasizes order/payment/settlement/reward logic, DDD/domain events, Kafka/CQRS/Redis, distributed consistency, performance analysis and AI-assisted iteration.
+
+Rejected thesis:
+- “customer-selected future pickup time is the project differentiator.”
+
+Accepted thesis:
+- **the differentiator is the reliability layer behind that existing product promise**.
+
+Implementation changes:
+- added a separate Java/Spring `merchant-fulfillment-service`;
+- `CommitmentConfirmed` enters a DB inbox and produces a durable merchant delivery;
+- unacknowledged delivery is replayable after reconnect;
+- duplicate Kafka delivery does not duplicate POS print or new-order notification effects;
+- pickup time + workload derive a JIT preparation window;
+- too-early start is rejected; EARLY/LATE READY is explicit;
+- cancellation or reschedule after preparation starts becomes review evidence instead of last-write-wins;
+- `READY_LATE` publishes a fulfillment event that drives the existing Pickup Pact compensation exactly once.
+
+This iteration is intentionally documented because it is the clearest example of the target role's requested behavior: use AI aggressively, but reject a polished result when product evidence shows the problem framing is wrong.

@@ -187,6 +187,7 @@ class CommitmentService(
                         PendingDomainEvent(
                             "CommitmentConfirmed",
                             mapOf(
+                                "store_id" to saved.storeId,
                                 "pickup_at" to saved.pickupAt.toString(),
                                 "capacity_units" to saved.units
                             )
@@ -259,9 +260,23 @@ class CommitmentService(
     }
 
     fun breachPact(id: UUID): Mono<PickupCommitment> =
+        breachPactAt(id, Instant.now(), duplicateIsNoop = false)
+
+    fun breachPactFromFulfillment(id: UUID, observedAt: Instant): Mono<PickupCommitment> =
+        breachPactAt(id, observedAt, duplicateIsNoop = true)
+
+    private fun breachPactAt(
+        id: UUID,
+        observedAt: Instant,
+        duplicateIsNoop: Boolean
+    ): Mono<PickupCommitment> =
         repository.find(id)
-            .map { it.breachPact(Instant.now()) }
-            .flatMap { breached ->
+            .flatMap { current ->
+                val currentPact = checkNotNull(current.pact) { "pickup pact has not been issued" }
+                if (duplicateIsNoop && currentPact.compensationGranted) {
+                    return@flatMap Mono.just(current)
+                }
+                val breached = current.breachPact(observedAt)
                 val pact = checkNotNull(breached.pact)
                 repository.saveWithEvent(
                     breached,
@@ -270,7 +285,8 @@ class CommitmentService(
                         "promised_at" to pact.promisedAt.toString(),
                         "latest_at" to pact.latestAt.toString(),
                         "compensation_points" to pact.compensationPoints,
-                        "version" to pact.version
+                        "version" to pact.version,
+                        "source" to "merchant_fulfillment"
                     )
                 )
             }

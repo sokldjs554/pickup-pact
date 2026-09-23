@@ -79,7 +79,7 @@ jobs:
       - name: Docker configuration and images
         run: |
           docker compose config >/dev/null
-          docker compose build commitment ledger reconciler ops-console
+          docker compose build commitment merchant-fulfillment ledger reconciler ops-console
           docker build -f Dockerfile.demo -t pickup-pact-demo:ci .
 
       - name: PostgreSQL execution-plan verification

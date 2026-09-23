@@ -286,6 +286,32 @@ class CommitmentServiceTest {
     }
 
     @Test
+    fun duplicateLateFulfillmentSignalDoesNotDoubleCompensate() {
+        val repository = FakeRepository()
+        val service = service(repository = repository)
+        val held = service.hold(
+            HoldCommand(quoteToken(units = 1), Instant.now().plusSeconds(600), "idem-fulfillment-breach")
+        ).block()!!
+        service.authorizePayment(held.id, "auth-fulfillment-breach").block()
+        val confirmed = service.confirm(held.id).block()!!
+
+        val observedAt = Instant.now()
+        repository.rows[held.id] = confirmed.copy(
+            pact = confirmed.pact!!.copy(
+                promisedAt = observedAt.minusSeconds(600),
+                latestAt = observedAt.minusSeconds(300)
+            )
+        )
+
+        val first = service.breachPactFromFulfillment(held.id, observedAt).block()!!
+        val duplicate = service.breachPactFromFulfillment(held.id, observedAt.plusSeconds(1)).block()!!
+
+        assertEquals(PickupPactStatus.COMPENSATED, first.pact!!.status)
+        assertEquals(PickupPactStatus.COMPENSATED, duplicate.pact!!.status)
+        assertEquals(1, repository.events.count { it == "PickupPactBreached" })
+    }
+
+    @Test
     fun claimPickupIsRetrySafeAndDoesNotDuplicateItsDomainEvent() {
         val capacity = FakeCapacity()
         val repository = FakeRepository()

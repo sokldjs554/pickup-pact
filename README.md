@@ -1,13 +1,17 @@
 # Pickup Pact
 
-**고객이 원하는 픽업 시간을 직접 고르면 미래 제조 capacity를 5분 슬롯으로 원자 예약하고, 확정된 주문에는 버전드 `Pickup Pact Guarantee`를 발급해 약속 변경과 자동 보상까지 추적하는 이벤트 기반 스마트오더 백엔드 프로젝트입니다.**
+**패스오더 같은 스마트오더의 ‘원하는 시간 픽업’을 다시 만드는 대신, 결제 완료 주문이 점주 앱에 누락·중복 없이 전달되고 JIT 제조·조리완료·수령·정산까지 고객 약속이 깨지지 않도록 보호하는 Merchant Fulfillment Reliability 백엔드 프로젝트입니다.**
 
 **Live Demo:** <https://pickup-pact-demo.onrender.com>  
 **Public demo engine:** `services/reconciler/app/engine.py` · 합성 데이터만 사용
 
 ### 핵심 문제
 
-단순히 `pickup_at=12:30`과 클라이언트가 보낸 `units=1`을 저장하면 여러 고객이 같은 시간을 선택하거나 요청 값을 축소했을 때 매장의 실제 처리량을 초과 예약할 수 있습니다. Pickup Pact는 **서버가 메뉴 SKU/수량으로 제조 부담과 주문 금액을 계산하고, 짧게 유효한 HMAC quote를 발급한 뒤 (매장, 5분 슬롯)의 미래 capacity를 Redis Lua로 원자 예약**합니다. HOLD는 `Idempotency-Key`로 중복 네트워크 재시도를 한 commitment로 접고, 취소/수령 뒤에는 같은 lease를 여러 번 해제해도 용량이 과반환되지 않도록 lease identity를 별도로 보존합니다.
+고객이 13:30 픽업을 선택했다는 사실만 저장해서는 제품 약속이 완성되지 않습니다. **결제된 주문이 점주 앱에 실제로 도착했는지, 재접속·Kafka 재전달에도 POS/알림이 한 번만 발생하는지, 너무 일찍 만들어 품질이 떨어지지 않는지, 늦은 조리완료가 고객 보상까지 이어지는지**가 매장 실행 단계의 핵심 문제입니다.
+
+Pickup Pact는 주문 확정 이벤트를 별도 **Merchant Fulfillment bounded context**로 전달합니다. 이 context는 DB inbox로 Kafka 재전달을 dedupe하고, ACK 전 delivery를 재접속 시 다시 제공하며, `(order_id, effect_type)` unique boundary로 POS 출력·신규주문 알림을 정확히 한 번의 비즈니스 effect로 만듭니다. 픽업 시각과 workload에서는 제조 시작 가능 시각·목표 READY·최종 보장 시각을 역산합니다.
+
+Capacity reservation과 signed quote는 이 약속을 받을 수 있는지 결정하는 **admission layer**이고, 아래 Pickup Pact Guarantee는 실행 결과가 약속을 넘었을 때 책임지는 **customer promise layer**입니다.
 
 ### Pickup Pact Guarantee
 
@@ -43,13 +47,14 @@ Pickup Pact는 서버가 받은 순서만 믿지 않고 `occurred_at`과 `receiv
 
 일반 사용자는 Kafka, CQRS, ledger, anomaly, repair command 같은 용어를 볼 필요가 없습니다. 해당 내용은 백엔드 검토용 **숨김 개발자 모드(`?dev=1`)** 에서만 확인합니다.
 
-이 프로젝트의 중심 차별점은 **User-selected Capacity Slot + Pickup Pact Guarantee**입니다. Capacity Slot은 애초에 지킬 수 있는 시간만 선택하게 만들고, Pickup Pact는 확정 뒤 생기는 변화도 버전드 약속·재합의·자동 보상으로 이어갑니다. Trust Receipt와 One-time Pickup Code는 이 약속을 고객이 확인하고 안전하게 수령하기 위한 신뢰 레이어이며, 백엔드에는 정합성·ledger·audit 근거를 보존합니다.
+이 프로젝트의 중심 차별점은 **Durable Merchant Intake + JIT Preparation + Pickup Pact Guarantee**입니다. 픽업 시간 선택 자체는 차별점으로 주장하지 않습니다. 대신 ACK 전 주문 재전달, exactly-once POS/알림 effect, 제조 시작 window, EARLY/LATE READY 판정, 제조 후 취소·시간변경 review, READY_LATE의 500P 자동 보상까지 하나의 fulfillment lifecycle로 연결합니다.
 
 ### 기술 상세
 
 백엔드 면접관이나 개발자는 같은 세션에서 아래 운영 도구로 더 깊게 들어갈 수 있습니다.
 
 - **주문 흐름**: HOLD 주문, 결제 승인, 픽업 확정, 취소, 정상 정산/적립
+- **매장 운영**: durable delivery, reconnect/ACK, exact redelivery dedupe, POS/알림 effect, JIT 제조 시작, EARLY/LATE READY, 취소/시간변경 review
 - **매장 처리량**: reserved/available units, capacity revision, `AT_RISK`
 - **장애 주입**: 52초 지연 취소, exact Kafka redelivery, 동일 `event_id` 금액 충돌, 처리량 감소
 - **정합성 복구**: 실제 `services/reconciler/app/engine.py`, receive-time vs business-time, anomaly/evidence/repair proposal
@@ -91,6 +96,11 @@ flowchart LR
     PG --> Relay[Transactional Outbox Relay]
     Relay --> Kafka[(Kafka)]
 
+    Kafka --> Merchant[Java + Spring<br/>Merchant Fulfillment]
+    Merchant --> PG
+    Merchant --> FulfillmentKafka[(Fulfillment Events)]
+    FulfillmentKafka --> Commitment
+
     Kafka --> Ledger[Java + Spring<br/>Double-entry Ledger]
     Ledger --> PG
 
@@ -107,6 +117,11 @@ flowchart LR
 
 - 고객 admission은 **menu line items → server workload/price calculation → signed quote → 5분 slot 선택** 순서이며, HOLD API는 클라이언트가 직접 만든 capacity units를 신뢰하지 않습니다.
 - 동일 `Idempotency-Key` + 동일 요청의 HOLD 재시도는 같은 commitment를 반환하며 capacity를 다시 차감하지 않습니다.
+- 점주 주문은 `merchant_inbox_events.event_id`로 Kafka 재전달을 접고, ACK 전 delivery는 재접속 시 다시 읽을 수 있습니다.
+- POS 출력과 신규주문 알림은 `unique(order_id, effect_type)`으로 한 번의 비즈니스 effect만 생성합니다.
+- 제조 시작은 JIT window가 열리기 전에는 거절됩니다. READY가 너무 이르면 `READY_TOO_EARLY`, 보장 시각을 넘으면 `READY_LATE`를 남깁니다.
+- 제조가 시작된 뒤 취소·시간변경은 last-write-wins로 덮지 않고 review 상태/근거로 남깁니다.
+- `READY_LATE` fulfillment event는 Pickup Pact breach를 자동으로 일으키되 중복 신호는 보상을 두 번 만들지 않습니다.
 - 픽업 확정에는 **capacity lease + payment authorization**이 모두 필요합니다.
 - Redis Lua 경로에서는 동일 슬롯의 제조 capacity를 원자적으로 초과할 수 없습니다.
 - lease identity를 별도 Redis key로 저장해 취소/수령 API가 재시도되어도 같은 capacity를 두 번 반환하지 않습니다.
@@ -122,16 +137,16 @@ flowchart LR
 | 공고 기술 | 프로젝트에서 맡은 역할 |
 |---|---|
 | Kotlin / Spring WebFlux | Pickup Commitment aggregate와 reactive API |
-| Java / Spring | 이중 분개 Ledger, semantic idempotency, 충돌 quarantine, 주문별 ledger history 조회 |
+| Java / Spring | Merchant Fulfillment intake/JIT lifecycle + 이중 분개 Ledger, semantic idempotency, conflict quarantine |
 | Python / FastAPI | event-time reconciliation engine, 공개 데모 API |
 | Flask | 원본 ops-console 구현 경로의 운영 콘솔; 공개 데모는 배포 단순화를 위해 FastAPI 단일 프로세스로 구성 |
-| PostgreSQL | commitment, transactional outbox, ledger, reconciliation audit |
+| PostgreSQL | commitment/outbox, merchant inbox/delivery/effects/JIT state, ledger, reconciliation audit |
 | MongoDB | 재생 가능한 raw event evidence archive |
 | Redis | 매장별 capacity policy + Lua atomic lease + lease identity + Celery broker |
 | Elasticsearch | incident 검색/포렌식 index |
-| Kafka | commitment/financial domain events |
+| Kafka | commitment → merchant fulfillment → promise feedback + financial domain events |
 | Celery | 비동기 replay worker와 retry/backoff |
-| DDD / EDA / CQRS | bounded context, domain event, explicit canonical projection rebuild/query API |
+| DDD / EDA / CQRS | Pickup Commitment + Merchant Fulfillment + Financial Ledger contexts, domain events, canonical projection rebuild/query |
 | Docker / Kubernetes | 서비스 이미지, Compose, K8s deployment |
 | AWS | RDS PostgreSQL · ElastiCache Redis · MSK Serverless Terraform blueprint |
 | Jenkins | JVM/Python/Docker 검증 pipeline |
@@ -181,6 +196,7 @@ Pickup Pact의 0 overbooking은 공짜가 아닙니다. 이 workload에서는 53
 demo/                         # 면접관용 FastAPI 운영 샌드박스 + session state
 services/
   commitment-service/         # Kotlin + Spring WebFlux
+  merchant-fulfillment-service/ # Java + Spring · durable intake / ACK / JIT
   ledger-service/             # Java + Spring
   reconciler/                 # Python + FastAPI + Celery
 contracts/                    # OpenAPI / AsyncAPI
@@ -224,11 +240,11 @@ GitHub Actions는 Python reconciler, interviewer demo tests/live smoke, Docker b
 
 ## 왜 이 주제인가
 
-공개 주문 백엔드 포트폴리오는 `order/payment/restaurant + Kafka + Saga/Outbox/CQRS` 조합이 이미 매우 흔합니다. Pickup Pact는 여기에 기술을 더 붙이는 대신 **사용자가 고른 미래 픽업 시간을 실제 제조 capacity와 충돌 없이 예약하는 문제**를 먼저 도메인 자원으로 모델링하고, 확정 이후에는 이벤트 지연·중복·취소·capacity 변화까지 같은 약속의 수명주기로 연결합니다.
+공개 주문 백엔드 포트폴리오는 `order/payment/restaurant + Kafka + Saga/Outbox/CQRS` 조합이 이미 흔하고, 실제 패스오더 고객 앱에도 원하는 픽업 시간을 직접 고르는 기능이 이미 존재합니다. 그래서 이 프로젝트는 예약 UI를 차별점으로 삼지 않습니다. **결제된 주문이 점주 앱에 안정적으로 도착하고, 재접속·중복 이벤트·제조 시점·조리완료·취소 경합을 거쳐도 고객이 고른 시간 약속과 금융 정합성이 유지되는 문제**를 중심에 둡니다.
 
 특정 회사의 비공개 시스템을 추정하거나 복제하지 않았습니다. 공개 채용 요구와 일반적인 스마트오더 장애 조건에서 독립적으로 설계했습니다.
 
-자세한 선택 근거: [docs/topic-research.md](docs/topic-research.md)
+제품 조사와 선택 근거: [docs/topic-research.md](docs/topic-research.md) · [docs/merchant-fulfillment.md](docs/merchant-fulfillment.md)
 
 ## 범위와 한계
 

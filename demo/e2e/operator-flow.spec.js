@@ -115,6 +115,57 @@ test('virtual customer can order, protect pickup time, claim once, and read a tr
   await expect(page.locator('#auditList')).toContainText('PICKUP_CLAIMED');
 });
 
+test('merchant fulfillment demo proves reconnect dedupe, ACK, and JIT early-ready detection', async ({ page }) => {
+  await page.goto('/');
+
+  await page.getByRole('button', { name: '매장 운영', exact: true }).click();
+  await expect(page.getByRole('heading', { name: '매장 운영', exact: true })).toBeVisible();
+  await expect(page.getByText('Merchant Fulfillment Reliability', { exact: true })).toBeVisible();
+
+  await page.getByRole('button', { name: '샘플 주문 준비', exact: true }).click();
+  await expect(page.locator('#merchantStatusCard')).toContainText('주문 도착');
+  await expect(page.locator('#merchantStatusCard')).toContainText('ACK 대기');
+  await expect(page.locator('#merchantEffects')).toContainText('NEW_ORDER_NOTIFICATION');
+  await expect(page.locator('#merchantEffects')).toContainText('POS_PRINT');
+
+  await page.getByRole('button', { name: '동일 주문 재전달', exact: true }).click();
+  await expect(page.locator('#merchantStatusCard')).toContainText('1회');
+  await expect(page.locator('#merchantEffects .alert')).toHaveCount(2);
+
+  await page.getByRole('button', { name: 'Delivery ACK', exact: true }).click();
+  await expect(page.locator('#merchantStatusCard')).toContainText('ACK 완료');
+
+  await page.getByRole('button', { name: '주문 접수', exact: true }).click();
+  await expect(page.locator('#merchantStatusCard')).toContainText('접수 완료');
+
+  await page.getByRole('button', { name: '너무 이른 제조 시도', exact: true }).click();
+  await expect(page.locator('#merchantActionResult')).toContainText('서버가 시작을 거절했습니다');
+
+  await page.getByRole('button', { name: 'JIT 제조 시작', exact: true }).click();
+  await expect(page.locator('#merchantStatusCard')).toContainText('제조 중');
+
+  await page.getByRole('button', { name: '너무 일찍 완료', exact: true }).click();
+  await expect(page.locator('#merchantStatusCard')).toContainText('조리 완료');
+  await expect(page.locator('#merchantStatusCard')).toContainText('EARLY');
+  await expect(page.locator('#merchantAnomalies')).toContainText('READY_TOO_EARLY');
+});
+
+test('late merchant ready automatically compensates the customer promise', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: '매장 운영', exact: true }).click();
+  await page.getByRole('button', { name: '샘플 주문 준비', exact: true }).click();
+  await page.getByRole('button', { name: '주문 접수', exact: true }).click();
+  await page.getByRole('button', { name: 'JIT 제조 시작', exact: true }).click();
+  await page.getByRole('button', { name: '보장시간 초과 완료', exact: true }).click();
+
+  await expect(page.locator('#merchantAnomalies')).toContainText('READY_LATE');
+  await expect(page.locator('#merchantActionResult')).toContainText('500P');
+
+  await page.getByRole('button', { name: '내 주문', exact: true }).click();
+  await expect(page.locator('#customerOrderView')).toContainText('500P');
+  await expect(page.locator('.pact-card')).toHaveAttribute('data-pact-status', 'COMPENSATED');
+});
+
 test('cart follows the selected store and clears when the customer changes stores', async ({ page }) => {
   await page.goto('/');
 

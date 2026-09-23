@@ -1,7 +1,7 @@
 asyncapi: 3.0.0
 info:
   title: Pickup Pact Domain Events
-  version: 0.3.0
+  version: 0.4.0
 
 channels:
   commitmentEvents:
@@ -32,6 +32,28 @@ channels:
         payload:
           $ref: "#/components/schemas/CommitmentEvent"
 
+  fulfillmentEvents:
+    address: pickup.fulfillment.events.v1
+    messages:
+      merchantOrderReceived:
+        payload:
+          $ref: "#/components/schemas/FulfillmentEvent"
+      merchantOrderAccepted:
+        payload:
+          $ref: "#/components/schemas/FulfillmentEvent"
+      preparationStarted:
+        payload:
+          $ref: "#/components/schemas/FulfillmentEvent"
+      orderReady:
+        payload:
+          $ref: "#/components/schemas/FulfillmentEvent"
+      fulfillmentAnomalyDetected:
+        payload:
+          $ref: "#/components/schemas/FulfillmentEvent"
+      merchantPickupCompleted:
+        payload:
+          $ref: "#/components/schemas/FulfillmentEvent"
+
   financialEvents:
     address: pickup.financial.events.v1
     messages:
@@ -57,6 +79,27 @@ components:
         event_type:
           type: string
           enum: [PaymentAuthorized, CommitmentConfirmed, CommitmentCancelled, PickupRescheduled, PickupPactIssued, PickupPactRenegotiated, PickupPactBreached, PickupClaimed]
+        occurred_at: {type: string, format: date-time}
+        schema_version: {type: integer, const: 1}
+        payload: {type: object}
+
+    FulfillmentEvent:
+      type: object
+      required: [event_id, aggregate_id, event_type, occurred_at, schema_version, payload]
+      properties:
+        event_id: {type: string}
+        aggregate_id: {type: string}
+        event_type:
+          type: string
+          enum:
+            - MerchantOrderReceived
+            - MerchantOrderAccepted
+            - PreparationStarted
+            - OrderReady
+            - FulfillmentAnomalyDetected
+            - MerchantPickupCompleted
+            - MerchantOrderCancelled
+            - MerchantPickupScheduleChanged
         occurred_at: {type: string, format: date-time}
         schema_version: {type: integer, const: 1}
         payload: {type: object}
