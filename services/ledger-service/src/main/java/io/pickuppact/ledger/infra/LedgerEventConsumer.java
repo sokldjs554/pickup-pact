@@ -26,8 +26,15 @@ public class LedgerEventConsumer {
             throw new IllegalArgumentException("invalid financial event JSON", exception);
         }
 
-        var result = service.post(request.type(), request.eventId(), request.aggregateId(), request.amount());
-        if (result == LedgerPostingService.Result.CONFLICTING_EVENT_ID) {
+        var result = service.post(
+                request.type(),
+                request.eventId(),
+                request.aggregateId(),
+                request.amount(),
+                request.sourceEventId()
+        );
+        if (result == LedgerPostingService.Result.CONFLICTING_EVENT_ID
+                || result == LedgerPostingService.Result.SOURCE_POSTING_CONFLICT) {
             System.err.printf(
                     "quarantined conflicting financial event: eventId=%s aggregateId=%s%n",
                     request.eventId(),
