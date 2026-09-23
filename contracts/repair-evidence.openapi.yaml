@@ -31,7 +31,7 @@ paths:
       responses:
         '200': {description: Projection rebuilt from executable evidence}
         '409':
-          description: Evidence unresolved; persistence is not called
+          description: Evidence unresolved or stale evidence omitted source events already in the projection
           content:
             application/json:
               schema:
