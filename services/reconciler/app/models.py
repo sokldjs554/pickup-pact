@@ -95,6 +95,7 @@ class ReconcileResult(BaseModel):
     evidence_event_ids: list[str]
     financial_actions: list[FinancialRepairAction] = Field(default_factory=list)
     source_event_ids: list[str] = Field(default_factory=list)
+    source_event_fingerprints: dict[str, str] = Field(default_factory=dict)
     decision: Literal["AUTO", "WAIT_FOR_EVIDENCE", "MANUAL_REVIEW"] = "AUTO"
     blocking_reasons: list[str] = Field(default_factory=list)
     missing_event_ids: list[str] = Field(default_factory=list)
