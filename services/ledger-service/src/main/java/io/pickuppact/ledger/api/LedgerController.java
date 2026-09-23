@@ -25,12 +25,19 @@ public class LedgerController {
 
     @PostMapping("/postings")
     public ResponseEntity<Map<String, String>> posting(@Valid @RequestBody LedgerPostingRequest request) {
-        var result = service.post(request.type(), request.eventId(), request.aggregateId(), request.amount());
+        var result = service.post(
+                request.type(),
+                request.eventId(),
+                request.aggregateId(),
+                request.amount(),
+                request.sourceEventId()
+        );
         var body = Map.of("result", result.name());
         return switch (result) {
             case POSTED -> ResponseEntity.status(HttpStatus.ACCEPTED).body(body);
             case DUPLICATE_NOOP -> ResponseEntity.ok(body);
-            case CONFLICTING_EVENT_ID -> ResponseEntity.status(HttpStatus.CONFLICT).body(body);
+            case CONFLICTING_EVENT_ID, SOURCE_POSTING_CONFLICT ->
+                    ResponseEntity.status(HttpStatus.CONFLICT).body(body);
         };
     }
 
