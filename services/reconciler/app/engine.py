@@ -4,7 +4,7 @@ from collections import defaultdict
 
 from .models import EventEnvelope, ReconcileRequest, ReconcileResult, Snapshot
 from .evidence_order import causal_order
-from .financial_scope import scope_blockers
+from .financial_scope import accounting_amount, plan_financial_repairs
 
 _EVENT_PRIORITY = {
     "PickupSlotHeld": 10,
@@ -45,6 +45,27 @@ def _unique_by_event_id(events: list[EventEnvelope]) -> tuple[list[EventEnvelope
 
 def _fold(events: list[EventEnvelope], *, count_duplicates: bool = False) -> tuple[Snapshot, list[str]]:
     state = Snapshot(); anomalies: list[str] = []; seen: set[str] = set(); required_capacity = 1; capacity_at_risk = False
+    settlement_balances: dict[str, int] = {}
+    reward_balances: dict[str, int] = {}
+
+    def posting_amount(event: EventEnvelope) -> int:
+        try:
+            return accounting_amount(event.payload.get("amount"))
+        except ValueError:
+            # Keep malformed postings visibly open; the financial planner will
+            # quarantine them instead of allowing a false "fully reversed" fold.
+            return 1
+
+    def apply_reversal(event: EventEnvelope, balances: dict[str, int]) -> None:
+        target = event.payload.get("source_event_id") or event.causation_id
+        if not target or target not in balances:
+            return
+        try:
+            amount = accounting_amount(event.payload.get("amount")) if "amount" in event.payload else balances[target]
+        except ValueError:
+            return
+        balances[target] = max(0, balances[target] - amount)
+
     for event in events:
         if not count_duplicates and event.event_id in seen: continue
         seen.add(event.event_id)
@@ -65,10 +86,19 @@ def _fold(events: list[EventEnvelope], *, count_duplicates: bool = False) -> tup
             state.status="CANCELLED"; capacity_at_risk=False
         elif event.event_type == "PickupClaimed":
             state.status="PICKED_UP"; capacity_at_risk=False
-        elif event.event_type == "SettlementPosted": state.settlement_post_count+=1; state.settled=True
-        elif event.event_type == "RewardGranted": state.reward_post_count+=1; state.rewarded=True
-        elif event.event_type == "SettlementReversed": state.settled=False
-        elif event.event_type == "RewardReversed": state.rewarded=False
+        elif event.event_type == "SettlementPosted":
+            state.settlement_post_count+=1
+            settlement_balances[event.event_id]=posting_amount(event)
+        elif event.event_type == "RewardGranted":
+            state.reward_post_count+=1
+            reward_balances[event.event_id]=posting_amount(event)
+        elif event.event_type == "SettlementReversed":
+            apply_reversal(event, settlement_balances)
+        elif event.event_type == "RewardReversed":
+            apply_reversal(event, reward_balances)
+
+    state.settled = any(amount > 0 for amount in settlement_balances.values())
+    state.rewarded = any(amount > 0 for amount in reward_balances.values())
     if capacity_at_risk:
         anomalies.append("confirmed_promise_exceeds_revised_capacity")
     return state, anomalies
@@ -121,38 +151,46 @@ def reconcile(request: ReconcileRequest) -> ReconcileResult:
     claims = [e for e in unique if e.event_type == "PickupClaimed"]
     settlements = [e for e in unique if e.event_type == "SettlementPosted"]
     rewards = [e for e in unique if e.event_type == "RewardGranted"]
+    financial_actions = []
+
     if cancels and claims:
         # Both are committed terminal facts. Timestamp order cannot arbitrate
         # an invalid cross-context transition; this requires authoritative review.
         manual.append("conflicting_terminal_facts")
         evidence.update(e.event_id for e in cancels + claims)
 
-    def after_cancel(cancel: EventEnvelope, posting: EventEnvelope) -> bool:
-        if ordered.precedes(cancel.event_id, posting.event_id):
-            return True
-        if ordered.precedes(posting.event_id, cancel.event_id):
-            return False
-        if cancel.occurred_at == posting.occurred_at:
-            if "ambiguous_financial_order" not in manual:
+    # Preserve an explicit ambiguity guard for unrelated financial facts with an
+    # identical business timestamp. Causal evidence, when present, resolves it.
+    for cancel in cancels:
+        for posting in settlements + rewards:
+            if (
+                not ordered.precedes(cancel.event_id, posting.event_id)
+                and not ordered.precedes(posting.event_id, cancel.event_id)
+                and cancel.occurred_at == posting.occurred_at
+            ):
                 manual.append("ambiguous_financial_order")
-            evidence.update((cancel.event_id, posting.event_id))
-            return False
-        # Legacy event-time policy for unrelated events: this assumes comparable
-        # producer clocks. No arbitrary cross-system clock-order guarantee.
-        return cancel.occurred_at < posting.occurred_at
+                evidence.update((cancel.event_id, posting.event_id))
 
     if cancels:
-        for postings, active, anomaly, repair in (
-            (settlements, canonical_state.settled,
-             "settlement_posted_after_prior_cancellation", "REVERSE_SETTLEMENT"),
-            (rewards, canonical_state.rewarded,
-             "reward_granted_after_prior_cancellation", "REVERSE_REWARD"),
-        ):
-            invalid = [post for post in postings if any(after_cancel(c, post) for c in cancels)]
-            if invalid and active:
-                anomalies.append(anomaly)
-                evidence.update(e.event_id for e in cancels + invalid)
-                repairs.add(repair)
+        financial_actions, financial_blockers = plan_financial_repairs(
+            unique,
+            cancelled=canonical_state.status == "CANCELLED",
+        )
+        manual.extend(financial_blockers)
+        if financial_blockers:
+            evidence.update(event.event_id for event in unique)
+        if financial_actions:
+            evidence.update(event.event_id for event in cancels)
+            evidence.update(action.target_event_id for action in financial_actions)
+            for action in financial_actions:
+                repairs.add(action.repair)
+                anomaly = (
+                    "cancelled_order_has_open_settlement"
+                    if action.repair == "REVERSE_SETTLEMENT"
+                    else "cancelled_order_has_open_order_reward"
+                )
+                if anomaly not in anomalies:
+                    anomalies.append(anomaly)
 
     if "confirmed_promise_exceeds_revised_capacity" in canonical_anomalies:
         repairs.add("RESLOT_REVIEW")
@@ -160,13 +198,6 @@ def reconcile(request: ReconcileRequest) -> ReconcileResult:
     if "confirmed_without_payment_authorization" in canonical_anomalies:
         manual.append("confirmed_without_payment_authorization")
         evidence.update(e.event_id for e in unique if e.event_type == "CommitmentConfirmed")
-
-    # A missing antecedent remains WAIT, not a guessed full-amount reversal.
-    if not ordered.missing_ids:
-        scope_errors = scope_blockers(unique, repairs)
-        manual.extend(scope_errors)
-        if scope_errors:
-            evidence.update(e.event_id for e in unique)
 
     decision = "AUTO"
     blockers = list(dict.fromkeys(manual))
@@ -186,6 +217,7 @@ def reconcile(request: ReconcileRequest) -> ReconcileResult:
         # MANUAL_REVIEW repair for legacy consumers; decision distinguishes wait.
         repairs.intersection_update({"NO_OP_DUPLICATE"})
         repairs.add("MANUAL_REVIEW")
+        financial_actions = []
         canonical_state = canonical_state.model_copy(update={"status": "UNRESOLVED"})
 
     return ReconcileResult(
@@ -196,6 +228,7 @@ def reconcile(request: ReconcileRequest) -> ReconcileResult:
         repairs=[repair for repair in _REPAIR_ORDER if repair in repairs],
         duplicate_event_ids=duplicate_ids,
         evidence_event_ids=sorted(evidence),
+        financial_actions=financial_actions,
         source_event_ids=sorted({event.event_id for event in unique}),
         decision=decision,
         blocking_reasons=blockers,
