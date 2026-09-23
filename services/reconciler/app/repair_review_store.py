@@ -47,11 +47,11 @@ def sample_events(case: str) -> list[EventEnvelope]:
     if case == 'terminal_conflict': return root+[cancel,post,ev('claim','PickupClaimed',6,'confirm')]
     if case == 'missing_parent': return root+[cancel,post.model_copy(update={'causation_id':'late'})]
     if case == 'partial_cancel':
-        partial = cancel.model_copy(update={'payload':{
+        partial = ev('partial-cancel','PartialCancellationApplied',3,'confirm',{
             'scope':'PARTIAL',
             'amount':'3000',
             'allocations':[{'target_event_id':'settle','amount':'3000','unit':'KRW'}],
-        }})
+        },20)
         return root+[partial,post]
     if case == 'multiple_postings':
         return root+[cancel,post,ev('settle2','SettlementPosted',6,'cancel',{'amount':'2000','currency':'KRW'})]
