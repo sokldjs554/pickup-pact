@@ -168,7 +168,9 @@ def rebuild_projection(result: ReconcileResult) -> dict:
 
     A later request may add evidence, but it cannot omit event IDs already
     represented by the stored projection. This prevents a stale replay from
-    overwriting a newer read model merely because it arrived later.
+    overwriting a newer read model merely because it arrived later. Retained
+    rows without complete provenance cannot prove this relation and fail closed;
+    a caller cannot bootstrap their provenance using its own partial evidence.
     """
     if result.decision != "AUTO" or "MANUAL_REVIEW" in result.repairs:
         raise ValueError("reconciliation evidence is not executable")
@@ -202,7 +204,10 @@ def rebuild_projection(result: ReconcileResult) -> dict:
                   source_event_fingerprints = excluded.source_event_fingerprints,
                   source_event_count = excluded.source_event_count,
                   rebuilt_at = now()
-                where commitment_projection.source_event_ids <@ excluded.source_event_ids
+                where commitment_projection.source_event_count > 0
+                  and commitment_projection.source_event_count = cardinality(commitment_projection.source_event_ids)
+                  and commitment_projection.source_event_fingerprints ?& commitment_projection.source_event_ids
+                  and commitment_projection.source_event_ids <@ excluded.source_event_ids
                   and commitment_projection.source_event_fingerprints <@ excluded.source_event_fingerprints
                 """,
                 (
