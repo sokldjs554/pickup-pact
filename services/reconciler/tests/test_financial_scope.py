@@ -42,6 +42,7 @@ def test_partial_cancellation_executes_only_explicit_source_allocation():
             ],
         },
     })
+    req.events[4] = req.events[4].model_copy(update={'causation_id': 'partial-cancel'})
     result = reconcile(req)
     assert result.decision == 'AUTO'
     assert [a.model_dump() for a in result.financial_actions] == [{
@@ -86,6 +87,7 @@ def test_partial_allocation_cannot_exceed_open_balance():
             ],
         },
     })
+    req.events[4] = req.events[4].model_copy(update={'causation_id': 'partial-cancel'})
     assert_blocked(req, 'partial_allocation_exceeds_open_balance')
 
 
