@@ -21,7 +21,9 @@ class PlanRequest(Input):
     version: StrictInt = Field(ge=1)
 
 class ApprovedAction(Input):
-    action_id: str = Field(pattern='^[a-f0-9]{64}
+    action_id: str = Field(pattern='^[a-f0-9]{64}$')
+    cancellation_event_id: str = Field(min_length=1,max_length=160)
+    target_event_id: str = Field(min_length=1,max_length=160)
     repair: Literal['REVERSE_SETTLEMENT','REVERSE_REWARD']
     amount: StrictInt = Field(gt=0,le=1_000_000_000_000)
     unit: Literal['KRW','PTS']
