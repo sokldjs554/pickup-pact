@@ -20,6 +20,7 @@ _EVENT_PRIORITY = {
     "PickupPactRenegotiated": 46,
     "PickupPactBreached": 50,
     "CommitmentCancelled": 55,
+    "PartialCancellationApplied": 56,
     "PickupClaimed": 60,
     "SettlementPosted": 60,
     "RewardGranted": 70,
@@ -159,21 +160,23 @@ def reconcile(request: ReconcileRequest) -> ReconcileResult:
     # authorization evidence is present and ordered before confirmation.
     anomalies.extend(x for x in canonical_anomalies if x not in anomalies)
 
-    cancels = [e for e in unique if e.event_type == "CommitmentCancelled"]
+    full_cancels = [e for e in unique if e.event_type == "CommitmentCancelled"]
+    partial_cancels = [e for e in unique if e.event_type == "PartialCancellationApplied"]
+    financial_cancels = full_cancels + partial_cancels
     claims = [e for e in unique if e.event_type == "PickupClaimed"]
     settlements = [e for e in unique if e.event_type == "SettlementPosted"]
     rewards = [e for e in unique if e.event_type == "RewardGranted"]
     financial_actions = []
 
-    if cancels and claims:
-        # Both are committed terminal facts. Timestamp order cannot arbitrate
-        # an invalid cross-context transition; this requires authoritative review.
+    if full_cancels and claims:
+        # Only a full committed cancellation conflicts with final pickup.
+        # Partial financial adjustment does not terminalize the order.
         manual.append("conflicting_terminal_facts")
-        evidence.update(e.event_id for e in cancels + claims)
+        evidence.update(e.event_id for e in full_cancels + claims)
 
     # Preserve an explicit ambiguity guard for unrelated financial facts with an
     # identical business timestamp. Causal evidence, when present, resolves it.
-    for cancel in cancels:
+    for cancel in financial_cancels:
         for posting in settlements + rewards:
             if (
                 not ordered.precedes(cancel.event_id, posting.event_id)
@@ -183,16 +186,13 @@ def reconcile(request: ReconcileRequest) -> ReconcileResult:
                 manual.append("ambiguous_financial_order")
                 evidence.update((cancel.event_id, posting.event_id))
 
-    if cancels:
-        financial_actions, financial_blockers = plan_financial_repairs(
-            unique,
-            cancelled=canonical_state.status == "CANCELLED",
-        )
+    if financial_cancels:
+        financial_actions, financial_blockers = plan_financial_repairs(unique)
         manual.extend(financial_blockers)
         if financial_blockers:
             evidence.update(event.event_id for event in unique)
         if financial_actions:
-            evidence.update(event.event_id for event in cancels)
+            evidence.update(event.event_id for event in financial_cancels)
             evidence.update(action.target_event_id for action in financial_actions)
             posting_by_id = {event.event_id: event for event in settlements + rewards}
             for action in financial_actions:
@@ -204,7 +204,7 @@ def reconcile(request: ReconcileRequest) -> ReconcileResult:
                         not ordered.precedes(posting.event_id, cancel.event_id)
                         and cancel.occurred_at < posting.occurred_at
                     )
-                    for cancel in cancels
+                    for cancel in financial_cancels
                 )
                 if action.repair == "REVERSE_SETTLEMENT":
                     anomaly = (
