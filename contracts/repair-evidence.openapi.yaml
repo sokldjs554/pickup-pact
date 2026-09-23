@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Pickup Pact Reconciliation Evidence Gate
-  version: 0.2.0
+  version: 0.3.0
   description: >-
     Service-scoped contract for the evidence-safe reconciliation implementation. A cancellation
     request is not a committed cancellation. causation_id, when supplied here,
@@ -31,21 +31,10 @@ paths:
       responses:
         '200': {description: Projection rebuilt from executable evidence}
         '409':
-          description: Evidence unresolved or stale evidence omitted source events already in the projection
+          description: Evidence unresolved or stale/changed evidence would overwrite a newer projection
           content:
             application/json:
-              schema:
-                type: object
-                required: [detail]
-                properties:
-                  detail:
-                    type: object
-                    required: [error, decision, blocking_reasons, missing_event_ids]
-                    properties:
-                      error: {type: string, const: unresolved_reconciliation_evidence}
-                      decision: {type: string, enum: [WAIT_FOR_EVIDENCE, MANUAL_REVIEW]}
-                      blocking_reasons: {type: array, items: {type: string}}
-                      missing_event_ids: {type: array, items: {type: string}}
+              schema: {$ref: '#/components/schemas/ProjectionConflict'}
         '422': {description: Invalid evidence packet}
 components:
   schemas:
@@ -80,7 +69,7 @@ components:
             revision: {type: integer, minimum: 1}
     ReconcileResult:
       type: object
-      required: [aggregate_id, receive_order_state, canonical_state, anomalies, repairs, duplicate_event_ids, evidence_event_ids, financial_actions, source_event_ids, decision, blocking_reasons, missing_event_ids]
+      required: [aggregate_id, receive_order_state, canonical_state, anomalies, repairs, duplicate_event_ids, evidence_event_ids, financial_actions, source_event_ids, source_event_fingerprints, decision, blocking_reasons, missing_event_ids]
       properties:
         aggregate_id: {type: string}
         receive_order_state: {$ref: '#/components/schemas/Snapshot'}
@@ -100,10 +89,58 @@ components:
         source_event_ids:
           type: array
           items: {type: string}
+        source_event_fingerprints:
+          type: object
+          additionalProperties:
+            type: string
+            pattern: '^[a-f0-9]{64}
+        repair: {type: string, enum: [REVERSE_SETTLEMENT, REVERSE_REWARD]}
+        amount: {type: integer, minimum: 1}
+        unit: {type: string, enum: [KRW, PTS]}
+    ProjectionConflict:
+      oneOf:
+        - $ref: '#/components/schemas/UnresolvedProjectionConflict'
+        - $ref: '#/components/schemas/StaleProjectionConflict'
+    UnresolvedProjectionConflict:
+      type: object
+      required: [detail]
+      properties:
+        detail:
+          type: object
+          required: [error, decision, blocking_reasons, missing_event_ids]
+          properties:
+            error: {type: string, const: unresolved_reconciliation_evidence}
+            decision: {type: string, enum: [WAIT_FOR_EVIDENCE, MANUAL_REVIEW]}
+            blocking_reasons: {type: array, items: {type: string}}
+            missing_event_ids: {type: array, items: {type: string}}
+    StaleProjectionConflict:
+      type: object
+      required: [detail]
+      properties:
+        detail:
+          type: object
+          required: [error, message, source_event_ids]
+          properties:
+            error: {type: string, const: stale_projection_evidence}
+            message: {type: string}
+            source_event_ids: {type: array, items: {type: string}}
+
+    Snapshot:
+      type: object
+      properties:
+        status: {type: string, description: UNRESOLVED is diagnostic only and must not be persisted as an automatic rebuild}
+        payment_authorized: {type: boolean}
+        settled: {type: boolean}
+        rewarded: {type: boolean}
+        capacity_revision: {type: integer}
+        settlement_post_count: {type: integer}
+        reward_post_count: {type: integer}
+
     FinancialRepairAction:
       type: object
-      required: [target_event_id, repair, amount, unit]
+      required: [cancellation_event_id, target_event_id, repair, amount, unit]
       properties:
+        cancellation_event_id: {type: string, minLength: 1}
         target_event_id: {type: string, minLength: 1}
         repair: {type: string, enum: [REVERSE_SETTLEMENT, REVERSE_REWARD]}
         amount: {type: integer, minimum: 1}
