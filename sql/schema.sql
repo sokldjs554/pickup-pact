@@ -123,12 +123,14 @@ create table if not exists commitment_projection (
   reward_post_count integer not null,
   canonical_hash char(64) not null,
   source_event_ids text[] not null default '{}',
+  source_event_fingerprints jsonb not null default '{}'::jsonb,
   source_event_count integer not null default 0,
   rebuilt_at timestamptz not null default now()
 );
 
 
 alter table commitment_projection add column if not exists source_event_ids text[] not null default '{}';
+alter table commitment_projection add column if not exists source_event_fingerprints jsonb not null default '{}'::jsonb;
 alter table commitment_projection add column if not exists source_event_count integer not null default 0;
 
 create table if not exists merchant_orders (
