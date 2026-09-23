@@ -592,45 +592,120 @@ class DemoStore:
 
             occurred = _now()
             received = occurred + timedelta(seconds=max(0, delay_seconds))
-            order["status"] = "CANCELLED"
-            session["capacity"]["reserved_units"] = max(
-                0,
-                session["capacity"]["reserved_units"] - order["units"],
-            )
-            protection = session.get("pickup_protection") or {}
-            session["pickup_protection"] = {
-                "status": "CANCELLED",
-                "original_pickup_at": protection.get("original_pickup_at") or order["pickup_at"],
-                "suggested_pickup_at": protection.get("suggested_pickup_at"),
-            }
-            if session["pickup_pact"]["status"] in {"ACTIVE", "COMPENSATED"}:
-                session["pickup_pact"]["status"] = "CANCELLED"
+
+            # Before confirmation there is no merchant execution authority yet.
+            if order["status"] == "HELD":
+                order["status"] = "CANCELLED"
+                session["capacity"]["reserved_units"] = max(
+                    0,
+                    session["capacity"]["reserved_units"] - order["units"],
+                )
+                event = self._append_event_locked(
+                    session_id,
+                    "CommitmentCancelled",
+                    {
+                        "reason": "customer_request",
+                        "authority": "commitment_pre_confirmation",
+                    },
+                    detail="확정 전 주문 취소",
+                    occurred_at=occurred,
+                    received_at=received,
+                )
+                self._audit_locked(
+                    session_id,
+                    "ORDER_CANCELLED",
+                    f"{order['order_id']} · pre-confirmation",
+                )
+                return {"event": deepcopy(event), "decision": "APPROVED", "state": self.snapshot(session_id)}
+
             merchant = session.get("merchant_fulfillment") or _empty_merchant_fulfillment()
+            request_id = uuid4().hex
+            request_event = self._append_event_locked(
+                session_id,
+                "CancellationRequested",
+                {
+                    "request_id": request_id,
+                    "reason": "customer_request",
+                    "merchant_state": merchant.get("status"),
+                },
+                detail="고객 취소 요청 · 매장 실행 상태 확인",
+                occurred_at=occurred,
+                received_at=occurred,
+            )
+
             if merchant.get("status") in {"RECEIVED", "ACCEPTED"}:
                 merchant["status"] = "CANCELLED"
-            elif merchant.get("status") in {"PREPARING", "READY"}:
-                merchant["status"] = "CANCELLATION_REVIEW"
+                session["merchant_fulfillment"] = merchant
+                order["status"] = "CANCELLED"
+                session["capacity"]["reserved_units"] = max(
+                    0,
+                    session["capacity"]["reserved_units"] - order["units"],
+                )
+                protection = session.get("pickup_protection") or {}
+                session["pickup_protection"] = {
+                    "status": "CANCELLED",
+                    "original_pickup_at": protection.get("original_pickup_at") or order["pickup_at"],
+                    "suggested_pickup_at": protection.get("suggested_pickup_at"),
+                }
+                if session["pickup_pact"]["status"] in {"ACTIVE", "COMPENSATED"}:
+                    session["pickup_pact"]["status"] = "CANCELLED"
+                event = self._append_event_locked(
+                    session_id,
+                    "CommitmentCancelled",
+                    {
+                        "reason": "customer_request",
+                        "authority": "merchant_fulfillment",
+                        "request_id": request_id,
+                    },
+                    detail=(
+                        "매장 제조 시작 전 취소 승인"
+                        if delay_seconds <= 0
+                        else f"매장 제조 시작 전 취소 승인 · 메시지 {delay_seconds}초 지연"
+                    ),
+                    occurred_at=occurred,
+                    received_at=received,
+                )
+                self._audit_locked(
+                    session_id,
+                    "MERCHANT_CANCELLATION_APPROVED",
+                    f"{order['order_id']} · request={request_id}",
+                )
+                return {
+                    "event": deepcopy(event),
+                    "request_event": deepcopy(request_event),
+                    "decision": "APPROVED",
+                    "state": self.snapshot(session_id),
+                }
+
+            if merchant.get("status") in {"PREPARING", "READY", "PICKED_UP", "CANCELLATION_REVIEW"}:
                 if "CANCEL_AFTER_PREPARATION" not in merchant["anomalies"]:
                     merchant["anomalies"].append("CANCEL_AFTER_PREPARATION")
-            session["merchant_fulfillment"] = merchant
-            event = self._append_event_locked(
-                session_id,
-                "CommitmentCancelled",
-                {"reason": "customer_request"},
-                detail=(
-                    "고객 주문 취소"
-                    if delay_seconds <= 0
-                    else f"고객 주문 취소 · 메시지 {delay_seconds}초 지연"
-                ),
-                occurred_at=occurred,
-                received_at=received,
-            )
-            self._audit_locked(
-                session_id,
-                "ORDER_CANCELLED",
-                f"{order['order_id']} · delivery_delay={max(0, delay_seconds)}s",
-            )
-            return {"event": deepcopy(event), "state": self.snapshot(session_id)}
+                session["merchant_fulfillment"] = merchant
+                event = self._append_event_locked(
+                    session_id,
+                    "CancellationRejected",
+                    {
+                        "request_id": request_id,
+                        "reason": "PREPARATION_ALREADY_STARTED",
+                        "merchant_state": merchant.get("status"),
+                    },
+                    detail="제조 시작 후 취소 거절 · 주문 약속과 capacity 유지",
+                    occurred_at=occurred,
+                    received_at=received,
+                )
+                self._audit_locked(
+                    session_id,
+                    "MERCHANT_CANCELLATION_REJECTED",
+                    f"{order['order_id']} · state={merchant.get('status')}",
+                )
+                return {
+                    "event": deepcopy(event),
+                    "request_event": deepcopy(request_event),
+                    "decision": "REJECTED",
+                    "state": self.snapshot(session_id),
+                }
+
+            raise ValueError("merchant fulfillment state cannot decide cancellation")
 
     def settle(self, session_id: str, amount: int | None = None) -> dict[str, Any]:
         with self._lock:
