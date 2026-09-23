@@ -970,6 +970,100 @@ def ledger_flow(pass_no: int) -> None:
         for item in conflicts
     ), conflicts
 
+    allocation_order = f"integration-allocation-{pass_no}-{uuid.uuid4().hex[:8]}"
+    first_source = f"{allocation_order}-settle-1"
+    second_source = f"{allocation_order}-settle-2"
+
+    for source_id, amount in ((first_source, 9000), (second_source, 2000)):
+        expect(
+            httpx.post(
+                f"{LEDGER}/api/v1/ledger/postings",
+                json={
+                    "eventId": source_id,
+                    "aggregateId": allocation_order,
+                    "type": "SETTLEMENT",
+                    "amount": amount,
+                },
+                timeout=15,
+            ),
+            202,
+        )
+
+    partial = expect(
+        httpx.post(
+            f"{LEDGER}/api/v1/ledger/postings",
+            json={
+                "eventId": f"{allocation_order}-reverse-3000",
+                "aggregateId": allocation_order,
+                "type": "REVERSE_SETTLEMENT",
+                "amount": 3000,
+                "sourceEventId": first_source,
+            },
+            timeout=15,
+        ),
+        202,
+    )
+    assert partial["result"] == "POSTED", partial
+
+    too_much = expect(
+        httpx.post(
+            f"{LEDGER}/api/v1/ledger/postings",
+            json={
+                "eventId": f"{allocation_order}-reverse-too-much",
+                "aggregateId": allocation_order,
+                "type": "REVERSE_SETTLEMENT",
+                "amount": 7000,
+                "sourceEventId": first_source,
+            },
+            timeout=15,
+        ),
+        409,
+    )
+    assert too_much["result"] == "SOURCE_POSTING_CONFLICT", too_much
+
+    expect(
+        httpx.post(
+            f"{LEDGER}/api/v1/ledger/postings",
+            json={
+                "eventId": f"{allocation_order}-reverse-rest",
+                "aggregateId": allocation_order,
+                "type": "REVERSE_SETTLEMENT",
+                "amount": 6000,
+                "sourceEventId": first_source,
+            },
+            timeout=15,
+        ),
+        202,
+    )
+    expect(
+        httpx.post(
+            f"{LEDGER}/api/v1/ledger/postings",
+            json={
+                "eventId": f"{allocation_order}-reverse-second",
+                "aggregateId": allocation_order,
+                "type": "REVERSE_SETTLEMENT",
+                "amount": 2000,
+                "sourceEventId": second_source,
+            },
+            timeout=15,
+        ),
+        202,
+    )
+
+    allocation_history = expect(
+        httpx.get(
+            f"{LEDGER}/api/v1/ledger/orders/{allocation_order}?limit=20",
+            timeout=15,
+        ),
+        200,
+    )
+    reversals = [row for row in allocation_history if row["reason"] == "REVERSE_SETTLEMENT"]
+    assert sorted((row["sourceEventId"], int(row["amount"])) for row in reversals) == [
+        (first_source, 3000),
+        (first_source, 6000),
+        (second_source, 2000),
+    ], allocation_history
+
 
 def kafka_ledger_flow(pass_no: int) -> None:
     event_id = f"integration-kafka-ledger-{pass_no}-{uuid.uuid4().hex[:8]}"
