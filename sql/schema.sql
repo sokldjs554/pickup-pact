@@ -16,6 +16,8 @@ create table if not exists pickup_commitments (
   pact_version integer,
   pact_status text,
   pact_compensation_granted boolean not null default false,
+  cancellation_request_id uuid,
+  cancellation_requested_at timestamptz,
   updated_at timestamptz not null default now()
 );
 
@@ -28,6 +30,8 @@ alter table pickup_commitments add column if not exists pact_compensation_points
 alter table pickup_commitments add column if not exists pact_version integer;
 alter table pickup_commitments add column if not exists pact_status text;
 alter table pickup_commitments add column if not exists pact_compensation_granted boolean not null default false;
+alter table pickup_commitments add column if not exists cancellation_request_id uuid;
+alter table pickup_commitments add column if not exists cancellation_requested_at timestamptz;
 
 update pickup_commitments
 set idempotency_key = coalesce(idempotency_key, 'legacy-' || id::text),
