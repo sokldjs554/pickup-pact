@@ -9,6 +9,8 @@ EventType = Literal[
     "PickupSlotHeld",
     "PaymentAuthorized",
     "CommitmentConfirmed",
+    "CancellationRequested",
+    "CancellationRejected",
     "CommitmentCancelled",
     "SettlementPosted",
     "RewardGranted",
