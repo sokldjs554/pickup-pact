@@ -8,8 +8,6 @@ cross-posting allocation.
 from __future__ import annotations
 
 from decimal import Decimal, InvalidOperation
-from typing import Iterable
-
 from .models import EventEnvelope, FinancialRepairAction
 
 POSTING_RULES = {
@@ -77,8 +75,13 @@ def _posting_balances(
             try:
                 amount = accounting_amount(post.payload.get("amount"))
                 unit = _unit(post, rule["unit"])
-            except ValueError:
-                blockers.append("invalid_financial_amount")
+            except ValueError as exc:
+                reason = str(exc)
+                blockers.append(
+                    "invalid_financial_unit"
+                    if reason == "invalid_financial_unit"
+                    else "invalid_financial_amount"
+                )
                 continue
 
             if posting_type == "RewardGranted":
