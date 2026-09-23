@@ -122,9 +122,14 @@ create table if not exists commitment_projection (
   settlement_post_count integer not null,
   reward_post_count integer not null,
   canonical_hash char(64) not null,
+  source_event_ids text[] not null default '{}',
+  source_event_count integer not null default 0,
   rebuilt_at timestamptz not null default now()
 );
 
+
+alter table commitment_projection add column if not exists source_event_ids text[] not null default '{}';
+alter table commitment_projection add column if not exists source_event_count integer not null default 0;
 
 create table if not exists merchant_orders (
   order_id uuid primary key,
