@@ -44,6 +44,17 @@ public class LedgerPostingService {
         }
 
         if (batch.reversal() && !repository.reversalAllowed(batch)) {
+            // Another transaction may have committed this exact event while
+            // we were waiting on the source-posting lock. Re-check event
+            // identity before reporting a source-balance conflict.
+            var concurrent = repository.fingerprint(batch.eventId());
+            if (concurrent.isPresent()) {
+                if (concurrent.get().equals(batch.semanticFingerprint())) {
+                    return Result.DUPLICATE_NOOP;
+                }
+                repository.recordConflict(batch, concurrent.get());
+                return Result.CONFLICTING_EVENT_ID;
+            }
             return Result.SOURCE_POSTING_CONFLICT;
         }
 
