@@ -37,6 +37,7 @@ def test_partial_cancellation_executes_only_explicit_source_allocation():
     result = reconcile(req)
     assert result.decision == 'AUTO'
     assert [a.model_dump() for a in result.financial_actions] == [{
+        'cancellation_event_id': 'cancel',
         'target_event_id': 'settle',
         'repair': 'REVERSE_SETTLEMENT',
         'amount': 3000,
