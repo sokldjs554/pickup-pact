@@ -58,6 +58,7 @@ def test_unsafe_cases_have_no_executable_plan(client,case):
 def test_partial_cancellation_plan_uses_only_explicit_allocation(client):
     s=create(client,'partial_cancel')
     assert s['evaluation']['decision']=='AUTO'
+    assert s['evaluation']['canonical_state']['status']=='CONFIRMED'
     p=preview(client,s)
     assert [(a['target_event_id'],a['amount'],a['unit']) for a in p['actions']] == [
         ('settle',3000,'KRW')
