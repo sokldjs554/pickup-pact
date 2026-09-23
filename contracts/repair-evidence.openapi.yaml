@@ -65,7 +65,7 @@ components:
         aggregate_id: {type: string, minLength: 1}
         event_type:
           type: string
-          enum: [PickupSlotHeld, PaymentAuthorized, CommitmentConfirmed, CommitmentCancelled, SettlementPosted, RewardGranted, CapacityRevised, PickupRescheduled, PickupPactIssued, PickupPactRenegotiated, PickupPactBreached, PickupClaimed, SettlementReversed, RewardReversed]
+          enum: [PickupSlotHeld, PaymentAuthorized, CommitmentConfirmed, CancellationRequested, CancellationRejected, CommitmentCancelled, SettlementPosted, RewardGranted, CapacityRevised, PickupRescheduled, PickupPactIssued, PickupPactRenegotiated, PickupPactBreached, PickupClaimed, SettlementReversed, RewardReversed]
         occurred_at: {type: string, format: date-time}
         received_at: {type: string, format: date-time}
         correlation_id: {type: [string, 'null']}
@@ -80,7 +80,7 @@ components:
             revision: {type: integer, minimum: 1}
     ReconcileResult:
       type: object
-      required: [aggregate_id, receive_order_state, canonical_state, anomalies, repairs, duplicate_event_ids, evidence_event_ids, decision, blocking_reasons, missing_event_ids]
+      required: [aggregate_id, receive_order_state, canonical_state, anomalies, repairs, duplicate_event_ids, evidence_event_ids, financial_actions, source_event_ids, decision, blocking_reasons, missing_event_ids]
       properties:
         aggregate_id: {type: string}
         receive_order_state: {$ref: '#/components/schemas/Snapshot'}
@@ -94,6 +94,12 @@ components:
           items: {type: string, enum: [NO_OP_DUPLICATE, REBUILD_PROJECTION, REVERSE_SETTLEMENT, REVERSE_REWARD, RESLOT_REVIEW, MANUAL_REVIEW]}
         duplicate_event_ids: {type: array, items: {type: string}}
         evidence_event_ids: {type: array, items: {type: string}}
+        financial_actions:
+          type: array
+          items: {$ref: '#/components/schemas/FinancialRepairAction'}
+        source_event_ids:
+          type: array
+          items: {type: string}
     FinancialRepairAction:
       type: object
       required: [target_event_id, repair, amount, unit]
