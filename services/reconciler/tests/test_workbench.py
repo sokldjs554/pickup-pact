@@ -70,6 +70,21 @@ def test_partial_cancellation_plan_uses_only_explicit_allocation(client):
     ]
 
 
+def test_partial_cancellation_is_not_planned_twice_after_approval(client):
+    s=create(client,'partial_cancel')
+    p=preview(client,s)
+    result=approve(client,s,p)
+    assert result.status_code==200,result.text
+    state=result.json()['session']
+    assert state['evaluation']['financial_actions']==[]
+    assert not {'REVERSE_SETTLEMENT','REVERSE_REWARD'} & set(state['evaluation']['repairs'])
+    retry_plan=client.post(
+        f"/api/repair-lab/sessions/{s['id']}/plans",
+        json={'version':state['version']},
+    )
+    assert retry_plan.status_code==409
+
+
 def test_full_cancellation_multiple_postings_records_each_open_balance_once(client):
     s=create(client,'multiple_postings')
     assert s['evaluation']['decision']=='AUTO'
