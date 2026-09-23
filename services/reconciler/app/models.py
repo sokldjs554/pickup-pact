@@ -12,6 +12,7 @@ EventType = Literal[
     "CancellationRequested",
     "CancellationRejected",
     "CommitmentCancelled",
+    "PartialCancellationApplied",
     "SettlementPosted",
     "RewardGranted",
     "CapacityRevised",
