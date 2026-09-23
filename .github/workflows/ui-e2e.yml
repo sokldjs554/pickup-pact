@@ -7,13 +7,13 @@ on:
       - "demo/**"
       - "services/reconciler/app/engine.py"
       - "services/reconciler/app/models.py"
-      - ".github/workflows/ui-e2e.yml"
+      - ".github/workflows/**"
   pull_request:
     paths:
       - "demo/**"
       - "services/reconciler/app/engine.py"
       - "services/reconciler/app/models.py"
-      - ".github/workflows/ui-e2e.yml"
+      - ".github/workflows/**"
   workflow_dispatch:
 
 permissions:
