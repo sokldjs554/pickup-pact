@@ -29,6 +29,13 @@ jobs:
           done
       - name: Real HTTP desktop and mobile journeys, no mocked fetch
         run: python -m scripts.repair_audit.verify_workbench_browser --output verification/repair-workbench/browser --repeat 3
+      - name: Preserve exact tested source and commit identity
+        if: always()
+        run: |
+          mkdir -p verification/repair-workbench
+          git rev-parse HEAD > verification/repair-workbench/tested-commit.txt
+          git archive --format=zip --output=verification/repair-workbench/tested-source.zip HEAD
+          sha256sum verification/repair-workbench/tested-source.zip > verification/repair-workbench/tested-source.sha256
       - uses: actions/upload-artifact@v4
         if: always()
         with:
