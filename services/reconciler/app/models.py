@@ -66,6 +66,13 @@ class ReconcileRequest(BaseModel):
         return self
 
 
+class FinancialRepairAction(BaseModel):
+    target_event_id: str = Field(min_length=1)
+    repair: Literal["REVERSE_SETTLEMENT", "REVERSE_REWARD"]
+    amount: int = Field(gt=0)
+    unit: Literal["KRW", "PTS"]
+
+
 class Snapshot(BaseModel):
     status: str = "DRAFT"
     payment_authorized: bool = False
@@ -84,6 +91,7 @@ class ReconcileResult(BaseModel):
     repairs: list[RepairType]
     duplicate_event_ids: list[str]
     evidence_event_ids: list[str]
+    financial_actions: list[FinancialRepairAction] = Field(default_factory=list)
     source_event_ids: list[str] = Field(default_factory=list)
     decision: Literal["AUTO", "WAIT_FOR_EVIDENCE", "MANUAL_REVIEW"] = "AUTO"
     blocking_reasons: list[str] = Field(default_factory=list)
