@@ -9,7 +9,7 @@ on:
       - "render.yaml"
       - "services/reconciler/app/engine.py"
       - "services/reconciler/app/models.py"
-      - ".github/workflows/live-demo-smoke.yml"
+      - ".github/workflows/**"
   workflow_dispatch:
 
 permissions:
@@ -256,4 +256,3 @@ jobs:
         env:
           DEMO_BASE_URL: https://pickup-pact-demo.onrender.com
         run: npm run test:e2e
-
