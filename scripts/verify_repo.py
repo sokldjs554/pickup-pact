@@ -127,6 +127,8 @@ assert "idx_pickup_commitments_store_schedule" in schema
 assert "uq_pickup_commitments_idempotency" in schema
 assert "pact_promised_at" in schema and "pact_status" in schema
 assert "order_amount" in schema
+assert "cancellation_request_id" in schema and "cancellation_requested_at" in schema
+assert "source_event_ids" in schema and "source_event_count" in schema
 for table in [
     "merchant_orders",
     "merchant_inbox_events",
@@ -140,6 +142,8 @@ assert "required: [eventId, aggregateId, type, amount]" in asyncapi
 assert "PickupPactIssued" in openapi and "PickupPactIssued" in asyncapi
 assert "PickupPactRenegotiated" in openapi and "PickupPactRenegotiated" in asyncapi
 assert "PickupPactBreached" in openapi and "PickupPactBreached" in asyncapi
+for event_name in ["CancellationRequested", "CancellationRejected", "MerchantCancellationApproved", "MerchantCancellationRejected"]:
+    assert event_name in asyncapi, f"cancellation authority event missing: {event_name}"
 assert "pickup.fulfillment.events.v1" in asyncapi
 assert "FulfillmentAnomalyDetected" in asyncapi
 compose = (ROOT / "docker-compose.yml").read_text()
@@ -153,6 +157,10 @@ assert "/api/v1/merchant/stores/{storeId}/deliveries" in openapi
 assert "/api/v1/merchant/orders/{orderId}/start" in openapi
 assert "/api/v1/merchant/orders/{orderId}/ready" in openapi
 assert "reconciliation_run" in schema and "reconciliation_run" in persistence
+assert "commitment_projection.source_event_ids <@ excluded.source_event_ids" in persistence
+repair_contract = (ROOT / "contracts/repair-evidence.openapi.yaml").read_text()
+assert "financial_actions:" in repair_contract and "FinancialRepairAction:" in repair_contract
+assert "source_event_ids:" in repair_contract
 assert "outbox_events" in explain and "outbox_event\n" not in explain
 assert "event_sequence" in schema
 outbox_relay = (ROOT / "services/commitment-service/src/main/kotlin/io/pickuppact/commitment/infra/OutboxRelay.kt").read_text()
@@ -176,6 +184,9 @@ integration_smoke = (ROOT / "scripts/integration_smoke.py").read_text()
 assert integration_smoke.count("full topology integration pass") == 1
 assert "merchant_fulfillment_flow" in integration_smoke
 assert "READY_LATE automatic Pickup Pact compensation" in integration_smoke
+assert "merchant-authorized confirmed cancellation" in integration_smoke
+assert "merchant rejects cancellation after preparation" in integration_smoke
+assert "stale_projection_evidence" in integration_smoke
 env_example = (ROOT / ".env.example").read_text()
 assert "MONGODB_URL=" in env_example
 assert "REDIS_URL=" in env_example
