@@ -92,7 +92,8 @@ def attributed_reversals_remain_scoped_and_idempotent() -> None:
         payload = dict(eventId=order + "-repair", aggregateId=order, type=reverse,
                        amount=10, sourceEventId=source)
         first = httpx.post(LEDGER, json=payload, timeout=15)
-        assert first.status_code == 200 and first.json()["result"] == "POSTED", first.text
+        # New posting is 202 Accepted; only duplicate retries return 200.
+        assert first.status_code == 202 and first.json()["result"] == "POSTED", (first.status_code, first.text)
         retry = httpx.post(LEDGER, json=payload, timeout=15)
         assert retry.status_code == 200 and retry.json()["result"] == "DUPLICATE_NOOP", retry.text
         excess = httpx.post(LEDGER, json={**payload, "eventId": order + "-excess", "amount": 1}, timeout=15)
