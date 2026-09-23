@@ -9,6 +9,7 @@ public record LedgerBatch(
         String semanticFingerprint,
         String aggregateId,
         String reason,
+        String sourceEventId,
         List<LedgerEntry> entries
 ) {
     public LedgerBatch {
@@ -32,5 +33,17 @@ public record LedgerBatch(
         if (debit.compareTo(credit) != 0) {
             throw new IllegalArgumentException("double-entry batch must balance");
         }
+    }
+
+    public BigDecimal amount() {
+        return entries.getFirst().amount();
+    }
+
+    public String unit() {
+        return entries.getFirst().currency();
+    }
+
+    public boolean reversal() {
+        return reason.equals("REVERSE_SETTLEMENT") || reason.equals("REVERSE_REWARD");
     }
 }
