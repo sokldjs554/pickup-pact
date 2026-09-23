@@ -10,6 +10,8 @@ _EVENT_PRIORITY = {
     "PickupSlotHeld": 10,
     "PaymentAuthorized": 20,
     "CommitmentConfirmed": 30,
+    "CancellationRequested": 31,
+    "CancellationRejected": 32,
     "PickupPactIssued": 35,
     "CapacityRevised": 40,
     "PickupRescheduled": 45,
