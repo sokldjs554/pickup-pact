@@ -52,7 +52,11 @@ def sample_events(case: str) -> list[EventEnvelope]:
             'amount':'3000',
             'allocations':[{'target_event_id':'settle','amount':'3000','unit':'KRW'}],
         },20)
-        return root+[partial,post.model_copy(update={'causation_id':'partial-cancel'})]
+        return root+[
+            partial,
+            post.model_copy(update={'causation_id':'partial-cancel'}),
+            reward.model_copy(update={'causation_id':'confirm'}),
+        ]
     if case == 'multiple_postings':
         return root+[cancel,post,ev('settle2','SettlementPosted',6,'cancel',{'amount':'2000','currency':'KRW'})]
     raise ValueError('unknown sample case')
