@@ -133,16 +133,15 @@ def _allocation_rows(cancel: EventEnvelope) -> list[dict]:
 
 def plan_financial_repairs(
     events: list[EventEnvelope],
-    *,
-    cancelled: bool,
 ) -> tuple[list[FinancialRepairAction], list[str]]:
     blockers: list[str] = []
     if any(event.schema_version != 1 for event in events):
         blockers.append("unsupported_event_schema")
-    if not cancelled:
-        return [], blockers
 
-    cancels = [event for event in events if event.event_type == "CommitmentCancelled"]
+    cancels = [
+        event for event in events
+        if event.event_type in {"CommitmentCancelled", "PartialCancellationApplied"}
+    ]
     if not cancels:
         return [], blockers
     if len(cancels) != 1:
@@ -155,7 +154,10 @@ def plan_financial_repairs(
         return [], list(dict.fromkeys(blockers))
 
     cancel = cancels[0]
-    scope = str(cancel.payload.get("scope", "FULL")).upper()
+    default_scope = "PARTIAL" if cancel.event_type == "PartialCancellationApplied" else "FULL"
+    scope = str(cancel.payload.get("scope", default_scope)).upper()
+    if cancel.event_type == "PartialCancellationApplied" and scope != "PARTIAL":
+        return [], ["invalid_partial_cancellation_scope"]
     actions: list[FinancialRepairAction] = []
 
     if scope == "FULL":
@@ -275,6 +277,5 @@ def plan_financial_repairs(
 
 def scope_blockers(events: list[EventEnvelope], repairs: set[str]) -> list[str]:
     """Compatibility wrapper for older callers/tests."""
-    cancelled = any(event.event_type == "CommitmentCancelled" for event in events)
-    _actions, blockers = plan_financial_repairs(events, cancelled=cancelled)
+    _actions, blockers = plan_financial_repairs(events)
     return blockers
