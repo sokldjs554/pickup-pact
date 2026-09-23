@@ -917,6 +917,222 @@ def merchant_fulfillment_flow(pass_no: int) -> None:
     )
 
 
+def cancellation_authority_race_flow(pass_no: int) -> None:
+    from threading import Barrier
+
+    store_id = f"cancel-race-store-{pass_no}"
+
+    for iteration in range(4):
+        quote = expect(
+            httpx.post(
+                f"{COMMITMENT}/api/v1/commitments/quotes",
+                json={
+                    "storeId": store_id,
+                    "items": [{"sku": "cafe-latte", "quantity": 1}],
+                    "count": 1,
+                },
+                timeout=15,
+            ),
+            200,
+        )
+        pickup_at = quote["slots"][0]["pickupAt"]
+        held = expect(
+            httpx.post(
+                f"{COMMITMENT}/api/v1/commitments/hold",
+                headers={
+                    "Idempotency-Key":
+                        f"cancel-race-{pass_no}-{iteration}-{uuid.uuid4().hex[:8]}"
+                },
+                json={"quoteToken": quote["quoteToken"], "pickupAt": pickup_at},
+                timeout=15,
+            ),
+            200,
+        )
+        order_id = held["id"]
+        expect(
+            httpx.post(
+                f"{COMMITMENT}/api/v1/commitments/{order_id}/authorize-payment",
+                json={"authorizationId": f"cancel-race-auth-{pass_no}-{iteration}"},
+                timeout=15,
+            ),
+            200,
+        )
+        expect(
+            httpx.post(
+                f"{COMMITMENT}/api/v1/commitments/{order_id}/confirm",
+                timeout=15,
+            ),
+            200,
+        )
+
+        wait_until(
+            lambda: (
+                (response := httpx.get(
+                    f"{MERCHANT}/api/v1/merchant/orders/{order_id}",
+                    timeout=10,
+                )).status_code == 200
+                and response.json()["state"] == "RECEIVED"
+            ),
+            timeout_s=30,
+            label=f"merchant race order intake {iteration}",
+        )
+        expect(
+            httpx.post(
+                f"{MERCHANT}/api/v1/merchant/orders/{order_id}/accept",
+                timeout=15,
+            ),
+            200,
+        )
+
+        # Open the JIT window so a start command is genuinely executable.
+        with postgres_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    update merchant_orders
+                    set earliest_start_at=now()-interval '1 minute',
+                        target_ready_at=now()+interval '5 minutes',
+                        latest_ready_at=now()+interval '10 minutes'
+                    where order_id=%s::uuid
+                    """,
+                    (order_id,),
+                )
+            connection.commit()
+
+        barrier = Barrier(2)
+
+        def start_now() -> httpx.Response:
+            barrier.wait()
+            return httpx.post(
+                f"{MERCHANT}/api/v1/merchant/orders/{order_id}/start",
+                timeout=20,
+            )
+
+        def cancel_now() -> httpx.Response:
+            barrier.wait()
+            return httpx.post(
+                f"{COMMITMENT}/api/v1/commitments/{order_id}/cancel",
+                timeout=20,
+            )
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            start_future = pool.submit(start_now)
+            cancel_future = pool.submit(cancel_now)
+            start_response = start_future.result(timeout=25)
+            cancel_response = cancel_future.result(timeout=25)
+
+        assert start_response.status_code in {200, 409}, start_response.text
+        assert cancel_response.status_code == 200, cancel_response.text
+
+        final_pair: tuple[dict, dict] | None = None
+
+        def authority_converged() -> bool:
+            nonlocal final_pair
+            merchant_response = httpx.get(
+                f"{MERCHANT}/api/v1/merchant/orders/{order_id}",
+                timeout=10,
+            )
+            commitment_response = httpx.get(
+                f"{COMMITMENT}/api/v1/commitments/{order_id}",
+                timeout=10,
+            )
+            if merchant_response.status_code != 200 or commitment_response.status_code != 200:
+                return False
+            merchant = merchant_response.json()
+            commitment = commitment_response.json()
+            if commitment.get("cancellationRequestId") is not None:
+                return False
+            pair = (commitment["state"], merchant["state"])
+            if pair not in {
+                ("CANCELLED", "CANCELLED"),
+                ("CONFIRMED", "PREPARING"),
+            }:
+                return False
+            final_pair = (commitment, merchant)
+            return True
+
+        wait_until(
+            authority_converged,
+            timeout_s=30,
+            label=f"single cancellation authority convergence {iteration}",
+        )
+        commitment, merchant = final_pair
+        final_states = (commitment["state"], merchant["state"])
+
+        with postgres_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    select event_type
+                    from outbox_events
+                    where aggregate_id=%s::uuid
+                      and event_type in (
+                        'CancellationRequested',
+                        'CancellationRejected',
+                        'CommitmentCancelled'
+                      )
+                    order by event_sequence
+                    """,
+                    (order_id,),
+                )
+                commitment_decisions = [row[0] for row in cursor.fetchall()]
+                cursor.execute(
+                    """
+                    select event_type
+                    from fulfillment_outbox_events
+                    where aggregate_id=%s::uuid
+                      and event_type in (
+                        'MerchantCancellationApproved',
+                        'MerchantCancellationRejected'
+                      )
+                    order by event_sequence
+                    """,
+                    (order_id,),
+                )
+                merchant_decisions = [row[0] for row in cursor.fetchall()]
+
+        assert commitment_decisions[0] == "CancellationRequested", commitment_decisions
+        assert len(merchant_decisions) == 1, merchant_decisions
+
+        if final_states == ("CANCELLED", "CANCELLED"):
+            assert commitment_decisions == [
+                "CancellationRequested",
+                "CommitmentCancelled",
+            ], commitment_decisions
+            assert merchant_decisions == ["MerchantCancellationApproved"], merchant_decisions
+        else:
+            assert commitment_decisions == [
+                "CancellationRequested",
+                "CancellationRejected",
+            ], commitment_decisions
+            assert merchant_decisions == ["MerchantCancellationRejected"], merchant_decisions
+
+            # Clean up the winning preparation path without creating another
+            # cancellation decision.
+            expect(
+                httpx.post(
+                    f"{MERCHANT}/api/v1/merchant/orders/{order_id}/ready",
+                    timeout=15,
+                ),
+                200,
+            )
+            expect(
+                httpx.post(
+                    f"{MERCHANT}/api/v1/merchant/orders/{order_id}/pickup",
+                    timeout=15,
+                ),
+                200,
+            )
+            claimed = expect(
+                httpx.post(
+                    f"{COMMITMENT}/api/v1/commitments/{order_id}/claim-pickup",
+                    timeout=15,
+                ),
+                200,
+            )
+            assert claimed["state"] == "PICKED_UP", claimed
+
+
 def ledger_flow(pass_no: int) -> None:
     event_id = f"integration-ledger-{pass_no}-{uuid.uuid4().hex[:8]}"
     payload = {
@@ -1356,6 +1572,7 @@ def one_pass(pass_no: int) -> None:
     idempotency_concurrency_flow(pass_no)
     pact_financial_flow(pass_no)
     merchant_fulfillment_flow(pass_no)
+    cancellation_authority_race_flow(pass_no)
     ledger_flow(pass_no)
     kafka_ledger_flow(pass_no)
     reconciler_flow(pass_no)
