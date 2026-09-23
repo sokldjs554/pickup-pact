@@ -77,8 +77,8 @@ def _posting_balances(
             try:
                 amount = accounting_amount(post.payload.get("amount"))
                 unit = _unit(post, rule["unit"])
-            except ValueError as exc:
-                blockers.append(str(exc))
+            except ValueError:
+                blockers.append("invalid_financial_amount")
                 continue
 
             if posting_type == "RewardGranted":
