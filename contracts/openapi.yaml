@@ -551,6 +551,7 @@ components:
             - CancellationRequested
             - CancellationRejected
             - CommitmentCancelled
+            - PartialCancellationApplied
             - SettlementPosted
             - RewardGranted
             - CapacityRevised
