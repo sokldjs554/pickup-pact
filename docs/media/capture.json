@@ -1,72 +1,72 @@
 {
   "base_url": "https://pickup-pact-demo.onrender.com",
-  "recorded_release_commit": "baca06bc083b4097b71833a723bccb5a39996945",
+  "recorded_release_commit": "838222ef5f1512ce49a001c7423aed1f815eff17",
   "health_before": {
     "status": "ok",
     "service": "pickup-pact-demo",
     "engine": "services/reconciler/app/engine.py",
-    "release_commit": "baca06bc083b4097b71833a723bccb5a39996945"
+    "release_commit": "838222ef5f1512ce49a001c7423aed1f815eff17"
   },
   "health_after": {
     "status": "ok",
     "service": "pickup-pact-demo",
     "engine": "services/reconciler/app/engine.py",
-    "release_commit": "baca06bc083b4097b71833a723bccb5a39996945"
+    "release_commit": "838222ef5f1512ce49a001c7423aed1f815eff17"
   },
   "browser": "153.0.8010.12",
   "viewport": {
     "width": 1280,
     "height": 900
   },
-  "source_video": "raw/page@95c106fd8e5772f8d6fed24c20979874.webm",
+  "source_video": "raw/page@3b466799f91f58721b275f05958aa99b.webm",
   "scenes": [
     {
       "name": "01-home",
       "caption": "일정에 맞춘 커피 주문 · 실제 공개 데모",
-      "start": 2.3742089690000086,
-      "duration": 3.011168718999997
+      "start": 2.267077493000002,
+      "duration": 3.0095442519999978
     },
     {
       "name": "02-benefits",
-      "caption": "매장 전용 쿠폰과 1,000P를 선택합니다",
-      "start": 5.451462939999999,
-      "duration": 5.001138018000006
+      "caption": "매장 전용 쿠폰과 1,000P를 골라요",
+      "start": 5.347461963000001,
+      "duration": 4.999884960000003
     },
     {
       "name": "03-order",
       "caption": "쿠폰·포인트 적용 후 2,300원으로 주문",
-      "start": 10.510122697,
-      "duration": 4.00015027100001
+      "start": 10.403918427999997,
+      "duration": 4.000714325000004
     },
     {
       "name": "04-delay",
-      "caption": "혼잡을 추가하면, 유지·이동의 시간과 비용이 달라집니다",
-      "start": 15.929898922999996,
-      "duration": 5.000906577000009
+      "caption": "매장이 늦어지면, 시간과 금액을 비교해요",
+      "start": 15.174879705999999,
+      "duration": 5.000749378999998
     },
     {
       "name": "05-consent",
       "caption": "11분 빠른 도착 예상 / 쿠폰 상실로 1,400원 추가",
-      "start": 20.98506040800001,
-      "duration": 7.003418904
+      "start": 20.226033407000003,
+      "duration": 7.001992501999993
     },
     {
       "name": "06-transfer",
-      "caption": "동의한 금액으로 이동합니다. 주문 번호는 그대로입니다",
-      "start": 28.085033046000007,
-      "duration": 3.999800554999993
+      "caption": "바뀌는 금액을 보고 결정해요. 주문 번호는 그대로예요",
+      "start": 27.30939422,
+      "duration": 4.003019420000001
     },
     {
       "name": "08-pickup",
-      "caption": "가상 시계를 진행한 뒤 수령 · 모의 결제는 한 번만",
-      "start": 33.93900148,
-      "duration": 5.0012636430000015
+      "caption": "체험 시간을 앞당겨 수령해요. 결제는 한 번만 기록해요",
+      "start": 33.910013772,
+      "duration": 5.000593189
     },
     {
       "name": "09-receipt",
       "caption": "같은 주문의 영수증 · 3,700원 / 1,000P 사용·37P 적립",
-      "start": 38.989522053,
-      "duration": 5.002908867000002
+      "start": 38.955082378,
+      "duration": 5.001639026999996
     }
   ],
   "screenshots": [
@@ -80,7 +80,7 @@
     "08-pickup.png",
     "09-receipt.png"
   ],
-  "order_id": "PCT-8847D12D01",
+  "order_id": "PCT-474E0CAE54",
   "same_order": true,
   "cash_due": 3700,
   "capture_count": 1,
@@ -99,53 +99,53 @@
     },
     {
       "status": 200,
-      "url": "https://pickup-pact-demo.onrender.com/api/route/journeys/4a97d81a9d60472a9bc1058c9e26d9e1/commands"
+      "url": "https://pickup-pact-demo.onrender.com/api/route/journeys/5d27a133643e4e319f2794fddaf96c74/commands"
     },
     {
       "status": 200,
-      "url": "https://pickup-pact-demo.onrender.com/api/route/journeys/4a97d81a9d60472a9bc1058c9e26d9e1/commands"
+      "url": "https://pickup-pact-demo.onrender.com/api/route/journeys/5d27a133643e4e319f2794fddaf96c74/commands"
     },
     {
       "status": 200,
-      "url": "https://pickup-pact-demo.onrender.com/api/route/journeys/4a97d81a9d60472a9bc1058c9e26d9e1/commands"
+      "url": "https://pickup-pact-demo.onrender.com/api/route/journeys/5d27a133643e4e319f2794fddaf96c74/commands"
     },
     {
       "status": 200,
-      "url": "https://pickup-pact-demo.onrender.com/api/route/journeys/4a97d81a9d60472a9bc1058c9e26d9e1/commands"
+      "url": "https://pickup-pact-demo.onrender.com/api/route/journeys/5d27a133643e4e319f2794fddaf96c74/commands"
     },
     {
       "status": 200,
-      "url": "https://pickup-pact-demo.onrender.com/api/route/journeys/4a97d81a9d60472a9bc1058c9e26d9e1/commands"
+      "url": "https://pickup-pact-demo.onrender.com/api/route/journeys/5d27a133643e4e319f2794fddaf96c74/commands"
     },
     {
       "status": 200,
-      "url": "https://pickup-pact-demo.onrender.com/api/route/journeys/4a97d81a9d60472a9bc1058c9e26d9e1/commands"
+      "url": "https://pickup-pact-demo.onrender.com/api/route/journeys/5d27a133643e4e319f2794fddaf96c74/commands"
     },
     {
       "status": 200,
-      "url": "https://pickup-pact-demo.onrender.com/api/route/journeys/4a97d81a9d60472a9bc1058c9e26d9e1/commands"
+      "url": "https://pickup-pact-demo.onrender.com/api/route/journeys/5d27a133643e4e319f2794fddaf96c74/commands"
     },
     {
       "status": 200,
-      "url": "https://pickup-pact-demo.onrender.com/api/route/journeys/4a97d81a9d60472a9bc1058c9e26d9e1/commands"
+      "url": "https://pickup-pact-demo.onrender.com/api/route/journeys/5d27a133643e4e319f2794fddaf96c74/commands"
     }
   ],
   "editing": "Real browser recording; between-scene waiting/preparation omitted. Normal-speed scenes. Virtual clock and simulated payments.",
-  "edited_duration_seconds": 38.04,
+  "edited_duration_seconds": 38.2,
   "media_sha256": {
-    "pickup-pact-preview.gif": "91d1b45bc9f8b76c1fff06258f3b5b410cae277531a5ebad012f78cdd3ab34f1",
-    "09-receipt.png": "1be77ee7018e82c49fe24e69a77b4dab7d4ee9dd104ffa9ed2d9b84a3b31f0ad",
-    "05-consent.png": "19e7460ed478f1ecb05f4f4fec7dcc5283da172836f7ea933a242f4d7f83c455",
-    "02-benefits.png": "4fc93d11dc96132a6ad9b7d43ae7191678a7a7d5ca9e811c2fdbc1c85e2817a3",
-    "pickup-pact-demo.mp4": "177220f1fb67b5be6e562a72009ff05f4f55d5d2f38f7fd69b3c4bf9c658edb8",
-    "mobile-home.png": "1b8e19325ac1ab5aeda2661a08fb982d72ec22a3e98f4e6d36abfa566c8077bb",
-    "08-pickup.png": "7e988baa4d135b0029c9ae16670680cf93750fee58f7d29406f1f19527aa4ae8",
-    "03-order.png": "d9011a558b9e4c754a752362d86d359afccd08ed1e82ec1b7c66fa393da45890",
-    "04-delay.png": "452770b5b7b1b8ddf0d765e199b4ddeeacbb8f55fbc530f95f1f1547dc01ac4e",
-    "mobile-restored.png": "760ef5731184defb003bc699aa1f80a3d5f5323a329bf8f872d0bc6e14c8c7ee",
-    "06-transfer.png": "9aa006fff6aeadcb9738f5aedcb5eb0d2e3f8a53c903d7edd334ea66f73059b5",
-    "01-home.png": "961849b299757ac90d2d41c80a8fe661d78940a62c769f81a6e275b167e1a11b",
-    "07-merchant.png": "6b26ab7153cd713251327469ee38fd1119268d0dc38da4a5b78793c5cfa0f1a1",
-    "mobile-consent.png": "4096c87d52cbbe0b96c71d8c2c628b142f4b7b196f07259b260abd160d503c96"
+    "07-merchant.png": "e6edfd88fc48f47381143bbbf147741a48ff561cedefc50554861104d1ce2107",
+    "mobile-restored.png": "4a1bb678e0bfb0eb548a119468c5cd0f405bbab0a31570631f85cd3d997b3794",
+    "04-delay.png": "6d84426396ffcd23dbdae385d6df8202d42a3df4614794b67f4d53fd4f17dc59",
+    "mobile-home.png": "88d5588573128fbacc61c1eb0681a776f186719382698c97c6062a67af886512",
+    "02-benefits.png": "4caec190c62e436f82e9ca74762351298404d93c9e5d2afe45ba830376955ff7",
+    "pickup-pact-demo.mp4": "dd98849bc3e610b946ab770893e96b15e3e55538cde8b4e163cc0688fa3962e9",
+    "pickup-pact-preview.gif": "40c6d15b8375b671e21d7e815c706e3634923740f2850ee9c503337782cc790f",
+    "06-transfer.png": "7089d89eb7190b9f3ae17768379ff0916e4826f1d6e50a8c04d5cfe39820a215",
+    "01-home.png": "6bb3f47bded4fecde4d6f4587306ef7a1446eda9ac7cf2d66f95af257499db4d",
+    "03-order.png": "d13e17af2b9c9cf19c422dbfea5e16e286474c78f50113c1266641aa1cfdb7ef",
+    "09-receipt.png": "1aba9ce26b2d7c2aa157313bd279982ecc1855715956050842f5797f710cdd83",
+    "08-pickup.png": "65e296273061706df657ac9a8170755e5b26ff9feddfc45ca2dd4f682a0b7f37",
+    "05-consent.png": "66fa95300837d538a3e4beb9d82896bc266019001ee65736cc67964bb14c3e87",
+    "mobile-consent.png": "718c6c547df671a6df8bcf4382da678a210328d3d61aa1f54a55e158f2e469ba"
   }
 }
