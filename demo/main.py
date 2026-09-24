@@ -12,3 +12,7 @@ from services.reconciler.app.workbench import create_router
 
 _default_db = Path(tempfile.gettempdir())/'pickup-pact-repair-review.sqlite'
 app.include_router(create_router(os.environ.get('REPAIR_REVIEW_DB', str(_default_db))))
+
+# Customer-facing time-first ordering shares one persisted journey across views.
+from demo.route.api import create_router as create_route_router
+app.include_router(create_route_router())

@@ -1,0 +1,42 @@
+name: assemble-route
+on:
+  push:
+    branches: [feat/time-first-coffee-product]
+permissions:
+  contents: write
+jobs:
+  preserve-classic-entrypoints:
+    if: contains(github.event.head_commit.message, '[assemble]')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/time-first-coffee-product
+      - name: Apply only reviewed entrypoint changes
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          edits = {
+            'demo/customer_app.py': [('@app.get("/", response_class=HTMLResponse)', '@app.get("/classic", response_class=HTMLResponse)',1)],
+            'demo/test_demo.py': [('response = client.get("/")','response = client.get("/classic")',1)],
+            'demo/test_repair_integration.py': [("assert '매장 운영' in client.get('/').text", "assert '매장 운영' in client.get('/classic').text\n    assert '커피는 챙기고' in client.get('/').text",1)],
+            'demo/e2e/operator-flow.spec.js': [("page.goto('/')", "page.goto('/classic')",7),("page.goto('/?dev=1')", "page.goto('/classic?dev=1')",3)]
+          }
+          for name, rows in edits.items():
+              p=Path(name); text=p.read_text()
+              for old,new,count in rows:
+                  assert text.count(old)==count, (name,old,text.count(old),count)
+                  text=text.replace(old,new)
+              p.write_text(text)
+          p=Path('README.md'); text=p.read_text(); assert text.startswith('# Pickup Pact\n')
+          text=Path('.transport-readme.txt').read_text()+text[len('# Pickup Pact\n'):]
+          text=text.replace('[기존 주문·매장 데모](https://pickup-pact-demo.onrender.com)', '[기존 주문·매장 데모](https://pickup-pact-demo.onrender.com/classic)')
+          p.write_text(text)
+          Path('.transport-readme.txt').unlink()
+          PY
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add demo/customer_app.py demo/test_demo.py demo/test_repair_integration.py demo/e2e/operator-flow.spec.js README.md .transport-readme.txt
+          git commit -m 'feat: move classic entrypoint while preserving all legacy assertions'
+          git push origin HEAD:feat/time-first-coffee-product
