@@ -18,6 +18,13 @@
 |---|---|---|
 | ![주문 화면](docs/media/01-home.png) | ![쿠폰 할인과 추가금 확인](docs/media/05-consent.png) | ![같은 주문의 영수증](docs/media/09-receipt.png) |
 
+<details>
+<summary>모바일 화면 보기</summary>
+
+<img src="docs/media/mobile-home.png" alt="모바일 주문 화면" width="280"> <img src="docs/media/mobile-consent.png" alt="모바일 매장 변경 확인" width="280"> <img src="docs/media/mobile-restored.png" alt="취소 후 포인트가 복원된 화면" width="280">
+
+</details>
+
 ## 쿠폰·포인트와 동일 조건 비교
 
 첫 화면에서 전 매장/매장 전용/정률 쿠폰과 체험 포인트를 선택합니다. 매장 이동으로 할인이 사라지면 새로운 결제액을 확인하고 동의해야 합니다. 주문 때 혜택을 보류하고, 제조 전 취소 때 복원하며, 수령 때 한 번만 차감·적립합니다. 이 일정만의 모의 지갑이며 실제 회원 포인트가 아닙니다.
