@@ -1,0 +1,65 @@
+name: assemble-copy
+on:
+  push:
+    branches: [fix/demo-korean-copy]
+permissions:
+  contents: write
+jobs:
+  apply-reviewed-copy:
+    if: contains(github.event.head_commit.message, '[assemble-copy]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/demo-korean-copy
+      - name: Apply exact reviewed non-workflow edits
+        run: |
+          python - <<'PY'
+          import base64, hashlib, json, lzma
+          from pathlib import Path
+          allowed = {
+              'demo/e2e/operator-flow.spec.js', 'demo/index.html',
+              'demo/route/benefits-ui.js', 'demo/route/index.html', 'demo/route/product.js',
+              'demo/test_demo.py', 'demo/test_repair_integration.py', 'docs/demo-copy-review.md',
+              'scripts/capture_readme_demo.py', 'scripts/repair_audit/verify_workbench_browser.py',
+              'scripts/verify_copy_labels.cjs', 'scripts/verify_demo_copy_browser.py',
+              'scripts/verify_repo.py', 'scripts/verify_route_browser.py',
+              'services/ops-console/templates/index.html',
+              'services/reconciler/app/repair_workbench.html',
+              'services/reconciler/tests/test_workbench.py',
+              'tests/route/test_demo_copy.py', 'tests/route/test_product.py',
+          }
+          parts = [Path(f'.copy-review/part-{i}.b64') for i in range(1,5)]
+          raw = lzma.decompress(base64.b64decode(''.join(p.read_text() for p in parts), validate=True))
+          assert hashlib.sha256(raw).hexdigest() == '91e7e399c8cb31c0c3bd73b3289fd89c33dc4d79e276f35e8f14706a10891736'
+          entries = json.loads(raw)
+          assert {row['path'] for row in entries} == allowed and len(entries) == len(allowed)
+          prepared = []
+          for row in entries:
+              p = Path(row['path'])
+              if row['old'] is None:
+                  assert not p.exists(), str(p)
+                  text = ''
+              else:
+                  assert hashlib.sha256(p.read_bytes()).hexdigest() == row['old'], str(p)
+                  text = p.read_text()
+              for start, end, replacement in reversed(row['edits']):
+                  assert 0 <= start <= end <= len(text), str(p)
+                  text = text[:start] + replacement + text[end:]
+              assert hashlib.sha256(text.encode()).hexdigest() == row['new'], str(p)
+              prepared.append((p,text,row['new']))
+          for p,text,sha in prepared:
+              p.parent.mkdir(parents=True,exist_ok=True)
+              p.write_text(text)
+              print(sha, p)
+          for p in parts:
+              p.unlink()
+          Path('.copy-review').rmdir()
+          PY
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add demo docs/demo-copy-review.md scripts services/ops-console/templates/index.html services/reconciler/app/repair_workbench.html services/reconciler/tests/test_workbench.py tests/route .copy-review
+          git commit -m 'copy: apply reviewed Korean wording across all demo views'
+          git push origin HEAD:fix/demo-korean-copy
