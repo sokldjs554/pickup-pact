@@ -49,8 +49,8 @@ def capture(base,expected,output):
             r=page.request.get(base+'/api/route/journeys/'+sid);assert r.ok
             return r.json()
         with scene('01-home','일정에 맞춘 커피 주문 · 실제 공개 데모',3):
-            expect(page.locator('h1').first).to_contain_text('커피는 챙기고')
-        with scene('02-benefits','매장 전용 쿠폰과 1,000P를 선택합니다',5):
+            expect(page.locator('h1').first).to_contain_text('커피 한 잔')
+        with scene('02-benefits','매장 전용 쿠폰과 1,000P를 골라요',5):
             page.locator('#coupon').scroll_into_view_if_needed()
             page.locator('#coupon').select_option('wave1000');page.locator('#points').fill('1000')
         with scene('03-order','쿠폰·포인트 적용 후 2,300원으로 주문',4):
@@ -60,7 +60,7 @@ def capture(base,expected,output):
         wave.locator('[data-quote]').click()
         expect(page.locator('#availablePoints')).to_have_text('1,000P')
         original=data();oid=original['order']['id']
-        with scene('04-delay','혼잡을 추가하면, 유지·이동의 시간과 비용이 달라집니다',5):
+        with scene('04-delay','매장이 늦어지면, 시간과 금액을 비교해요',5):
             page.locator('[data-action=busy]').click()
             expect(page.locator('#orderComparison')).to_contain_text('11분')
             page.locator('#orderComparison').scroll_into_view_if_needed()
@@ -68,7 +68,7 @@ def capture(base,expected,output):
             page.locator('.route-card[data-hover=oat] [data-quote]').click()
             expect(page.locator('#couponLossWarning')).to_contain_text('1,000원')
             expect(page.locator('#dialogBody .benefit-total')).to_contain_text('3,700원')
-        with scene('06-transfer','동의한 금액으로 이동합니다. 주문 번호는 그대로입니다',4):
+        with scene('06-transfer','바뀌는 금액을 보고 결정해요. 주문 번호는 그대로예요',4):
             page.locator('#confirmTransfer').click()
             expect(page.locator('.success-banner')).to_be_visible()
             page.locator('#orderArea').scroll_into_view_if_needed()
@@ -85,7 +85,7 @@ def capture(base,expected,output):
         ready=page.locator('#merchantContent [data-action=ready]');expect(ready).to_be_enabled();ready.click()
         snapshot('07-merchant')
         page.locator('nav [data-view=customer]').click()
-        with scene('08-pickup','가상 시계를 진행한 뒤 수령 · 모의 결제는 한 번만',5):
+        with scene('08-pickup','체험 시간을 앞당겨 수령해요. 결제는 한 번만 기록해요',5):
             code=page.locator('#pickupCode').inner_text().strip()
             page.locator('#claimCode').fill(code);page.locator('#claim').click()
             expect(page.locator('#benefitsEarned')).to_contain_text('37P')
@@ -139,7 +139,7 @@ def edit(output,report):
         text=output/f'caption-{i}.txt';text.write_text(s['caption']);clip=output/f'clip-{i}.mp4'
         vf=("pad=1280:978:0:0:color=0x153e35,"
             f"drawtext=fontfile={font}:textfile={text}:fontsize=23:fontcolor=white:x=(w-tw)/2:y=920,"
-            f"drawtext=fontfile={font}:text='공개 데모 녹화 · 가상 매장 / 모의 결제':fontsize=14:fontcolor=0xd7ec99:x=(w-tw)/2:y=954")
+            f"drawtext=fontfile={font}:text='공개 데모 녹화 · 가상 매장 / 실제 결제 없음':fontsize=14:fontcolor=0xd7ec99:x=(w-tw)/2:y=954")
         run('ffmpeg','-y','-loglevel','error','-ss',str(s['start']),'-i',str(source),'-t',str(s['duration']),
             '-vf',vf,'-an','-r','25','-c:v','libx264','-preset','veryfast','-crf','22','-pix_fmt','yuv420p',str(clip))
         clips.append(clip)

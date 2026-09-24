@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Pickup Pact Ops Console</title>
+  <title>Pickup Pact · 운영 화면</title>
   <style>
     body{font-family:system-ui,-apple-system,sans-serif;margin:0;background:#f6f7fb;color:#172033}
     main{max-width:1040px;margin:auto;padding:48px 24px}
@@ -18,48 +18,50 @@
 <main>
   <section class="hero">
     <small>Pickup Pact · 운영 콘솔</small>
-    <h1>취소가 늦게 도착해도 주문·정산·적립을 다시 맞추는 백엔드</h1>
-    <p><strong>30초 안에 이해하는 백엔드</strong> — 수신 순서와 실제 발생 순서가 다른 이벤트를 replay해 이상을 찾고, 삭제 대신 보상 분개와 조회 모델 재구성 계획을 만듭니다.</p>
+    <h1>취소 소식이 늦게 왔다면, 정산 기록부터 확인해요</h1>
+    <p>주문 기록이 실제로 일어난 순서와 다르게 도착하면 어떤 문제가 생길까요? 기록을 다시 확인하고, 잘못된 금액을 되돌릴 방법을 살펴보세요. 실제 결제나 환불은 하지 않아요.</p>
   </section>
   <section class="card">
-    <h2>장애 시나리오</h2>
-    <p class="muted">버튼을 누르면 Flask 운영 콘솔이 FastAPI reconciler를 호출합니다.</p>
+    <h2>확인할 상황</h2>
+    <p class="muted">상황을 고르면 저장된 기록을 FastAPI 처리 서비스로 보내 다시 확인해요.</p>
     <div class="grid">
       {% for id, s in bootstrap.scenarios.items() %}
       <article class="card">
-        <small>{{ s.eyebrow }}</small>
-        <h3>{{ s.title }}</h3>
-        <p>{{ s.summary }}</p>
-        <button onclick="runScenario('{{ id }}')">replay 실행</button>
+        <small>{{ {'late-cancel':'늦게 온 기록','duplicate':'같은 기록 재전달','capacity-drop':'매장이 바빠졌을 때','conflict':'금액이 다를 때'}[id] }}</small>
+        <h3>{{ {'late-cancel':'취소 소식이 늦게 온 주문','duplicate':'같은 정산이 다시 온 주문','capacity-drop':'주문 뒤 매장이 바빠졌어요','conflict':'같은 정산인데 금액이 달라요'}[id] }}</h3>
+        <p>{{ {'late-cancel':'취소가 먼저 일어났지만 기록은 정산·적립 뒤에 도착한 상황이에요.', 'duplicate':'같은 정산 기록을 다시 받았어요. 두 번 처리되는지 확인해 보세요.', 'capacity-drop':'주문을 확정한 뒤 매장에서 준비할 수 있는 양이 줄었어요.', 'conflict':'같은 번호로 서로 다른 금액이 들어왔어요. 어떤 내용을 확인해야 할까요?'}[id] }}</p>
+        <button onclick="runScenario('{{ id }}')">이 상황 확인하기</button>
       </article>
       {% endfor %}
     </div>
   </section>
   <section class="card">
-    <h2>판정 결과</h2>
-    <div id="result" class="result">시나리오를 선택하세요.</div>
+    <h2>확인 결과</h2>
+    <div id="result" class="result">위에서 확인할 상황을 골라주세요.</div>
   </section>
   <section class="card">
-    <h2>합성 정합성 벤치마크</h2>
-    <p>운영 TPS 주장이 아니라 deterministic correctness 실험입니다. 상세 수치는 README와 <code>docs/performance.md</code>에서 확인할 수 있습니다.</p>
+    <h2>가상 상황으로 비교한 결과</h2>
+    <p>같은 기록을 넣었을 때 기대한 판단이 나오는지 확인한 실험이에요. 실제 서비스의 처리 속도를 측정한 결과는 아니에요. 자세한 내용은 README와 <code>docs/performance.md</code>에서 볼 수 있어요.</p>
   </section>
 </main>
 <script>
 async function runScenario(id){
   const out=document.getElementById('result');
-  out.textContent='replay 중…';
+  out.textContent='기록을 다시 확인하고 있어요…';
   try{
     const r=await fetch('/api/demo/run/'+id,{method:'POST'});
     const j=await r.json();
-    if(!r.ok) throw new Error(j.message||j.hint||'실행 실패');
+    if(!r.ok) throw new Error(r.status===503?'기록 확인 서비스에 연결하지 못했어요. 서비스를 실행한 뒤 다시 눌러주세요.':'이 상황을 확인하지 못했어요. 잠시 후 다시 시도해 주세요.');
     const x=j.result.reconciliation;
+    const labels={"duplicate_event_delivery": "같은 기록이 다시 도착했어요", "conflicting_duplicate_payload": "같은 번호의 내용이 달라요", "receive_order_projection_drift": "받은 순서 때문에 주문 요약이 달라요", "confirmed_without_payment_authorization": "결제 승인 전에 주문이 확정됐어요", "confirmed_promise_exceeds_revised_capacity": "예약한 양이 준비 가능한 양보다 많아요", "settlement_posted_after_prior_cancellation": "취소 뒤 정산이 남아 있어요", "reward_granted_after_prior_cancellation": "취소 뒤 적립이 남아 있어요", "NO_OP_DUPLICATE": "중복으로 처리하지 않기", "REBUILD_PROJECTION": "주문 요약 다시 맞추기", "REVERSE_SETTLEMENT": "정산 되돌리기", "REVERSE_REWARD": "적립 되돌리기", "RESLOT_REVIEW": "픽업 시간 다시 확인", "MANUAL_REVIEW": "확인 전 금액 유지"};
+    const explain=c=>labels[c]||c;
     out.textContent=[
-      'aggregate: '+x.aggregate_id,
-      'anomalies: '+(x.anomalies.join(', ')||'없음'),
-      'repairs: '+(x.repairs.join(', ')||'없음'),
-      'evidence: '+x.evidence_event_ids.join(', ')
+      '주문 번호: '+x.aggregate_id,
+      '확인이 필요한 내용: '+(x.anomalies.map(explain).join(', ')||'없음'),
+      '처리할 내역: '+(x.repairs.map(explain).join(', ')||'없음'),
+      '근거가 된 기록: '+x.evidence_event_ids.join(', ')
     ].join('\n');
-  }catch(e){out.textContent='오류: '+e.message}
+  }catch(e){out.textContent='처리하지 못했어요. '+e.message}
 }
 </script>
 </body>

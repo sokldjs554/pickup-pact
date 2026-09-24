@@ -82,15 +82,15 @@ test('virtual customer can order, protect pickup time, claim once, and read a tr
 
   await page.getByRole('button', { name: '영수증 보기', exact: true }).click();
   await expect(page.getByRole('dialog', { name: '모바일 영수증' })).toBeVisible();
-  await expect(page.locator('#receiptContent')).toContainText('TRUST RECEIPT');
-  await expect(page.locator('#receiptContent')).toContainText('최종 청구');
+  await expect(page.locator('#receiptContent')).toContainText('주문 처리 내역');
+  await expect(page.locator('#receiptContent')).toContainText('체험 결제 금액');
   await expect(page.locator('#receiptContent')).toContainText('9,000원');
   await expect(page.locator('#receiptContent')).toContainText('590P');
   await expect(page.locator('#receiptContent')).toContainText('Pickup Pact');
   await expect(page.locator('#receiptContent')).toContainText('자동 보상');
   await expect(page.locator('#receiptContent')).toContainText('500P');
   await expect(page.locator('#receiptContent')).toContainText('픽업 시간 변경');
-  await expect(page.locator('#receiptContent')).toContainText('픽업 보상 자동 적용');
+  await expect(page.locator('#receiptContent')).toContainText('약속 시간 초과 포인트 적립');
   await expect(page.locator('#receiptContent')).toContainText('픽업 완료');
   await page.getByRole('button', { name: '영수증 닫기', exact: true }).click();
 
@@ -120,43 +120,43 @@ test('merchant fulfillment demo proves reconnect dedupe, ACK, and JIT early-read
 
   await page.getByRole('button', { name: '매장 운영', exact: true }).click();
   await expect(page.getByRole('heading', { name: '매장 운영', exact: true })).toBeVisible();
-  await expect(page.getByText('Merchant Fulfillment Reliability', { exact: true })).toBeVisible();
+  await expect(page.getByText('매장에서 주문 받기', { exact: true })).toBeVisible();
 
-  await page.getByRole('button', { name: '샘플 주문 준비', exact: true }).click();
+  await page.getByRole('button', { name: '체험 주문 만들기', exact: true }).click();
   await expect(page.locator('#merchantStatusCard')).toContainText('주문 도착');
-  await expect(page.locator('#merchantStatusCard')).toContainText('ACK 대기');
+  await expect(page.locator('#merchantStatusCard')).toContainText('수신 확인 전');
   await expect(page.locator('#merchantEffects')).toContainText('NEW_ORDER_NOTIFICATION');
   await expect(page.locator('#merchantEffects')).toContainText('POS_PRINT');
 
-  await page.getByRole('button', { name: '동일 주문 재전달', exact: true }).click();
+  await page.getByRole('button', { name: '같은 주문 다시 받기', exact: true }).click();
   await expect(page.locator('#merchantStatusCard')).toContainText('1회');
   await expect(page.locator('#merchantEffects .alert')).toHaveCount(2);
 
-  await page.getByRole('button', { name: 'Delivery ACK', exact: true }).click();
-  await expect(page.locator('#merchantStatusCard')).toContainText('ACK 완료');
+  await page.getByRole('button', { name: '주문 수신 확인', exact: true }).click();
+  await expect(page.locator('#merchantStatusCard')).toContainText('수신 확인 완료');
 
   await page.getByRole('button', { name: '주문 접수', exact: true }).click();
   await expect(page.locator('#merchantStatusCard')).toContainText('접수 완료');
 
-  await page.getByRole('button', { name: '너무 이른 제조 시도', exact: true }).click();
-  await expect(page.locator('#merchantActionResult')).toContainText('서버가 시작을 거절했습니다');
+  await page.getByRole('button', { name: '시간 전에 만들기 시도', exact: true }).click();
+  await expect(page.locator('#merchantActionResult')).toContainText('만들기 요청을 처리하지 않았어요');
 
-  await page.getByRole('button', { name: 'JIT 제조 시작', exact: true }).click();
+  await page.getByRole('button', { name: '예정대로 만들기 시작', exact: true }).click();
   await expect(page.locator('#merchantStatusCard')).toContainText('제조 중');
 
-  await page.getByRole('button', { name: '너무 일찍 완료', exact: true }).click();
+  await page.getByRole('button', { name: '일찍 준비 완료', exact: true }).click();
   await expect(page.locator('#merchantStatusCard')).toContainText('조리 완료');
-  await expect(page.locator('#merchantStatusCard')).toContainText('EARLY');
+  await expect(page.locator('#merchantStatusCard')).toContainText('이른 준비');
   await expect(page.locator('#merchantAnomalies')).toContainText('READY_TOO_EARLY');
 });
 
 test('late merchant ready automatically compensates the customer promise', async ({ page }) => {
   await page.goto('/classic');
   await page.getByRole('button', { name: '매장 운영', exact: true }).click();
-  await page.getByRole('button', { name: '샘플 주문 준비', exact: true }).click();
+  await page.getByRole('button', { name: '체험 주문 만들기', exact: true }).click();
   await page.getByRole('button', { name: '주문 접수', exact: true }).click();
-  await page.getByRole('button', { name: 'JIT 제조 시작', exact: true }).click();
-  await page.getByRole('button', { name: '보장시간 초과 완료', exact: true }).click();
+  await page.getByRole('button', { name: '예정대로 만들기 시작', exact: true }).click();
+  await page.getByRole('button', { name: '늦게 준비 완료', exact: true }).click();
 
   await expect(page.locator('#merchantAnomalies')).toContainText('READY_LATE');
   await expect(page.locator('#merchantActionResult')).toContainText('500P');
@@ -191,8 +191,8 @@ test('backend reviewer can enter through the hidden dev URL and operate the expe
     await expect(page.getByRole('button', { name: label, exact: true })).toBeVisible();
   }
 
-  await page.getByRole('button', { name: '빈 세션으로 초기화', exact: true }).click();
-  await page.getByRole('button', { name: '주문 HOLD 생성', exact: true }).click();
+  await page.getByRole('button', { name: '체험 비우기', exact: true }).click();
+  await page.getByRole('button', { name: '주문 자리 확보', exact: true }).click();
   await expect(page.locator('#orderDetail')).toContainText('HELD');
 
   await page.getByRole('button', { name: '결제 승인', exact: true }).click();
@@ -204,9 +204,9 @@ test('backend reviewer can enter through the hidden dev URL and operate the expe
   await expect(page.locator('#faultEvents')).toContainText('SettlementPosted');
 
   await openPage(page, '정합성 복구');
-  await page.getByRole('button', { name: '정합성 다시 계산', exact: true }).click();
-  await expect(page.locator('#anomalyList')).toContainText('취소 뒤에 점주 정산이 반영되었습니다.');
-  await page.getByRole('button', { name: '안전한 복구 계획을 샌드박스에 적용', exact: true }).click();
+  await page.getByRole('button', { name: '기록 다시 확인하기', exact: true }).click();
+  await expect(page.locator('#anomalyList')).toContainText('취소 뒤에도 매장 정산이 남아 있어요.');
+  await page.getByRole('button', { name: '확인한 내역을 체험에 반영', exact: true }).click();
 
   await openPage(page, '정산 · 감사');
   await expect(page.locator('#ledgerSettlement')).toHaveText('0');
@@ -233,9 +233,9 @@ test('customer cancellation recovery remains inspectable only in dev mode', asyn
   await page.getByRole('button', { name: '영수증 보기', exact: true }).click();
   await expect(page.getByRole('dialog', { name: '모바일 영수증' })).toBeVisible();
   await expect(page.locator('#receiptContent')).toContainText('취소 완료');
-  await expect(page.locator('#receiptContent')).toContainText('최종 청구');
+  await expect(page.locator('#receiptContent')).toContainText('체험 결제 금액');
   await expect(page.locator('#receiptContent')).toContainText('0원');
-  await expect(page.locator('#receiptContent')).toContainText('결제 취소 완료');
+  await expect(page.locator('#receiptContent')).toContainText('체험 결제 취소 완료');
   await expect(page.locator('#receiptContent')).toContainText('포인트 조정 완료');
   await page.getByRole('button', { name: '영수증 닫기', exact: true }).click();
 
