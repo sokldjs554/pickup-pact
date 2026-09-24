@@ -1,0 +1,88 @@
+name: demo-media
+on:
+  push:
+    branches: [docs/demo-video]
+    paths: ['scripts/capture_readme_demo.py', '.github/workflows/demo-media.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  capture-public:
+    if: github.ref == 'refs/heads/docs/demo-video'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: docs/demo-video
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install browser and encoding dependencies
+        run: |
+          python -m pip install playwright
+          python -m playwright install --with-deps chromium
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg fonts-noto-cjk
+      - name: Capture verified public application without modifying it
+        run: >-
+          python scripts/capture_readme_demo.py
+          --expected-commit baca06bc083b4097b71833a723bccb5a39996945
+          --output verification/demo-media
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: public-demo-recording
+          path: verification/demo-media
+          retention-days: 30
+      - name: Save only public demo media on the documentation branch
+        run: |
+          python - <<'PY'
+          import json, shutil
+          from pathlib import Path
+          src=Path('verification/demo-media');dst=Path('docs/media');dst.mkdir(parents=True,exist_ok=True)
+          report=json.loads((src/'capture.json').read_text())
+          assert report['same_order'] and report['capture_count']==1 and not report['page_errors']
+          names=['pickup-pact-demo.mp4','pickup-pact-preview.gif','01-home.png','05-consent.png','09-receipt.png','mobile-consent.png','mobile-restored.png','capture.json']
+          for name in names:
+              assert (src/name).is_file(),name
+              assert (src/name).stat().st_size < 25000000,name
+              shutil.copy2(src/name,dst/name)
+          p=Path('README.md');text=p.read_text()
+          heading='## 데모 영상과 실제 화면\n'
+          assert heading not in text
+          block=f'''{heading}
+          [![쿠폰 적용부터 매장 이동·영수증까지](docs/media/pickup-pact-preview.gif)](https://github.com/sokldjs554/pickup-pact/raw/refs/heads/main/docs/media/pickup-pact-demo.mp4)
+
+          **[약 {round(report['edited_duration_seconds'])}초 영상 보기](https://github.com/sokldjs554/pickup-pact/raw/refs/heads/main/docs/media/pickup-pact-demo.mp4)** · [직접 체험](https://pickup-pact-demo.onrender.com)
+
+          전용 쿠폰·1,000P 적용 → 매장 혼잡 → 쿠폰 상실과 +1,400원 확인 → 고객 동의로 같은 주문 이동 → 수령·영수증.
+
+          실제 공개 사이트를 녹화했습니다. 장면 사이의 대기·제조 조작 일부를 잘랐으며, 표시되는 시간·포인트·결제는 가상 체험 값입니다. 촬영한 앱 버전: `{report['recorded_release_commit'][:8]}`. [촬영·검증 기록](docs/media/capture.json)
+
+          <details>
+          <summary>데스크톱·모바일 캡처 보기</summary>
+
+          ![할인 상실과 최종 차액 동의](docs/media/05-consent.png)
+
+          ![같은 주문의 최종 영수증](docs/media/09-receipt.png)
+
+          <img src="docs/media/mobile-consent.png" alt="모바일 매장 이동 동의" width="300"> <img src="docs/media/mobile-restored.png" alt="모바일 취소 후 포인트 복원" width="300">
+
+          </details>
+
+          '''
+          # Left-align the generated Markdown; do not change any domain or test file.
+          block='\n'.join(line[10:] if line.startswith('          ') else line for line in block.split('\n'))
+          marker='## 쿠폰·포인트와 동일 조건 비교'
+          assert marker in text
+          p.write_text(text.replace(marker,block+marker,1))
+          PY
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add README.md docs/media
+          git commit -m 'docs: publish verified public demo video and desktop/mobile captures'
+          git push origin HEAD:docs/demo-video
