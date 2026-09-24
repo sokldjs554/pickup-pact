@@ -972,7 +972,7 @@ def apply_demo_repairs(session_id: str) -> dict[str, Any]:
         raise _demo_error(exc) from exc
 
 
-@app.get("/", response_class=HTMLResponse)
+@app.get("/classic", response_class=HTMLResponse)
 def home() -> str:
     return INDEX.read_text(encoding="utf-8")
 

@@ -3,11 +3,6 @@ on:
   push:
     branches: [main]
   pull_request:
-    paths:
-      - 'services/reconciler/**'
-      - 'scripts/repair_audit/**'
-      - 'artifacts/repair-audit/original_engine.py'
-      - '.github/workflows/repair-evidence-audit.yml'
   workflow_dispatch:
 permissions:
   contents: read

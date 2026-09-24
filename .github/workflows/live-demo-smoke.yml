@@ -56,7 +56,7 @@ jobs:
           for attempt in range(1, 43):
               try:
                   health = request("GET", "/health")
-                  page = text("/")
+                  page = text("/classic")
                   assert health["status"] == "ok"
                   assert health["engine"] == "services/reconciler/app/engine.py"
                   assert health["release_commit"] == EXPECTED_COMMIT, (
