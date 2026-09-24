@@ -11,7 +11,7 @@ from pathlib import Path
 import secrets
 import sqlite3
 from uuid import uuid4
-from .planner import STORES, digest, plans
+from .planner import STORES, REASONS, digest, plans
 
 class Conflict(ValueError):
     def __init__(self,code,message): super().__init__(message); self.code=code
@@ -65,12 +65,15 @@ class JourneyStore:
             if order['state'] in {'PREPARING','READY','PICKED_UP'}:
                 current=deepcopy(current)
                 current['ready_at']=order['ready_at']
-                current['pickup_at']=max(order['departure_at']+s['arrival_delay']+current['walk_to'],order['ready_at'])
+                current['pickup_at']=(order.get('picked_up_at',order['ready_at']) if order['state']=='PICKED_UP'
+                    else max(s['clock'],order['departure_at']+s['arrival_delay']+current['walk_to'],order['ready_at']))
                 current['arrival_at']=current['pickup_at']+current['walk_after']
                 current['margin']=s['intent']['deadline_minutes']-current['arrival_at']
                 current['reasons']=[r for r in current['reasons'] if r not in {'OFFLINE','MENU','DEADLINE'}]
                 if current['margin']<1: current['reasons'].append('DEADLINE')
                 current['feasible']=not current['reasons']
+                current['reason_labels']=[REASONS[r] for r in current['reasons']]
+                rows=[current if p['store_id']==order['store_id'] else p for p in rows]
             if order['state'] not in {'READY','PICKED_UP'}: order['pickup_code']=None
         active=order and order['state'] not in {'CANCELLED','PICKED_UP'}
         risk=bool(active and current and not current['feasible'])
@@ -179,6 +182,7 @@ class JourneyStore:
             require(hmac.compare_digest(str(c.get('pickup_code','')),order['pickup_code']),'BAD_CODE','수령 코드가 맞지 않아요.')
             if order['state']=='PICKED_UP': return
             order['state']='PICKED_UP'
+            order['picked_up_at']=s['clock']
             self.event(s,'PICKUP_COMPLETED','같은 주문으로 커피를 받았어요')
             self.event(s,'PAYMENT_CAPTURED','모의 결제를 한 번 확정했어요',amount=order['price'])
         elif action=='cancel':
