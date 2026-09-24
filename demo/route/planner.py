@@ -4,6 +4,7 @@ from copy import deepcopy
 from hashlib import sha256
 import heapq
 import json
+from .benefits import COUPONS, INITIAL_POINTS, price_quote, legacy_pricing
 
 NODES = {
     'station': [9, 79], 'j1': [31, 76], 'j2': [51, 64], 'j3': [69, 43],
@@ -51,7 +52,9 @@ def shortest(source: str, destination: str) -> tuple[int,list[str]]:
 def catalogue() -> dict:
     return dict(nodes=NODES, edges=EDGES, stores=deepcopy(STORES),
                 destinations=[dict(id='office',name='오피스 타워'),dict(id='park',name='센트럴 파크')],
-                mode='synthetic', minutes_per_tick=1, start_time='08:40', safety_buffer=1)
+                mode='synthetic', minutes_per_tick=1, start_time='08:40', safety_buffer=1,
+                benefits=dict(initial_points=INITIAL_POINTS, coupons=deepcopy(COUPONS),
+                              scope='journey_demo', policy='coupon_then_points_v1'))
 
 def plans(state: dict) -> list[dict]:
     intent=state['intent']; now=state['clock']
@@ -66,6 +69,10 @@ def plans(state: dict) -> list[dict]:
         price=store['prices'].get(intent['drink'],0)
         price += 600 if intent['milk']=='oat' and intent['drink']=='latte' else 0
         price += 200 if intent['decaf'] else 0
+        pricing = price_quote(state, store['id'], price)
+        if order and order['store_id'] == store['id']:
+            pricing = deepcopy(order.get('pricing', legacy_pricing(order)))
+        price = pricing['cash_due']
         prep=store['prep'] + (1 if intent['drink']=='latte' else 0)
         start=max(now,store['queue_until'],depart+walk_to-prep)
         ready=start+prep; pickup=max(depart+walk_to,ready)
@@ -80,7 +87,7 @@ def plans(state: dict) -> list[dict]:
         if arrival+1>intent['deadline_minutes']: reasons.append('DEADLINE')
         row=dict(store_id=store['id'], name=store['name'], subtitle=store['subtitle'],
                  walk_to=walk_to, walk_after=walk_after, walk_total=walk_to+walk_after,
-                 detour=detour, wait=max(0,ready-depart-walk_to), price=price,
+                 detour=detour, wait=max(0,ready-depart-walk_to), price=price, pricing=pricing,
                  start_at=start,ready_at=ready,pickup_at=pickup,arrival_at=arrival,
                  margin=intent['deadline_minutes']-arrival,prep=prep,
                  queue=max(0,store['queue_until']-now),milk=intent['milk'],decaf=intent['decaf'],

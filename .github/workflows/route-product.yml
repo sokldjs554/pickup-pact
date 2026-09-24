@@ -27,6 +27,20 @@ jobs:
           for pass in 1 2 3; do
             python -m pytest -q tests/route services/reconciler/tests demo/test_demo.py demo/test_repair_integration.py services/ops-console/tests | tee verification/route-product/tests-$pass.log
           done
+      - name: Reproduce paired outcomes with all failures included
+        run: |
+          set -euo pipefail
+          for pass in 1 2 3; do
+            python scripts/route_outcomes.py --output verification/route-product/outcomes-$pass
+          done
+          python - <<'PY2'
+          import json
+          from pathlib import Path
+          for seed in (7,19,31):
+              reports=[json.loads(Path(f'verification/route-product/outcomes-{p}/seed-{seed}.json').read_text()) for p in (1,2,3)]
+              assert reports[0]==reports[1]==reports[2]
+              assert len(reports[0]['cases'])==120
+          PY2
       - name: Start real product HTTP server
         run: |
           uvicorn demo.main:app --host 127.0.0.1 --port 10000 > verification/route-product/server.log 2>&1 &
@@ -37,6 +51,8 @@ jobs:
           exit 1
       - name: Customer rescue and receipt desktop/mobile three times
         run: python scripts/verify_route_browser.py --repeat 3 --output verification/route-product/browser
+      - name: Coupon loss, restoration and one-time point settlement in real browsers
+        run: python scripts/verify_benefits_browser.py --repeat 3 --output verification/route-product/benefits-browser
       - name: Preserve exact source
         if: always()
         run: |
@@ -70,6 +86,13 @@ jobs:
           --base-url https://pickup-pact-demo.onrender.com
           --expected-commit '${{ github.sha }}'
           --output verification/route-live
+      - name: Same-commit public coupon, point and evidence flows
+        if: github.ref == 'refs/heads/main'
+        run: >-
+          python scripts/verify_benefits_browser.py --repeat 3
+          --base-url https://pickup-pact-demo.onrender.com
+          --expected-commit '${{ github.sha }}'
+          --output verification/route-live/benefits-browser
       - uses: actions/upload-artifact@v4
         if: always() && github.ref == 'refs/heads/main'
         with:
