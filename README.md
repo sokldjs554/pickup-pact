@@ -6,22 +6,22 @@
 
 ## 데모 영상과 실제 화면
 
-[![쿠폰 적용부터 매장 이동·영수증까지](docs/media/pickup-pact-preview.gif)](https://github.com/sokldjs554/pickup-pact/raw/refs/heads/main/docs/media/pickup-pact-demo.mp4)
+[![공개 데모: 쿠폰·포인트부터 매장 변경과 영수증까지](docs/media/pickup-pact-preview.gif)](https://github.com/sokldjs554/pickup-pact/raw/refs/heads/main/docs/media/pickup-pact-demo.mp4)
 
-**[약 38초 영상 보기](https://github.com/sokldjs554/pickup-pact/raw/refs/heads/main/docs/media/pickup-pact-demo.mp4)** · [직접 체험](https://pickup-pact-demo.onrender.com)
+**[약 38초 데모 영상](https://github.com/sokldjs554/pickup-pact/raw/refs/heads/main/docs/media/pickup-pact-demo.mp4)** · [직접 체험하기](https://pickup-pact-demo.onrender.com) · [촬영 기록](docs/media/capture.json)
 
-전용 쿠폰·1,000P 적용 → 매장 혼잡 → 쿠폰 상실과 +1,400원 확인 → 고객 동의로 같은 주문 이동 → 수령·영수증.
+쿠폰·1,000P 적용 → 매장 대기 추가 → 쿠폰 할인이 사라져 1,400원 추가되는지 확인 → 같은 주문으로 매장 변경 → 수령·영수증.
 
-실제 공개 사이트를 녹화했습니다. 장면 사이의 대기·제조 조작 일부를 잘랐으며, 표시되는 시간·포인트·결제는 가상 체험 값입니다. 촬영한 앱 버전: `baca06bc`. [촬영·검증 기록](docs/media/capture.json)
+문구를 바꾼 공개 사이트를 실제 Chromium으로 다시 녹화했습니다. 가상 시계를 사용하는 제조 조작과 장면 사이 대기는 일부 생략했으며, 각 장면은 정상 속도입니다. 실제 주문·결제는 하지 않습니다. 촬영한 앱 커밋은 `838222ef5f1512ce49a001c7423aed1f815eff17`이며, 녹화 전후 `/health`가 일치합니다.
+
+| 주문 화면 | 쿠폰·가격 변경 확인 | 영수증 |
+|---|---|---|
+| ![주문 화면](docs/media/01-home.png) | ![쿠폰 할인과 추가금 확인](docs/media/05-consent.png) | ![같은 주문의 영수증](docs/media/09-receipt.png) |
 
 <details>
-<summary>데스크톱·모바일 캡처 보기</summary>
+<summary>모바일 화면 보기</summary>
 
-![할인 상실과 최종 차액 동의](docs/media/05-consent.png)
-
-![같은 주문의 최종 영수증](docs/media/09-receipt.png)
-
-<img src="docs/media/mobile-consent.png" alt="모바일 매장 이동 동의" width="300"> <img src="docs/media/mobile-restored.png" alt="모바일 취소 후 포인트 복원" width="300">
+<img src="docs/media/mobile-home.png" alt="모바일 주문 화면" width="280"> <img src="docs/media/mobile-consent.png" alt="모바일 매장 변경 확인" width="280"> <img src="docs/media/mobile-restored.png" alt="취소 후 포인트가 복원된 화면" width="280">
 
 </details>
 

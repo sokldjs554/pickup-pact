@@ -1,35 +1,50 @@
 name: demo-media
 on:
   push:
-    branches: [docs/demo-video]
+    branches: [docs/demo-copy-video]
     paths: ['scripts/capture_readme_demo.py', '.github/workflows/demo-media.yml']
   workflow_dispatch:
 permissions:
-  contents: read
+  contents: write
 jobs:
-  capture-public:
-    if: github.ref == 'refs/heads/docs/demo-video'
+  capture-public-browser:
+    if: github.ref == 'refs/heads/docs/demo-copy-video'
     runs-on: ubuntu-latest
-    timeout-minutes: 12
-    permissions:
-      contents: write
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: docs/demo-video
+          ref: docs/demo-copy-video
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Install browser and encoding dependencies
+      - name: Install real browser and video tools
         run: |
           python -m pip install playwright
           python -m playwright install --with-deps chromium
           sudo apt-get update -qq
-          sudo apt-get install -y ffmpeg fonts-noto-cjk
-      - name: Capture verified public application without modifying it
+          sudo apt-get install -y -qq ffmpeg fonts-noto-cjk
+      - name: Wait for reviewed copy on the public service
+        env:
+          EXPECTED_COMMIT: 838222ef5f1512ce49a001c7423aed1f815eff17
+        run: |
+          python - <<'PY'
+          import json, os, time, urllib.request
+          for attempt in range(60):
+              try:
+                  with urllib.request.urlopen('https://pickup-pact-demo.onrender.com/health', timeout=15) as response:
+                      if json.load(response).get('release_commit') == os.environ['EXPECTED_COMMIT']:
+                          break
+              except Exception:
+                  pass
+              time.sleep(8)
+          else:
+              raise SystemExit('Reviewed deployment not observed; no recording published')
+          PY
+      - name: Record the deployed customer journey and screenshots
         run: >-
           python scripts/capture_readme_demo.py
-          --expected-commit baca06bc083b4097b71833a723bccb5a39996945
+          --expected-commit 838222ef5f1512ce49a001c7423aed1f815eff17
           --output verification/demo-media
       - uses: actions/upload-artifact@v4
         if: always()
@@ -37,52 +52,55 @@ jobs:
           name: public-demo-recording
           path: verification/demo-media
           retention-days: 30
-      - name: Save only public demo media on the documentation branch
+      - name: Publish refreshed media and replace only the README media section
         run: |
           python - <<'PY'
-          import json, shutil
+          import hashlib, json, shutil
           from pathlib import Path
-          src=Path('verification/demo-media');dst=Path('docs/media');dst.mkdir(parents=True,exist_ok=True)
-          report=json.loads((src/'capture.json').read_text())
-          assert report['same_order'] and report['capture_count']==1 and not report['page_errors']
-          names=['pickup-pact-demo.mp4','pickup-pact-preview.gif','01-home.png','05-consent.png','09-receipt.png','mobile-consent.png','mobile-restored.png','capture.json']
+          source=Path('verification/demo-media');target=Path('docs/media');target.mkdir(parents=True,exist_ok=True)
+          names=['pickup-pact-demo.mp4','pickup-pact-preview.gif','01-home.png','05-consent.png','09-receipt.png','mobile-home.png','mobile-consent.png','mobile-restored.png']
+          report=json.loads((source/'capture.json').read_text())
+          assert report['recorded_release_commit']=='838222ef5f1512ce49a001c7423aed1f815eff17'
+          assert report['same_order'] and report['capture_count']==1 and report['cash_due']==3700
+          assert report['page_errors']==[]
           for name in names:
-              assert (src/name).is_file(),name
-              assert (src/name).stat().st_size < 25000000,name
-              shutil.copy2(src/name,dst/name)
-          p=Path('README.md');text=p.read_text()
-          heading='## 데모 영상과 실제 화면\n'
-          assert heading not in text
-          block=f'''{heading}
-          [![쿠폰 적용부터 매장 이동·영수증까지](docs/media/pickup-pact-preview.gif)](https://github.com/sokldjs554/pickup-pact/raw/refs/heads/main/docs/media/pickup-pact-demo.mp4)
+              data=(source/name).read_bytes()
+              assert 0 < len(data) < 25000000, name
+              assert hashlib.sha256(data).hexdigest()==report['media_sha256'][name], name
+              shutil.copy2(source/name,target/name)
+          shutil.copy2(source/'capture.json',target/'capture.json')
+          p=Path('README.md');text=p.read_text();heading='## 데모 영상과 실제 화면'
+          assert text.count(heading)==1
+          block=f'''## 데모 영상과 실제 화면
 
-          **[약 {round(report['edited_duration_seconds'])}초 영상 보기](https://github.com/sokldjs554/pickup-pact/raw/refs/heads/main/docs/media/pickup-pact-demo.mp4)** · [직접 체험](https://pickup-pact-demo.onrender.com)
+          [![공개 데모: 쿠폰·포인트부터 매장 변경과 영수증까지](docs/media/pickup-pact-preview.gif)](https://github.com/sokldjs554/pickup-pact/raw/refs/heads/main/docs/media/pickup-pact-demo.mp4)
 
-          전용 쿠폰·1,000P 적용 → 매장 혼잡 → 쿠폰 상실과 +1,400원 확인 → 고객 동의로 같은 주문 이동 → 수령·영수증.
+          **[약 {round(report['edited_duration_seconds'])}초 데모 영상](https://github.com/sokldjs554/pickup-pact/raw/refs/heads/main/docs/media/pickup-pact-demo.mp4)** · [직접 체험하기](https://pickup-pact-demo.onrender.com) · [촬영 기록](docs/media/capture.json)
 
-          실제 공개 사이트를 녹화했습니다. 장면 사이의 대기·제조 조작 일부를 잘랐으며, 표시되는 시간·포인트·결제는 가상 체험 값입니다. 촬영한 앱 버전: `{report['recorded_release_commit'][:8]}`. [촬영·검증 기록](docs/media/capture.json)
+          쿠폰·1,000P 적용 → 매장 대기 추가 → 쿠폰 할인이 사라져 1,400원 추가되는지 확인 → 같은 주문으로 매장 변경 → 수령·영수증.
+
+          문구를 바꾼 공개 사이트를 실제 Chromium으로 다시 녹화했습니다. 가상 시계를 사용하는 제조 조작과 장면 사이 대기는 일부 생략했으며, 각 장면은 정상 속도입니다. 실제 주문·결제는 하지 않습니다. 촬영한 앱 커밋은 `{report['recorded_release_commit']}`이며, 녹화 전후 `/health`가 일치합니다.
+
+          | 주문 화면 | 쿠폰·가격 변경 확인 | 영수증 |
+          |---|---|---|
+          | ![주문 화면](docs/media/01-home.png) | ![쿠폰 할인과 추가금 확인](docs/media/05-consent.png) | ![같은 주문의 영수증](docs/media/09-receipt.png) |
 
           <details>
-          <summary>데스크톱·모바일 캡처 보기</summary>
+          <summary>모바일 화면 보기</summary>
 
-          ![할인 상실과 최종 차액 동의](docs/media/05-consent.png)
-
-          ![같은 주문의 최종 영수증](docs/media/09-receipt.png)
-
-          <img src="docs/media/mobile-consent.png" alt="모바일 매장 이동 동의" width="300"> <img src="docs/media/mobile-restored.png" alt="모바일 취소 후 포인트 복원" width="300">
+          <img src="docs/media/mobile-home.png" alt="모바일 주문 화면" width="280"> <img src="docs/media/mobile-consent.png" alt="모바일 매장 변경 확인" width="280"> <img src="docs/media/mobile-restored.png" alt="취소 후 포인트가 복원된 화면" width="280">
 
           </details>
 
           '''
-          # Left-align the generated Markdown; do not change any domain or test file.
-          block='\n'.join(line[10:] if line.startswith('          ') else line for line in block.split('\n'))
-          marker='## 쿠폰·포인트와 동일 조건 비교'
-          assert marker in text
-          p.write_text(text.replace(marker,block+marker,1))
+          block='\n'.join(line[10:] if line.startswith('          ') else line for line in block.splitlines())+'\n'
+          marker='## 쿠폰·포인트와 동일 조건 비교';assert text.count(marker)==1
+          start=text.index(heading);end=text.index(marker,start)
+          p.write_text(text[:start]+block+text[end:])
           PY
           git diff --check
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add README.md docs/media
-          git commit -m 'docs: publish verified public demo video and desktop/mobile captures'
-          git push origin HEAD:docs/demo-video
+          git commit -m 'docs: refresh video and captures with reviewed Korean demo copy'
+          git push origin HEAD:docs/demo-copy-video
