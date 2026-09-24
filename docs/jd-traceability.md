@@ -1,80 +1,43 @@
-# Target-role traceability
+# 페이타랩 Backend 공고와 구현 대조
 
-This document makes the job-description mapping auditable instead of listing technologies without evidence.
+확인일: 2026-09-24. 공식 공고: https://recruit.passorder.co.kr/c/XZ4WHRTjx8?back=true
+지원 대상은 페이타랩(패스오더)의 Backend Developer 공고다. 기술 이름의 유무가 아니라 실제 실행 범위로 구분한다. 채용 목록의 모든 도구를 운영해 봤다는 뜻으로 읽히지 않도록 한다.
 
-| Target expectation | Concrete implementation/evidence |
-|---|---|
-| AI-driven PRD → design → code → docs | `ai/prompts/`, `ai/evals/cases.json`, `docs/ai-first-workflow.md`, n8n/Make templates |
-| Kotlin | `commitment-service` aggregate/application/API/adapters |
-| Java | `merchant-fulfillment-service` durable intake/JIT workflow + `ledger-service` balanced financial posting and idempotency |
-| Python | FastAPI reconciliation, Celery tasks, benchmark and verification scripts |
-| Spring | commitment, merchant fulfillment and ledger JVM services |
-| WebFlux | reactive commitment command edge and R2DBC/Redis adapters |
-| FastAPI | canonical replay/reconciliation API plus the public synthetic customer/catalog/order demo API |
-| Flask | operator replay console |
-| PostgreSQL | commitment/outbox, merchant inbox/delivery/effects/JIT state, append-only ledger, reconciliation audit |
-| MongoDB | distinct event-delivery evidence archive; conflicting copies of one event ID are preserved |
-| Redis | customer-visible 5-minute slot availability, Lua-protected atomic reservation, per-lease idempotent release + Celery broker topology |
-| Elasticsearch | searchable incident/reconciliation index adapter |
-| Kafka | commitment outbox → merchant intake, fulfillment feedback → Pickup Pact, financial event consumers |
-| Celery | asynchronous replay worker and retry/backoff policy |
-| DDD | Pickup Commitment + Merchant Fulfillment + Financial Ledger bounded contexts and invariants |
-| EDA | versioned domain envelopes and AsyncAPI contract |
-| CQRS | command-owned invariants + explicit PostgreSQL projection rebuild/query API from canonical event-time replay |
-| Distributed consistency | outbox, merchant inbox dedupe, durable ACK delivery, deduplicated intent records, event idempotency, conflict quarantine, compensation |
-| Customer requirements → product | customer flow is store/menu/cart → server-authoritative workload quote → signed feasible slots → customer time selection → idempotent hold → payment/confirmation → pickup/cancellation/receipt; Chromium E2E verifies the journey |
-| Scheduled pickup + promise protection | customer chooses a feasible capacity-backed slot before payment; later capacity revision → `RESLOT_REVIEW` → customer-friendly new-time proposal → `PickupRescheduled` |
-| Merchant order intake | `CommitmentConfirmed` → DB inbox dedupe → durable `ORDER_AVAILABLE` delivery; ACK-before/after reconnect behavior is exercised in full-topology integration |
-| JIT preparation | pickup time + workload → earliest start / target ready / latest ready; too-early start is rejected; EARLY/LATE READY and post-preparation cancellation/reschedule races are explicit evidence |
-| Deduplicated intent records | duplicate Kafka event ID does not create a second POS-print or notification intent row; actual device/provider execution is not claimed |
-| Fulfillment → promise feedback | `READY_LATE → FulfillmentAnomalyDetected → PickupPactBreached → REWARD 500 PTS`, duplicate late signals do not double-compensate |
-| Pickup Pact Guarantee | versioned `PickupPactIssued → PickupPactRenegotiated → PickupPactBreached →` lifecycle is persisted in the Kotlin aggregate/PostgreSQL/outbox; breach derives a deterministic 500P Kafka ledger posting; browser/API evidence covers the customer view |
-| Customer trust layer | customer adapter validates a one-time pickup code; core Kotlin commitment enforces `CONFIRMED → PICKED_UP`, emits `PickupClaimed`, releases capacity exactly once; mobile Trust Receipt and order history keep backend terminology hidden |
-| Order/payment/settlement/reward domains | core order/pickup + payment authorization + settlement/reward ledger are implemented; Pact breach traverses outbox/Kafka into the reward ledger. A separate promotion/coupon campaign domain is not claimed. |
-| REST/OpenAPI | OpenAPI 3.1 contract for signed quote → Idempotency-Key hold → payment → confirm/reschedule/breach/cancel/claim; runtime topology tests assert 400 vs 409 state semantics |
-| SQL tuning | CI/release-gate capture PostgreSQL 16 `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)` for both event history and the merchant active-pickup schedule, requiring the outbox timeline index and a partial `(store_id, pickup_at, id)` schedule index; forced-sequential baselines are kept as evidence |
-| Performance troubleshooting | deterministic race benchmark + loopback HTTP baseline + runbook |
-| Docker | commitment, ledger, reconciler, ops-console, and interviewer-demo images |
-| Kubernetes | checked-in deployments/services/probes/resource limits for the service topology |
-| AWS | Terraform blueprint for RDS PostgreSQL, ElastiCache Redis, and MSK Serverless; Kubernetes manifests are separate and no live EKS deployment is claimed |
-| Jenkins | verification/test/benchmark/container stages |
-| Datadog | service/env tagging and anomaly monitor template |
-| Elastic APM | trace propagation/instrumentation integration notes |
-| Claude Code / Cursor / Claude / ChatGPT / Gemini | `CLAUDE.md`, `.cursor/rules/project.mdc`, `AGENTS.md`, provider-neutral review interface, prompts and eval contract; no fake provider-run claim |
-| n8n / Make | regression/triage workflow artifacts |
-| Slack / Jira / Notion | optional automation destinations; no live account connection claimed |
-| Sprint/cross-functional workflow | `docs/sprint-brief.md` with PRD, handoff, QA, rollout and retrospective evidence plan |
+## 현재 소개할 제품
 
-## Current repair-review evidence
+대표 화면은 `/`와 `/go`의 일정 중심 커피 주문이다. 목적지 마감·음료·예산으로 경로를 고르고, 제조 전 동의 아래 같은 주문을 다른 매장으로 옮긴다. 쿠폰 상실과 최종 차액을 표시하고, 포인트 보류·취소 복원·수령 확정을 같은 주문에 연결한다. 유지/이동 정책의 합성 비교도 제공한다.
 
-| Requirement | Bounded implementation |
-|---|---|
-| Domain rules | One cancellation fact; explicit partial allocations and multiple per-source balances; ambiguous sources and multiple cancellation facts remain blocked |
-| Upgrade safety | Retained unattributed reversals block further spending for the same order/type; incomplete projection provenance is preserved, not bootstrapped from a request |
-| API correctness | Strict request and response schemas, 403/404/409/415/422 tests, mounted-router checks |
-| Retry and recovery | Evidence-version/hash-bound approval, 24 concurrent requests, forced process termination before/after commit |
-| Honest comparison | Original 25/65; independent conservative reference and candidate 65/65 on the documented 13-case corpus; no superiority claim |
+`/classic`은 이전 고객·점주 화면이며 기술 화면은 `/classic?dev=1`이다. `/repair-lab`은 고정된 합성 증거를 사용하는 별도의 복구 작업대다. 두 화면과 새 제품은 같은 앱에 있지만 같은 주문 저장소나 하나의 분산 처리 흐름은 아니다.
 
-## Interview story
+## 공고 역량별 근거와 한계
 
-The current primary deliverable is the evidence-bound repair workbench: **identify when cancellation/settlement evidence is sufficient, wait or block when it is not, and approve only the saved target, amount, unit and evidence version**. Merchant Fulfillment is the modeled authority for confirmed cancellation versus preparation; the Docker race test verifies eventual convergence, not physical manufacturing or a global atomic transaction. Neither this nor the workbench is a claim of market novelty or production readiness.
+| 공고의 요구 | 확인할 구현·증거 | 설명할 때 지킬 범위 |
+|---|---|---|
+| 고객 문제와 도메인 모델링 | `demo/route/planner.py`, `store.py`, `benefits.py`; 도착 마감, 제조 전 이동, 쿠폰 상실, 포인트 보류/복원/확정 | 고객 인터뷰나 실매출 개선을 측정한 사례가 아니라 개인 제품 제안 |
+| REST·OpenAPI | `demo/route/api.py`, `contracts/route-benefits.openapi.json`, `tests/route/test_benefit_ui_contract.py`; 버전·견적 재검증 및 오류 상태 | 입력 스키마와 명세 스냅샷을 검증함. 모든 응답이 세분화된 타입 모델인 것은 아님 |
+| 정합성·재시도 | `store.py`, `test_journey.py`, `test_benefits.py`; 동일 요청, 제조/이동 경합, 커밋 실패 롤백 | 공개 제품은 SQLite 단일 DB의 트랜잭션. 여러 실제 가맹점의 분산 이관이 아님 |
+| 원인 추적·검증 | `test_final_input_audit.py`, `RescheduleAdmissionTest.kt`; 미지원 유니코드 및 예약 변경 순서 반례 | 테스트를 먼저 실패시키고 수정한다. 무오류나 운영 SLA를 증명한 것은 아님 |
+| AI 활용 및 반복 개선 | 실제 ChatGPT 협업, `docs/ai-iteration-log.md`, PR의 반례·수정·회귀 기록 | 요구/판단과 생성된 코드·검증 작업을 구분. 모든 코드를 수작업으로 작성했다거나 생산성 배수를 측정했다고 쓰지 않음 |
+| Kotlin·Java·Spring·WebFlux | `services/commitment-service`, `merchant-fulfillment-service`, `ledger-service` | 별도 JVM/Docker 구성에서 실행. 공개 새 주문 UI가 이 서비스를 호출하지는 않음 |
+| Python·FastAPI·Flask | 공개 제품, reconciler, ops-console | 각각의 테스트와 실행 기록을 구분 |
+| DDD·EDA·MSA·Kafka·CQRS | commitment/merchant/ledger bounded contexts, outbox/inbox, PostgreSQL projection fence, `scripts/integration_smoke.py` | event 전달·취소 권위·원전표 잔액을 Docker에서 검증. 실물 제조/POS의 정확히 한 번 실행은 아님 |
+| PostgreSQL·SQL 실행계획 | `scripts/capture_postgres_plan.py`, `sql/explain/`, release-gate 산출물 | 합성 DB의 EXPLAIN (ANALYZE, BUFFERS), 예상 인덱스와 강제 순차조회 비교. 실트래픽 성능 수치가 아님 |
+| Redis·MongoDB·Elasticsearch·Celery | 예약 용량 Lua lease, 이벤트 전달 증거 보관, 검색 어댑터, 비동기 재생 작업 | 별도 topology/어댑터 범위. 새 공개 주문의 저장소로 사용했다고 설명하지 않음 |
+| Docker·AWS·Kubernetes·Jenkins | Docker 빌드/전체 구성 실행, Terraform validation, K8s/Jenkins 파일 | Docker 실행과 인프라 문법 검증은 있음. AWS·EKS·Jenkins 운영 경험을 대신하지 않음 |
+| Datadog·Elastic APM | 계측 설정·모니터 템플릿 | 외부 계정에서 장애를 운영·대응한 증거는 없음 |
+| Claude Code·Cursor·Claude·Gemini·n8n·Make | 규칙/프롬프트/자동화 템플릿 | 파일 존재가 해당 도구의 실행·운영 경험을 입증하지 않음. 확인된 실제 도구 사용만 지원서에 작성 |
+| Slack·Jira·Notion·스쿼드 협업 | handoff/sprint 문서와 선택적 자동화 예시 | 개인 프로젝트다. 실무 팀 협업이나 조직 프로세스 개선 경험으로 바꾸지 않음 |
 
-The existing root URL keeps the customer/merchant demo. `/repair-lab` exposes fixed synthetic evidence and an approval journal; `/?dev=1` keeps the older console. Both are simulations. Technical evidence is traceable to code, contracts, repeated tests and clearly labeled infrastructure blueprints.
+## 지원서에서 앞에 둘 이야기
 
+“커피 주문을 복제하기보다 고객의 도착 마감을 기준으로 선택과 주문 변경을 연결했다. 이동하면 빨라질 수 있지만 전용 쿠폰을 잃거나 예산을 넘을 수 있어, 서버가 변경 내용을 다시 계산하고 고객이 동의하도록 했다.”
 
-Earlier dated posting audit: [jd-audit-2026-09-22.md](jd-audit-2026-09-22.md)
-Customer feedback mapping: [customer-feedback-to-product.md](customer-feedback-to-product.md)
-AI iteration evidence: [ai-iteration-log.md](ai-iteration-log.md)
+그다음 같은 주문의 제조/이동 경합, 포인트 보류·복원, 근거가 부족한 정산 복구 차단을 설명한다. 기술 스택 전체를 첫 문단에 나열하지 않는다. 비교 실험은 합성 모델의 유지/이동 정책 비교이며 다른 지원자나 패스오더의 실제 성능을 측정한 결과가 아니다.
 
+공식 공고는 이력서와 함께 AI 활용 경험, 깊이 파고든 기술 문제 또는 팀 프로세스 개선 경험에 대한 답변을 요청한다. 이 개인 프로젝트에서는 AI 협업 및 실제 재현한 기술 문제를 선택한다. 운영/팀 경험을 만들어 넣지 않는다.
 
-## Verification boundaries — updated 2026-09-24
+## 검증 자료를 읽는 기준
 
-Merchant `POS_PRINT` and notification effects in this repository are durable **intent records**, not a physical printer driver or an external notification provider. The tested unique constraint prevents duplicate intent rows; exactly-once physical printing/delivery is not claimed. The repair workbench is a separate, bounded synthetic approval journal. It supports explicitly attributed partial-cancellation plans, but does not execute real refunds or call the Java Ledger from the public UI. Merchant cancellation authority and the PostgreSQL evidence fence are separate service boundaries. Legacy rows without reliable provenance fail closed; an automated legacy-data review/migration product is not claimed. The current README and repair-workbench document are the scope reference; earlier implementation-history descriptions are not a broader completion claim.
+최신 결과는 해당 commit의 workflow와 artifact를 기준으로 한다. PR의 성공을 main 성공으로, Docker의 성공을 공개 UI 성공으로 바꾸어 설명하지 않는다. 공개 health의 SHA, 고객/점주/복구 UI의 실제 HTTP 브라우저 검증을 따로 확인한다. 로컬에 없는 Maven/Docker나 정책상 차단된 Chromium을 통과로 세지 않는다.
 
-## 공고 재확인 — 2026-09-24
-
-지원 대상은 페이타랩 패스오더 **Backend Developer (산업기능요원 가능)** 공고다. 공식 출처: https://recruit.passorder.co.kr/c/XZ4WHRTjx8?back=true
-
-공고의 비즈니스 모델링·데이터 정합성·근본 원인 추적은 취소/제조 권위, 원전표 잔액, 보존 데이터 업그레이드 반례로 연결한다. SQL 실행계획, API 계약, Kafka/CQRS는 별도 실행 증거를 요구한다. AI 반복 개선은 실패한 반례 테스트와 수정 후 재실행 기록으로 설명하며, 도구 이름이나 설정 파일만으로 생산성 향상을 계량했다고 주장하지 않는다.
-
-인프라 템플릿과 운영 경험은 구분한다. 실제 AWS·외부 APM·n8n/Make 운영이나 타 직군과의 협업을 이 개인 프로젝트의 구현만으로 입증할 수 없다. 최종 완료는 최신 브랜치의 성공이 아니라 병합된 main SHA의 전체 검증, 동일 SHA의 공개 배포, 공개 고객·점주·복구 UI 검증을 모두 확인한 뒤 판단한다.
+과거 기록: [2026-09-22 공고 대조](jd-audit-2026-09-22.md). 현재 제품 범위: [쿠폰·포인트와 효과 비교](benefits-and-outcomes.md), [복구 작업대](repair-workbench.md). 이번 제출 전 점검: [최종 감사](final-application-audit-2026-09-24.md).

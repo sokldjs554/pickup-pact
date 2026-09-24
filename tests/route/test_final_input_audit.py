@@ -42,3 +42,10 @@ def test_well_formed_unicode_keeps_existing_validation_contract():
     response = client.post('/api/route/journeys', json={'drink':'커피☕'})
     assert response.status_code == 422
     assert client.post('/api/route/journeys', json={}).status_code == 201
+
+
+@pytest.mark.parametrize('raw,expected', [('',422), ('null',422), ('[]',422), ('{',422), ('"valid text"',422), ('{}',201)])
+def test_json_shape_validation_keeps_existing_contract(raw, expected):
+    client = TestClient(app, raise_server_exceptions=False)
+    response = client.post('/api/route/journeys', content=raw, headers={'Content-Type':'application/json'})
+    assert response.status_code == expected, (raw, response.status_code, response.text)
