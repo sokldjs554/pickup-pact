@@ -9,6 +9,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, model_validator
 from .planner import catalogue
 from .store import JourneyStore, Conflict
+from .outcomes import run_experiment
 
 HERE=Path(__file__).parent
 class Intent(BaseModel):
@@ -21,6 +22,8 @@ class Intent(BaseModel):
     budget: StrictInt=Field(default=5500,ge=1000,le=30000)
     max_detour: StrictInt=Field(default=5,ge=0,le=20)
     priority: Literal['arrival','price','walk']='arrival'
+    coupon_id: Literal['welcome500','wave1000','morning10']|None=None
+    points: StrictInt=Field(default=0,ge=0,le=2000)
     @model_validator(mode='after')
     def meaningful_milk(self):
         if self.drink=='americano' and self.milk=='oat':
@@ -49,6 +52,11 @@ class Command(BaseModel):
         if self.action=='claim' and not self.pickup_code: raise ValueError('수령 코드가 필요해요.')
         return self
 
+class ExperimentRequest(BaseModel):
+    model_config=ConfigDict(extra='forbid')
+    seed: StrictInt=Field(default=7,ge=0,le=1000000)
+    cases: StrictInt=Field(default=120,ge=6,le=200)
+
 # Demo sessions use random capability IDs, never personal or live payment data.
 store=JourneyStore(os.environ.get('ROUTE_DB',str(Path(tempfile.gettempdir())/'pickup-pact-route.sqlite')))
 
@@ -75,6 +83,12 @@ def create_router():
     @router.post('/api/route/journeys/{journey_id}/commands',responses={409:{'description':'Stale state, unsafe transfer or invalid lifecycle'}})
     def commands(journey_id:UUID,body:Command)->dict:
         return invoke(store.command,journey_id.hex,body.model_dump())
+    @router.get('/api/route/journeys/{journey_id}/comparison')
+    def comparison(journey_id:UUID)->dict:
+        return invoke(store.get,journey_id.hex)['comparison']
+    @router.post('/api/route/experiments')
+    def experiment(body:ExperimentRequest)->dict:
+        return run_experiment(body.seed,body.cases)
     @router.get('/api/route/journeys/{journey_id}/receipt')
     def receipt(journey_id:UUID)->dict:
         s=invoke(store.get,journey_id.hex)
@@ -84,6 +98,6 @@ def create_router():
     def product(): return FileResponse(HERE/'index.html',media_type='text/html',headers={'Cache-Control':'no-store'})
     @router.get('/route-assets/{asset}',include_in_schema=False)
     def asset_file(asset:str):
-        if asset not in {'product.css','product.js'}: raise HTTPException(404)
+        if asset not in {'product.css','product.js','benefits.css','benefits-ui.js'}: raise HTTPException(404)
         return FileResponse(HERE/asset,headers={'Cache-Control':'no-cache','X-Content-Type-Options':'nosniff'})
     return router

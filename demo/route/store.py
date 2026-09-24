@@ -12,6 +12,8 @@ import secrets
 import sqlite3
 from uuid import uuid4
 from .planner import STORES, REASONS, digest, plans
+from . import benefits
+from .outcomes import compare_order, current_plan
 
 class Conflict(ValueError):
     def __init__(self,code,message): super().__init__(message); self.code=code
@@ -50,7 +52,7 @@ class JourneyStore:
 
     def create(self,intent):
         s=dict(id=uuid4().hex,version=1,clock=0,arrival_delay=0,intent=intent,
-               stores=deepcopy(STORES),order=None,events=[],mode='synthetic')
+               stores=deepcopy(STORES),order=None,events=[],mode='synthetic',wallet=benefits.initial_wallet())
         self.event(s,'INTENT_CREATED','일정과 커피 조건을 저장했어요',intent=intent)
         with self.connection() as db: self._save(db,s)
         return self.view(s)
@@ -87,6 +89,11 @@ class JourneyStore:
                      payable=order['price'] if active else 0,
                      authorization_count=sum(e['type']=='PAYMENT_AUTHORIZED' for e in s['events']),
                      transfers=[e for e in s['events'] if e['type']=='ORDER_TRANSFERRED'])
+        pricing=order.get('pricing', benefits.legacy_pricing(order)) if order else None
+        receipt.update(pricing=pricing, coupon_discount=pricing['coupon_discount'] if pricing else 0,
+                       points_spent=benefits.wallet_for(s)['spent'], points_earned=benefits.wallet_for(s)['earned'])
+        out['wallet']=benefits.wallet_view(s)
+        out['comparison']=compare_order(s)
         out.update(all_plans=rows,recommendations=recommendations,current_plan=current,
                    risk=dict(needs_attention=risk,can_transfer=bool(order and order['state']=='RESERVED'),
                        reasons=current['reasons'] if risk else []), receipt=receipt, duplicate=duplicate)
@@ -126,8 +133,10 @@ class JourneyStore:
             require(order is None,'ORDER_EXISTS','이미 주문한 일정이에요. 새 결제 대신 주문을 옮길 수 있어요.')
             p=self._quote(s,c.get('quote_id'))
             s['order']=dict(id='PCT-'+uuid4().hex[:10].upper(),store_id=p['store_id'],
-                store_name=p['name'],state='RESERVED',price=p['price'],plan=p,ready_at=p['ready_at'],departure_at=s['clock'],
+                store_name=p['name'],state='RESERVED',price=p['price'],pricing=deepcopy(p['pricing']),plan=p,ready_at=p['ready_at'],departure_at=s['clock'],
                 pickup_code=f'{secrets.randbelow(1_000_000):06d}',original_store=p['name'])
+            benefits.hold(s,p['pricing'])
+            self.event(s,'BENEFITS_HELD','쿠폰·포인트 사용을 보류했어요',pricing=p['pricing'])
             self.event(s,'PAYMENT_AUTHORIZED','모의 결제 승인 1건',amount=p['price'])
             self.event(s,'ORDER_RESERVED',p['name']+'에 주문했어요',store_id=p['store_id'],amount=p['price'])
             return
@@ -160,10 +169,15 @@ class JourneyStore:
             p=self._quote(s,c.get('quote_id'))
             require(order['store_id']!=p['store_id'],'SAME_STORE','다른 매장을 선택해 주세요.')
             old_name=order['store_name']; old_price=order['price']; old_store=order['store_id']
-            order.update(store_id=p['store_id'],store_name=p['name'],price=p['price'],plan=p,ready_at=p['ready_at'],departure_at=s['clock'])
+            old_pricing=deepcopy(order.get('pricing',benefits.legacy_pricing(order)))
+            old_arrival=current_plan(s)['arrival_at']
+            benefits.hold(s,p['pricing'])
+            order.update(store_id=p['store_id'],store_name=p['name'],price=p['price'],pricing=deepcopy(p['pricing']),plan=p,ready_at=p['ready_at'],departure_at=s['clock'])
             self.event(s,'ORDER_TRANSFERRED',old_name+' → '+p['name'],
                        from_store=old_store,to_store=p['store_id'],from_name=old_name,to_name=p['name'],
-                       old_price=old_price,new_price=p['price'],difference=p['price']-old_price,order_id=order['id'])
+                       old_price=old_price,new_price=p['price'],difference=p['price']-old_price,order_id=order['id'],
+                       old_pricing=old_pricing,new_pricing=p['pricing'],
+                       old_arrival=old_arrival,new_arrival=p['arrival_at'])
             self.event(s,'AUTHORIZATION_ADJUSTED','모의 승인 금액만 조정했어요',amount=p['price'],difference=p['price']-old_price)
         elif action=='start':
             require(order['state']=='RESERVED','INVALID_STATE','제조 전 주문만 시작할 수 있어요.')
@@ -181,6 +195,10 @@ class JourneyStore:
             require(order['state'] in {'READY','PICKED_UP'},'NOT_READY','아직 수령 가능한 주문이 아니에요.')
             require(hmac.compare_digest(str(c.get('pickup_code','')).encode('utf-8'),order['pickup_code'].encode('utf-8')),'BAD_CODE','수령 코드가 맞지 않아요.')
             if order['state']=='PICKED_UP': return
+            pricing=order.get('pricing',benefits.legacy_pricing(order))
+            benefits.consume(s,pricing)
+            self.event(s,'BENEFITS_CONSUMED','쿠폰·포인트 사용과 적립을 확정했어요',
+                       coupon_id=pricing['coupon_id'],points_used=pricing['points_used'],points_earned=pricing['points_to_earn'])
             order['state']='PICKED_UP'
             order['picked_up_at']=s['clock']
             self.event(s,'PICKUP_COMPLETED','같은 주문으로 커피를 받았어요')
@@ -188,6 +206,10 @@ class JourneyStore:
         elif action=='cancel':
             if order['state']=='CANCELLED': return
             require(order['state']=='RESERVED','ALREADY_PREPARING','제조 시작 후에는 자동 취소하지 않아요.')
+            pricing=order.get('pricing',benefits.legacy_pricing(order))
+            benefits.release(s)
+            self.event(s,'BENEFITS_RELEASED','보류 중인 쿠폰·포인트를 돌려드렸어요',
+                       coupon_id=pricing['coupon_id'],points=pricing['points_used'])
             order['state']='CANCELLED'
             self.event(s,'ORDER_CANCELLED','주문 취소 · 모의 승인 해제',amount=order['price'])
         else:
