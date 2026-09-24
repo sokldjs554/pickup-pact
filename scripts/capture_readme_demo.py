@@ -121,7 +121,7 @@ def capture(base,expected,output):
     assert not errors,errors
     assert all(r['status']<400 for r in responses),responses
     report={'base_url':base,'recorded_release_commit':expected,'health_before':before,'health_after':after,
-        'browser':browser_version,'viewport':{'width':1280,'height':900},'source_video':str(source.relative_to(output)),
+        'browser':browser_version,'viewport':{'width':1280,'height':900},'source_video':str(source.resolve().relative_to(output.resolve())),
         'scenes':scenes,'screenshots':screenshots,'order_id':oid,'same_order':True,'cash_due':3700,
         'capture_count':1,'points_spent':1000,'points_earned':37,'wallet_available':1037,
         'page_errors':errors,'api_responses':responses,
