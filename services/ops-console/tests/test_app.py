@@ -17,9 +17,10 @@ def test_home_explains_product_in_korean() -> None:
     response = client.get("/")
     assert response.status_code == 200
     body = response.get_data(as_text=True)
-    assert "취소가 늦게 도착해도" in body
-    assert "30초 안에 이해하는 백엔드" in body
-    assert "합성 정합성 벤치마크" in body
+    assert "취소 소식이 늦게 왔다면" in body
+    assert "정산 기록부터 확인해요" in body
+    assert "가상 상황으로 비교한 결과" in body
+    assert "실제 결제나 환불은 하지 않아요." in body
 
 
 def test_demo_run_uses_reconciler_result(monkeypatch) -> None:
