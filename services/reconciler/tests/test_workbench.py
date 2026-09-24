@@ -27,8 +27,8 @@ def approve(client, session, plan, actions=None):
 def test_landing_is_actual_review_interface_not_static_report(client):
     r=client.get('/repair-lab')
     assert r.status_code==200
-    assert '실제 결제·환불을 실행하지 않습니다' in r.text
-    assert '승인 후 모의 기록' in r.text
+    assert '실제 결제나 환불은 되지 않아요' in r.text
+    assert '확인한 내용으로 기록' in r.text
 
 def test_real_engine_result_is_shown_with_evidence(client):
     s=create(client)
