@@ -213,13 +213,16 @@ class CommitmentService(
             if (current.pickupAt == newPickupAt && current.state == CommitmentState.CONFIRMED) {
                 return@flatMap Mono.just(current)
             }
+            // Validate the pure transition before acquiring an external lease.
+            // A synchronous domain rejection must never leave fresh capacity held.
+            val renegotiated = current.renegotiate(newPickupAt, current.leaseToken)
             val ttl = (Duration.between(now, newPickupAt) + Duration.ofMinutes(5))
                 .seconds.coerceAtLeast(30)
             capacity.acquire(current.storeId, newPickupAt, current.units, ttl)
                 .flatMap { newLease ->
                     val previousPickupAt = current.pickupAt
                     val previousLease = current.leaseToken
-                    val updated = current.renegotiate(newPickupAt, newLease)
+                    val updated = renegotiated.copy(leaseToken = newLease)
                     val pact = checkNotNull(updated.pact)
                     repository.saveWithEvents(
                         updated,

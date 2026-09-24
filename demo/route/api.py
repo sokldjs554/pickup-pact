@@ -61,7 +61,7 @@ class ExperimentRequest(BaseModel):
 store=JourneyStore(os.environ.get('ROUTE_DB',str(Path(tempfile.gettempdir())/'pickup-pact-route.sqlite')))
 
 def create_router():
-    def protect(request: Request,response: Response):
+    async def protect(request: Request,response: Response):
         response.headers['Cache-Control']='no-store'
         if request.method=='POST':
             if request.headers.get('content-type','').split(';')[0].strip().lower()!='application/json':
@@ -69,7 +69,23 @@ def create_router():
             origin=request.headers.get('origin')
             if origin and origin!=str(request.base_url).rstrip('/'):
                 raise HTTPException(403,'cross-origin request rejected')
-    router=APIRouter(dependencies=[Depends(protect)])
+            # JSON may decode a lone UTF-16 surrogate. It cannot be encoded as
+            # UTF-8 for command fingerprints or validation-error responses.
+            # Reject it before domain mutation, including in unknown/nested keys.
+            pending = [await request.json()] if await request.body() else []
+            while pending:
+                value = pending.pop()
+                if isinstance(value, str):
+                    if any(0xD800 <= ord(char) <= 0xDFFF for char in value):
+                        raise HTTPException(400, 'invalid Unicode in JSON')
+                elif isinstance(value, dict):
+                    pending.extend(value.keys())
+                    pending.extend(value.values())
+                elif isinstance(value, list):
+                    pending.extend(value)
+    router=APIRouter(dependencies=[Depends(protect)], responses={
+        400: {'description': 'Invalid Unicode in JSON rejected before mutation'},
+    })
     @router.get('/api/route/catalog')
     def catalog_api()->dict: return catalogue()
     @router.post('/api/route/journeys',status_code=201)
