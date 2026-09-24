@@ -25,7 +25,8 @@ def client(tmp_path_factory):
 
 def test_customer_home_and_repair_page_both_exist(client):
     assert client.get('/').status_code == 200
-    assert '매장 운영' in client.get('/').text
+    assert '매장 운영' in client.get('/classic').text
+    assert '커피는 챙기고' in client.get('/').text
     review = client.get('/repair-lab')
     assert review.status_code == 200
     assert '실제 결제·환불을 실행하지 않습니다' in review.text

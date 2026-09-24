@@ -13,7 +13,7 @@ async function choosePickupTime(page) {
 }
 
 test('virtual customer can order, protect pickup time, claim once, and read a trust receipt', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/classic');
 
   await expect(page.getByRole('heading', { name: /오늘 뭐 드실래요/ })).toBeVisible();
   await expect(page.locator('#customerPill')).toHaveText('체험 손님 · 하늘');
@@ -100,7 +100,7 @@ test('virtual customer can order, protect pickup time, claim once, and read a tr
 
   // Customer-facing complexity stays hidden, while the backend evidence remains inspectable.
   await expect(page.getByRole('button', { name: '정합성 복구', exact: true })).not.toBeVisible();
-  await page.goto('/?dev=1');
+  await page.goto('/classic?dev=1');
   await expect(page.locator('#orderEvents')).toContainText('PickupPactIssued');
   await expect(page.locator('#orderEvents')).toContainText('PickupRescheduled');
   await expect(page.locator('#orderEvents')).toContainText('PickupPactRenegotiated');
@@ -116,7 +116,7 @@ test('virtual customer can order, protect pickup time, claim once, and read a tr
 });
 
 test('merchant fulfillment demo proves reconnect dedupe, ACK, and JIT early-ready detection', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/classic');
 
   await page.getByRole('button', { name: '매장 운영', exact: true }).click();
   await expect(page.getByRole('heading', { name: '매장 운영', exact: true })).toBeVisible();
@@ -151,7 +151,7 @@ test('merchant fulfillment demo proves reconnect dedupe, ACK, and JIT early-read
 });
 
 test('late merchant ready automatically compensates the customer promise', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/classic');
   await page.getByRole('button', { name: '매장 운영', exact: true }).click();
   await page.getByRole('button', { name: '샘플 주문 준비', exact: true }).click();
   await page.getByRole('button', { name: '주문 접수', exact: true }).click();
@@ -167,7 +167,7 @@ test('late merchant ready automatically compensates the customer promise', async
 });
 
 test('cart follows the selected store and clears when the customer changes stores', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/classic');
 
   await page.getByRole('button', { name: '카페라떼 담기', exact: true }).click();
   await expect(page.locator('#cartCount')).toHaveText('1');
@@ -184,7 +184,7 @@ test('cart follows the selected store and clears when the customer changes store
 });
 
 test('backend reviewer can enter through the hidden dev URL and operate the expert flow', async ({ page }) => {
-  await page.goto('/?dev=1');
+  await page.goto('/classic?dev=1');
 
   await expect(page.locator('.sidebar')).toBeVisible();
   for (const label of ['주문 흐름', '매장 처리량', '장애 주입', '정합성 복구', '정산 · 감사']) {
@@ -220,7 +220,7 @@ test('backend reviewer can enter through the hidden dev URL and operate the expe
 });
 
 test('customer cancellation recovery remains inspectable only in dev mode', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/classic');
   await page.getByRole('button', { name: '아메리카노 담기', exact: true }).click();
   await page.getByRole('button', { name: '아메리카노 담기', exact: true }).click();
   await page.getByRole('button', { name: /장바구니 보기/ }).click();
@@ -242,7 +242,7 @@ test('customer cancellation recovery remains inspectable only in dev mode', asyn
   await page.getByRole('button', { name: '주문 내역', exact: true }).last().click();
   await expect(page.locator('#customerHistoryList')).toContainText('취소');
 
-  await page.goto('/?dev=1');
+  await page.goto('/classic?dev=1');
   await openPage(page, '정산 · 감사');
   await expect(page.locator('#ledgerSettlement')).toHaveText('0');
   await expect(page.locator('#ledgerReward')).toHaveText('0');
@@ -261,7 +261,7 @@ test('first customer action waits for a slow session bootstrap', async ({ page }
     await route.continue();
   });
 
-  await page.goto('/');
+  await page.goto('/classic');
   await page.getByRole('button', { name: '아메리카노 담기', exact: true }).click();
   await page.getByRole('button', { name: /장바구니 보기/ }).click();
   await choosePickupTime(page);
@@ -274,7 +274,7 @@ test('first customer action waits for a slow session bootstrap', async ({ page }
 
 test('customer smart-order flow remains usable on a narrow mobile viewport', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto('/');
+  await page.goto('/classic');
 
   await expect(page.getByRole('heading', { name: /오늘 뭐 드실래요/ })).toBeVisible();
   await expect(page.locator('#menuList')).toContainText('아메리카노');

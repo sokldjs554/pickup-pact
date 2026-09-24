@@ -290,7 +290,7 @@ def test_customer_cancel_after_merchant_preparation_is_rejected_without_state_sp
 
 
 def test_landing_page_exposes_guided_and_expert_layers():
-    response = client.get("/")
+    response = client.get("/classic")
     assert response.status_code == 200
     body = response.text
     for label in [
