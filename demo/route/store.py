@@ -179,7 +179,7 @@ class JourneyStore:
             self.event(s,'ORDER_READY','커피가 준비됐어요. 수령 코드를 확인해 주세요.')
         elif action=='claim':
             require(order['state'] in {'READY','PICKED_UP'},'NOT_READY','아직 수령 가능한 주문이 아니에요.')
-            require(hmac.compare_digest(str(c.get('pickup_code','')),order['pickup_code']),'BAD_CODE','수령 코드가 맞지 않아요.')
+            require(hmac.compare_digest(str(c.get('pickup_code','')).encode('utf-8'),order['pickup_code'].encode('utf-8')),'BAD_CODE','수령 코드가 맞지 않아요.')
             if order['state']=='PICKED_UP': return
             order['state']='PICKED_UP'
             order['picked_up_at']=s['clock']
