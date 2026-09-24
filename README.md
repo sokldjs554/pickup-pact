@@ -4,6 +4,27 @@
 
 현재 제품 화면은 `/`와 `/go`, 기존 주문·점주 화면은 `/classic`, 증거 복구 작업대는 `/repair-lab`입니다. 브랜치 변경이 배포됐는지는 `/health.release_commit`으로 확인합니다.
 
+## 데모 영상과 실제 화면
+
+[![쿠폰 적용부터 매장 이동·영수증까지](docs/media/pickup-pact-preview.gif)](https://github.com/sokldjs554/pickup-pact/raw/refs/heads/main/docs/media/pickup-pact-demo.mp4)
+
+**[약 38초 영상 보기](https://github.com/sokldjs554/pickup-pact/raw/refs/heads/main/docs/media/pickup-pact-demo.mp4)** · [직접 체험](https://pickup-pact-demo.onrender.com)
+
+전용 쿠폰·1,000P 적용 → 매장 혼잡 → 쿠폰 상실과 +1,400원 확인 → 고객 동의로 같은 주문 이동 → 수령·영수증.
+
+실제 공개 사이트를 녹화했습니다. 장면 사이의 대기·제조 조작 일부를 잘랐으며, 표시되는 시간·포인트·결제는 가상 체험 값입니다. 촬영한 앱 버전: `baca06bc`. [촬영·검증 기록](docs/media/capture.json)
+
+<details>
+<summary>데스크톱·모바일 캡처 보기</summary>
+
+![할인 상실과 최종 차액 동의](docs/media/05-consent.png)
+
+![같은 주문의 최종 영수증](docs/media/09-receipt.png)
+
+<img src="docs/media/mobile-consent.png" alt="모바일 매장 이동 동의" width="300"> <img src="docs/media/mobile-restored.png" alt="모바일 취소 후 포인트 복원" width="300">
+
+</details>
+
 ## 쿠폰·포인트와 동일 조건 비교
 
 첫 화면에서 전 매장/매장 전용/정률 쿠폰과 체험 포인트를 선택합니다. 매장 이동으로 할인이 사라지면 새로운 결제액을 확인하고 동의해야 합니다. 주문 때 혜택을 보류하고, 제조 전 취소 때 복원하며, 수령 때 한 번만 차감·적립합니다. 이 일정만의 모의 지갑이며 실제 회원 포인트가 아닙니다.
