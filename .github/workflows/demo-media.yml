@@ -55,15 +55,20 @@ jobs:
       - name: Publish refreshed media and replace only the README media section
         run: |
           python - <<'PY'
-          import json, shutil
+          import hashlib, json, shutil
           from pathlib import Path
           source=Path('verification/demo-media');target=Path('docs/media');target.mkdir(parents=True,exist_ok=True)
-          names=['pickup-pact-demo.mp4','pickup-pact-preview.gif','01-home.png','05-consent.png','09-receipt.png','mobile-home.png','mobile-consent.png','capture.json']
-          for name in names:shutil.copy2(source/name,target/name)
-          report=json.loads((target/'capture.json').read_text())
+          names=['pickup-pact-demo.mp4','pickup-pact-preview.gif','01-home.png','05-consent.png','09-receipt.png','mobile-home.png','mobile-consent.png','mobile-restored.png']
+          report=json.loads((source/'capture.json').read_text())
           assert report['recorded_release_commit']=='838222ef5f1512ce49a001c7423aed1f815eff17'
           assert report['same_order'] and report['capture_count']==1 and report['cash_due']==3700
           assert report['page_errors']==[]
+          for name in names:
+              data=(source/name).read_bytes()
+              assert 0 < len(data) < 25000000, name
+              assert hashlib.sha256(data).hexdigest()==report['media_sha256'][name], name
+              shutil.copy2(source/name,target/name)
+          shutil.copy2(source/'capture.json',target/'capture.json')
           p=Path('README.md');text=p.read_text();heading='## 데모 영상과 실제 화면'
           assert text.count(heading)==1
           block=f'''## 데모 영상과 실제 화면
@@ -79,6 +84,13 @@ jobs:
           | 주문 화면 | 쿠폰·가격 변경 확인 | 영수증 |
           |---|---|---|
           | ![주문 화면](docs/media/01-home.png) | ![쿠폰 할인과 추가금 확인](docs/media/05-consent.png) | ![같은 주문의 영수증](docs/media/09-receipt.png) |
+
+          <details>
+          <summary>모바일 화면 보기</summary>
+
+          <img src="docs/media/mobile-home.png" alt="모바일 주문 화면" width="280"> <img src="docs/media/mobile-consent.png" alt="모바일 매장 변경 확인" width="280"> <img src="docs/media/mobile-restored.png" alt="취소 후 포인트가 복원된 화면" width="280">
+
+          </details>
 
           '''
           block='\n'.join(line[10:] if line.startswith('          ') else line for line in block.splitlines())+'\n'
