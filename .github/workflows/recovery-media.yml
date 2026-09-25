@@ -1,0 +1,91 @@
+name: recovery-media
+on:
+  push:
+    branches: [docs/recovery-demo-release]
+permissions:
+  contents: write
+jobs:
+  record-reviewed-public-release:
+    if: contains(github.event.head_commit.message, '[record-recovery]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: docs/recovery-demo-release
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install browser and video tools
+        run: |
+          python -m pip install playwright
+          python -m playwright install --with-deps chromium
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg fonts-noto-cjk
+      - name: Wait for the reviewed app release
+        run: |
+          python - <<'PY'
+          import json,time,urllib.request
+          for n in range(80):
+              try:
+                  with urllib.request.urlopen('https://pickup-pact-demo.onrender.com/health',timeout=10) as r:
+                      if json.load(r).get('release_commit')=='414dac8cd5da48cf5a238fd991529d8bba944fe9': break
+              except Exception: pass
+              time.sleep(8)
+          else: raise SystemExit('Reviewed public release not available')
+          PY
+      - name: Record real rejection and unattended recovery
+        run: >-
+          python scripts/capture_recovery_demo.py
+          --expected-commit 414dac8cd5da48cf5a238fd991529d8bba944fe9
+          --output verification/recovery-media
+      - name: Render captured scenes without speeding them up
+        run: python scripts/render_recovery_demo.py verification/recovery-media
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: public-recovery-recording
+          path: verification/recovery-media
+          retention-days: 30
+      - name: Publish media to review branch, not main
+        run: |
+          python - <<'PY'
+          import hashlib,json,shutil
+          from pathlib import Path
+          src=Path('verification/recovery-media');dst=Path('docs/media/recovery');dst.mkdir(parents=True,exist_ok=True)
+          r=json.loads((src/'capture.json').read_text())
+          assert r['recorded_release_commit']=='414dac8cd5da48cf5a238fd991529d8bba944fe9'
+          assert r['same_order'] and r['automatic_recovery_without_customer_recover_post']
+          assert r['cash_due']==3200 and r['capture_count']==1 and r['points_spent']==1000 and r['points_earned']==32
+          assert r['runtime']['merchant_transport']=='http' and r['runtime']['automatic_recovery']
+          assert r['page_errors']==[] and r['full_video_decode']==r['full_gif_decode']=='passed'
+          names=['pickup-pact-recovery.mp4','pickup-pact-recovery.gif']+[p.name for p in src.glob('*.png')]
+          for name in names:
+              data=(src/name).read_bytes();assert 0<len(data)<25000000,name
+              h=hashlib.sha256(data).hexdigest()
+              if name in r['media_sha256']: assert r['media_sha256'][name]==h
+              r['media_sha256'][name]=h
+              shutil.copy2(src/name,dst/name)
+          (dst/'capture.json').write_text(json.dumps(r,ensure_ascii=False,indent=2)+'\n')
+          p=Path('README.md');text=p.read_text()
+          begin=text.index('**아래 38초 영상은 이전 주문 흐름입니다.**')
+          end=text.index('## 쿠폰·포인트와 동일 조건 비교',begin)
+          duration=r['edited_duration_seconds']
+          lines=[
+              '## 데모 영상과 실제 화면','',
+              '[![새 매장 거절과 자동 복구 실제 화면](docs/media/recovery/pickup-pact-recovery.gif)](https://github.com/sokldjs554/pickup-pact/raw/refs/heads/main/docs/media/recovery/pickup-pact-recovery.mp4)','',
+              f'**[약 {round(duration)}초 복구 데모 영상](https://github.com/sokldjs554/pickup-pact/raw/refs/heads/main/docs/media/recovery/pickup-pact-recovery.mp4)** · [직접 체험하기](https://pickup-pact-demo.onrender.com) · [촬영 기록](docs/media/recovery/capture.json)','',
+              '쿠폰·1,000P 적용 → 새 매장 거절에도 원래 주문 유지 → 메뉴 차액 400원 동의 → 매장 응답 끊김 → 다시 누르지 않고 자동 복구 → 같은 주문 수령·영수증.','',
+              '공개 앱 `414dac8cd5da48cf5a238fd991529d8bba944fe9`를 실제 Chromium으로 촬영했습니다. 녹화 전후 health와 HTTP·자동 복구 실행 방식을 확인했습니다. 복구 요청 POST를 보내지 않고 같은 주문이 이어지는지 검사했습니다. 장면은 정상 속도이며 가상 제조 시계 조작과 장면 사이 대기 일부만 생략했습니다. 실제 가맹점·결제 거래는 아닙니다.','',
+              '| 새 매장 거절 | 자동 확인 | 복구된 같은 주문 |','|---|---|---|',
+              '| ![원래 주문 유지](docs/media/recovery/03-rejected-panel.png) | ![응답 누락 후 확인](docs/media/recovery/05-pending-panel.png) | ![같은 주문으로 복구](docs/media/recovery/06-recovered-panel.png) |','',
+              '[영수증 화면](docs/media/recovery/07-receipt.png) · [취소 후 재주문과 같은 조건 비교](docs/media/recovery/08-comparison.png) · [이전 주문 흐름 영상](docs/media/pickup-pact-demo.mp4)','',
+          ]
+          p.write_text(text[:begin]+'\n'.join(lines)+'\n'+text[end:])
+          PY
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add README.md docs/media/recovery
+          git commit -m 'docs: show rejection safety and real unattended order recovery'
+          git push origin HEAD:docs/recovery-demo-release
