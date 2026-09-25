@@ -1,0 +1,25 @@
+name: recovery-public-diagnosis
+on:
+  push:
+    branches: [fix/recovery-public-review]
+    paths: ['scripts/diagnose_public_handoff.py','.github/workflows/recovery-public-diagnosis.yml']
+permissions:
+  contents: read
+jobs:
+  observe-failed-public-path:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install playwright
+      - run: python -m playwright install --with-deps chromium
+      - name: Observe existing release without intercepting requests
+        run: python scripts/diagnose_public_handoff.py --expected-commit 414dac8cd5da48cf5a238fd991529d8bba944fe9
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: public-handoff-diagnosis
+          path: verification/public-diagnosis
