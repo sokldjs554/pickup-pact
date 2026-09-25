@@ -34,7 +34,7 @@ def verify(base,output,repeat,expected_commit=None):
                         kwargs.update(record_video_dir=str(output/'recording'),record_video_size={'width':1280,'height':900})
                     context=browser.new_context(**kwargs);page=context.new_page();errors=[];network=[]
                     started=time.monotonic()
-                    page.on('request',lambda req:network.append(dict(kind='request',at=time.monotonic()-started,method=req.method,url=req.url)))
+                    page.on('request',lambda req:network.append(dict(kind='request',at=time.monotonic()-started,method=req.method,url=req.url,body=req.post_data_json if req.method=='POST' and req.url.startswith(base+'/api/route/') else None)))
                     page.on('response',lambda res:network.append(dict(kind='response',at=time.monotonic()-started,status=res.status,url=res.url)))
                     page.on('requestfailed',lambda req:network.append(dict(kind='failed',at=time.monotonic()-started,url=req.url,failure=req.failure)))
                     page.on('pageerror',lambda err:errors.append(str(err)))
@@ -44,13 +44,33 @@ def verify(base,output,repeat,expected_commit=None):
                     def shot(name):
                         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1')
                         if repetition==1:page.screenshot(path=str(output/f'{mode}-{name}.png'),full_page=True)
-                    def select_oat():
-                        page.locator('.route-card[data-hover="oat"] [data-quote]').click()
-                        expect(page.locator('#confirmDialog')).to_be_visible();page.locator('#confirmTransfer').click()
-                    def fault(value):
-                        page.locator('#handoffFault').select_option(value);page.locator('#setHandoffFault').click()
-                        expect(page.locator('#setHandoffFault')).to_be_enabled()
+                    def select_oat(expected_status):
                         page.wait_for_function("!document.body.classList.contains('busy')")
+                        page.locator('.route-card[data-hover="oat"] [data-quote]').click()
+                        expect(page.locator('#confirmDialog')).to_be_visible()
+                        with page.expect_response(lambda r:r.url.endswith('/commands') and r.request.method=='POST' and r.request.post_data_json.get('action')=='transfer') as transfer_event:
+                            page.locator('#confirmTransfer').click()
+                        response=transfer_event.value
+                        assert response.status==200,(response.status,response.text())
+                        initial=response.json()
+                        assert initial['handoff']['status']==expected_status,initial
+                        (output/f'{mode}-{repetition}-{expected_status.lower()}-response.json').write_text(json.dumps(initial,ensure_ascii=False,indent=2))
+                        return initial
+                    def fault(value):
+                        # A rejection is rendered before run() finishes its GET.
+                        # Wait BEFORE selecting: the old response can replace the
+                        # select while Playwright waits for its button to unlock.
+                        page.wait_for_function("!document.body.classList.contains('busy')")
+                        page.locator('#handoffFault').select_option(value)
+                        with page.expect_response(lambda r:r.url.endswith('/transfer-controls') and r.request.method=='POST',timeout=10000) as control_event:
+                            page.locator('#setHandoffFault').click()
+                        response=control_event.value
+                        assert response.status==200,(response.status,response.text())
+                        assert response.request.post_data_json['fault']==value
+                        configured=response.json()
+                        assert configured['next_transfer_fault']==value,configured
+                        page.wait_for_function("!document.body.classList.contains('busy')")
+                        expect(page.locator('#handoffFault')).to_have_value(value)
                     page.goto(base+'/',wait_until='networkidle');shot('01-home')
                     page.locator('#coupon').select_option('welcome500');page.locator('#points').fill('1000')
                     page.locator('#findRoutes').click();expect(page.locator('[data-quote]')).not_to_have_count(0)
@@ -59,10 +79,11 @@ def verify(base,output,repeat,expected_commit=None):
                     page.locator('#orderArea [data-action=busy]').click()
                     expect(page.locator('#orderArea .rescue-banner')).to_be_visible()
                     original=snapshot();oid=original['order']['id']
-                    fault('target_reject');select_oat()
+                    fault('target_reject');select_oat('REJECTED')
                     expect(page.locator('#handoffMessage')).to_contain_text('원래 주문과 혜택은 그대로')
                     rejected=snapshot();assert rejected['order']==original['order'] and rejected['wallet']==original['wallet'];shot('02-rejected')
-                    fault('after_target_hold');select_oat()
+                    fault('after_target_hold');initial_pending=select_oat('PENDING')
+                    assert initial_pending['handoff_pending']
                     expect(page.locator('#recoverHandoff')).to_be_visible()
                     expect(page.locator('#orderArea .status-pill')).to_have_text('처리 확인 중')
                     assert snapshot()['handoff_pending'];shot('03-pending')
@@ -122,6 +143,7 @@ def verify(base,output,repeat,expected_commit=None):
             if page is not None and not page.is_closed():
                 page.screenshot(path=str(output/'failure.png'),full_page=True)
                 (output/'failure-network.json').write_text(json.dumps(network,ensure_ascii=False,indent=2))
+                (output/'failure-state.json').write_text(json.dumps(page.evaluate('state'),ensure_ascii=False,indent=2))
             (output/'browser-failure.json').write_text(json.dumps(dict(result='failed',error=str(e),completed_runs=runs),ensure_ascii=False,indent=2))
             raise
         finally:
