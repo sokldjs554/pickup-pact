@@ -14,22 +14,26 @@
 
 ## 데모 영상과 실제 화면
 
-[![공개 데모: 쿠폰·포인트부터 매장 변경과 영수증까지](docs/media/pickup-pact-preview.gif)](https://github.com/sokldjs554/pickup-pact/raw/refs/heads/main/docs/media/pickup-pact-demo.mp4)
+[![거절·응답 끊김에도 같은 주문을 이어가는 공개 데모](docs/media/pickup-pact-preview.gif)](https://github.com/sokldjs554/pickup-pact/raw/refs/heads/main/docs/media/pickup-pact-demo.mp4)
 
-**[약 38초 데모 영상](https://github.com/sokldjs554/pickup-pact/raw/refs/heads/main/docs/media/pickup-pact-demo.mp4)** · [직접 체험하기](https://pickup-pact-demo.onrender.com) · [촬영 기록](docs/media/capture.json)
+**[약 42초 데모 영상](https://github.com/sokldjs554/pickup-pact/raw/refs/heads/main/docs/media/pickup-pact-demo.mp4)** · [직접 체험하기](https://pickup-pact-demo.onrender.com) · [촬영·검증 기록](docs/media/capture.json)
 
-쿠폰·1,000P 적용 → 매장 대기 추가 → 매장 변경 전 메뉴 차액 400원과 전용 쿠폰 미적용 1,000원을 확인 → 같은 주문으로 매장 변경 → 수령·영수증.
+쿠폰·1,000P 주문 → 새 매장 거절과 원래 주문 보존 → 수락 뒤 응답 끊김 → 다시 누르지 않아도 자동 복구 → 같은 주문의 수령·영수증 → 취소 후 재주문과 비교.
 
-문구를 바꾼 공개 사이트를 실제 Chromium으로 다시 녹화했습니다. 가상 시계를 사용하는 제조 조작과 장면 사이 대기는 일부 생략했으며, 각 장면은 정상 속도입니다. 실제 주문·결제는 하지 않습니다. 촬영한 앱 커밋은 `838222ef5f1512ce49a001c7423aed1f815eff17`이며, 녹화 전후 `/health`가 일치합니다.
+공개 앱 `000a106cc5fda6a3be595a83f938087096c3ad63`를 실제 Chromium에서 녹화했습니다. 촬영 전후 health가 일치하고, 수동 recover 명령 없이 같은 주문이 복구됐습니다. 가상 매장·모의 결제이며 실제 가맹점 장애를 일으킨 영상은 아닙니다. 장면은 정상 속도이고, 장면 사이 대기와 가상 제조 시계 조작 일부만 생략했습니다. 매장 HTTP 프로세스와 자동 복구가 켜진 공개 버전입니다.
 
-| 주문 화면 | 쿠폰·가격 변경 확인 | 영수증 |
+| 새 매장 거절 | 응답 확인 중 | 자동 복구 후 같은 주문 |
 |---|---|---|
-| ![주문 화면](docs/media/01-home.png) | ![쿠폰 할인과 추가금 확인](docs/media/05-consent.png) | ![같은 주문의 영수증](docs/media/09-receipt.png) |
+| ![원래 주문·혜택 보존](docs/media/03-refused.png) | ![서버가 자동 재확인](docs/media/04-pending.png) | ![같은 주문으로 변경 완료](docs/media/05-recovered.png) |
 
 <details>
-<summary>모바일 화면 보기</summary>
+<summary>주문·영수증·비교와 모바일 화면</summary>
 
-<img src="docs/media/mobile-home.png" alt="모바일 주문 화면" width="280"> <img src="docs/media/mobile-consent.png" alt="모바일 매장 변경 확인" width="280"> <img src="docs/media/mobile-restored.png" alt="취소 후 포인트가 복원된 화면" width="280">
+![주문 화면](docs/media/01-home.png)
+![수령 영수증](docs/media/08-receipt.png)
+![세 가지 방식 비교](docs/media/09-comparison.png)
+
+<img src="docs/media/mobile-pending.png" alt="모바일 자동 확인 중" width="280"> <img src="docs/media/mobile-recovered.png" alt="모바일 복구 후 주문" width="280">
 
 </details>
 
