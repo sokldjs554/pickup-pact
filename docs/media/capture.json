@@ -1,165 +1,350 @@
 {
   "base_url": "https://pickup-pact-demo.onrender.com",
-  "recorded_release_commit": "838222ef5f1512ce49a001c7423aed1f815eff17",
+  "recorded_release_commit": "000a106cc5fda6a3be595a83f938087096c3ad63",
   "health_before": {
     "status": "ok",
     "service": "pickup-pact-demo",
     "engine": "services/reconciler/app/engine.py",
-    "release_commit": "838222ef5f1512ce49a001c7423aed1f815eff17"
+    "release_commit": "000a106cc5fda6a3be595a83f938087096c3ad63"
   },
   "health_after": {
     "status": "ok",
     "service": "pickup-pact-demo",
     "engine": "services/reconciler/app/engine.py",
-    "release_commit": "838222ef5f1512ce49a001c7423aed1f815eff17"
+    "release_commit": "000a106cc5fda6a3be595a83f938087096c3ad63"
+  },
+  "runtime": {
+    "mode": "synthetic",
+    "merchant_transport": "http",
+    "automatic_recovery": true,
+    "predecision_timeout_seconds": 45,
+    "retry_limit": 8,
+    "scope": "single_host_independent_process_and_store_databases"
   },
   "browser": "153.0.8010.12",
   "viewport": {
     "width": 1280,
     "height": 900
   },
-  "source_video": "raw/page@e9e97deaef9c549d0d43b3bbdca8d4b7.webm",
+  "source_video": "raw/page@bdb1b9197ebe9a0d1040f4b1c4c33158.webm",
   "scenes": [
     {
       "name": "01-home",
-      "caption": "일정에 맞춘 커피 주문 · 실제 공개 데모",
-      "start": 1.8934531289999939,
-      "duration": 3.0291428809999985
+      "start": 0.6,
+      "duration": 2.6,
+      "caption": "매장이 거절해도, 원래 주문은 남아요"
     },
     {
-      "name": "02-benefits",
-      "caption": "매장 전용 쿠폰과 1,000P를 골라요",
-      "start": 5.006408617999995,
-      "duration": 5.0009502019999985
+      "name": "02-order",
+      "start": 4.8,
+      "duration": 4.0,
+      "caption": "전 매장 쿠폰과 1,000P를 적용해 주문해요"
     },
     {
-      "name": "03-order",
-      "caption": "쿠폰·포인트 적용 후 2,300원으로 주문",
-      "start": 10.073955219999988,
-      "duration": 4.002261769000015
+      "name": "02-busy",
+      "start": 9.2,
+      "duration": 3.6,
+      "caption": "주문한 매장이 늦어지면, 다른 매장을 살펴봐요"
     },
     {
-      "name": "04-delay",
-      "caption": "매장이 늦어지면, 시간과 금액을 비교해요",
-      "start": 14.732807102999985,
-      "duration": 5.002286799000018
+      "name": "03-refused",
+      "start": 15.2,
+      "duration": 5.0,
+      "caption": "새 매장이 거절하면, 원래 주문과 혜택을 유지해요"
     },
     {
-      "name": "05-consent",
-      "caption": "매장 변경: 메뉴 차액 400원 + 전용 쿠폰 미적용 1,000원 = 1,400원 추가",
-      "start": 19.78796387499999,
-      "duration": 7.003318765000017
+      "name": "04-automatic-recovery",
+      "start": 23.0,
+      "duration": 6.2,
+      "caption": "응답이 끊겨도, 서버가 같은 작업을 다시 확인해요"
     },
     {
-      "name": "06-transfer",
-      "caption": "바뀌는 금액을 보고 결정해요. 주문 번호는 그대로예요",
-      "start": 26.902869894999995,
-      "duration": 4.001564132999988
+      "name": "05-recovered",
+      "start": 29.2,
+      "duration": 4.0,
+      "caption": "복구 후에도 같은 주문 · 쿠폰과 포인트 그대로"
     },
     {
-      "name": "08-pickup",
-      "caption": "체험 시간을 앞당겨 수령해요. 결제는 한 번만 기록해요",
-      "start": 32.71577031299999,
-      "duration": 5.002446936000013
+      "name": "07-pickup",
+      "start": 37.2,
+      "duration": 5.1,
+      "caption": "체험 시계를 진행해 수령 · 결제는 한 번만"
     },
     {
-      "name": "09-receipt",
-      "caption": "같은 주문의 영수증 · 3,700원 / 1,000P 사용·37P 적립",
-      "start": 37.772719283,
-      "duration": 5.002409256999982
+      "name": "08-receipt",
+      "start": 43.0,
+      "duration": 4.2,
+      "caption": "같은 주문의 영수증 · 3,200원 / 1,000P 사용·32P 적립"
+    },
+    {
+      "name": "09-comparison",
+      "start": 58.2,
+      "duration": 5.0,
+      "caption": "취소 후 재주문과 비교 · 같았던 결과도 함께 공개해요"
     }
   ],
   "screenshots": [
     "01-home.png",
-    "02-benefits.png",
-    "03-order.png",
-    "04-delay.png",
-    "05-consent.png",
-    "06-transfer.png",
-    "07-merchant.png",
-    "08-pickup.png",
-    "09-receipt.png"
+    "02-order.png",
+    "03-refused.png",
+    "04-pending.png",
+    "04-automatic-recovery.png",
+    "05-recovered.png",
+    "06-merchant.png",
+    "07-pickup.png",
+    "08-receipt.png",
+    "09-comparison.png"
   ],
-  "order_id": "PCT-50C953D3AB",
+  "order_id": "PCT-02BB2B7B35",
   "same_order": true,
-  "cash_due": 3700,
+  "refusal_preserved_order_and_benefits": true,
+  "recovery_without_manual_command": true,
+  "cash_due": 3200,
   "capture_count": 1,
   "points_spent": 1000,
-  "points_earned": 37,
-  "wallet_available": 1037,
+  "points_earned": 32,
+  "wallet_available": 1032,
   "page_errors": [],
-  "api_responses": [
+  "api_requests": [
     {
-      "status": 200,
-      "url": "https://pickup-pact-demo.onrender.com/api/route/catalog"
+      "method": "GET",
+      "url": "https://pickup-pact-demo.onrender.com/",
+      "at": 0.056,
+      "action": null
     },
     {
-      "status": 201,
-      "url": "https://pickup-pact-demo.onrender.com/api/route/journeys"
+      "method": "GET",
+      "url": "https://pickup-pact-demo.onrender.com/route-assets/product.css",
+      "at": 0.888,
+      "action": null
     },
     {
-      "status": 200,
-      "url": "https://pickup-pact-demo.onrender.com/api/route/journeys/42582ab065f8483183ab374ac721f732/commands"
+      "method": "GET",
+      "url": "https://pickup-pact-demo.onrender.com/route-assets/benefits.css",
+      "at": 0.888,
+      "action": null
     },
     {
-      "status": 200,
-      "url": "https://pickup-pact-demo.onrender.com/api/route/journeys/42582ab065f8483183ab374ac721f732/commands"
+      "method": "GET",
+      "url": "https://pickup-pact-demo.onrender.com/route-assets/product.js",
+      "at": 0.889,
+      "action": null
     },
     {
-      "status": 200,
-      "url": "https://pickup-pact-demo.onrender.com/api/route/journeys/42582ab065f8483183ab374ac721f732/commands"
+      "method": "GET",
+      "url": "https://pickup-pact-demo.onrender.com/route-assets/benefits-ui.js",
+      "at": 0.889,
+      "action": null
     },
     {
-      "status": 200,
-      "url": "https://pickup-pact-demo.onrender.com/api/route/journeys/42582ab065f8483183ab374ac721f732/commands"
+      "method": "GET",
+      "url": "https://pickup-pact-demo.onrender.com/route-assets/handoff.css",
+      "at": 0.89,
+      "action": null
     },
     {
-      "status": 200,
-      "url": "https://pickup-pact-demo.onrender.com/api/route/journeys/42582ab065f8483183ab374ac721f732/commands"
+      "method": "GET",
+      "url": "https://pickup-pact-demo.onrender.com/route-assets/handoff-ui.js",
+      "at": 0.89,
+      "action": null
     },
     {
-      "status": 200,
-      "url": "https://pickup-pact-demo.onrender.com/api/route/journeys/42582ab065f8483183ab374ac721f732/commands"
+      "method": "GET",
+      "url": "https://pickup-pact-demo.onrender.com/route-assets/recovery-ui.js",
+      "at": 0.89,
+      "action": null
     },
     {
-      "status": 200,
-      "url": "https://pickup-pact-demo.onrender.com/api/route/journeys/42582ab065f8483183ab374ac721f732/commands"
+      "method": "GET",
+      "url": "https://pickup-pact-demo.onrender.com/api/route/catalog",
+      "at": 1.988,
+      "action": null
     },
     {
-      "status": 200,
-      "url": "https://pickup-pact-demo.onrender.com/api/route/journeys/42582ab065f8483183ab374ac721f732/commands"
+      "method": "POST",
+      "url": "https://pickup-pact-demo.onrender.com/api/route/journeys",
+      "at": 5.936,
+      "action": null
+    },
+    {
+      "method": "POST",
+      "url": "https://pickup-pact-demo.onrender.com/api/route/journeys/ac1fcb6a8bd24c00a1a213f59052f66e/commands",
+      "at": 10.968,
+      "action": "reserve"
+    },
+    {
+      "method": "POST",
+      "url": "https://pickup-pact-demo.onrender.com/api/route/journeys/ac1fcb6a8bd24c00a1a213f59052f66e/commands",
+      "at": 12.58,
+      "action": "disrupt"
+    },
+    {
+      "method": "POST",
+      "url": "https://pickup-pact-demo.onrender.com/api/route/journeys/ac1fcb6a8bd24c00a1a213f59052f66e/transfer-controls",
+      "at": 14.096,
+      "action": "fault"
+    },
+    {
+      "method": "POST",
+      "url": "https://pickup-pact-demo.onrender.com/api/route/journeys/ac1fcb6a8bd24c00a1a213f59052f66e/commands",
+      "at": 15.304,
+      "action": "transfer"
+    },
+    {
+      "method": "GET",
+      "url": "https://pickup-pact-demo.onrender.com/api/route/journeys/ac1fcb6a8bd24c00a1a213f59052f66e",
+      "at": 16.956,
+      "action": null
+    },
+    {
+      "method": "POST",
+      "url": "https://pickup-pact-demo.onrender.com/api/route/journeys/ac1fcb6a8bd24c00a1a213f59052f66e/transfer-controls",
+      "at": 21.829,
+      "action": "fault"
+    },
+    {
+      "method": "POST",
+      "url": "https://pickup-pact-demo.onrender.com/api/route/journeys/ac1fcb6a8bd24c00a1a213f59052f66e/commands",
+      "at": 22.54,
+      "action": "transfer"
+    },
+    {
+      "method": "GET",
+      "url": "https://pickup-pact-demo.onrender.com/api/route/journeys/ac1fcb6a8bd24c00a1a213f59052f66e",
+      "at": 23.472,
+      "action": null
+    },
+    {
+      "method": "GET",
+      "url": "https://pickup-pact-demo.onrender.com/api/route/journeys/ac1fcb6a8bd24c00a1a213f59052f66e",
+      "at": 24.949,
+      "action": null
+    },
+    {
+      "method": "GET",
+      "url": "https://pickup-pact-demo.onrender.com/api/route/journeys/ac1fcb6a8bd24c00a1a213f59052f66e",
+      "at": 26.458,
+      "action": null
+    },
+    {
+      "method": "GET",
+      "url": "https://pickup-pact-demo.onrender.com/api/route/journeys/ac1fcb6a8bd24c00a1a213f59052f66e",
+      "at": 28.061,
+      "action": null
+    },
+    {
+      "method": "POST",
+      "url": "https://pickup-pact-demo.onrender.com/api/route/journeys/ac1fcb6a8bd24c00a1a213f59052f66e/commands",
+      "at": 35.808,
+      "action": "advance"
+    },
+    {
+      "method": "POST",
+      "url": "https://pickup-pact-demo.onrender.com/api/route/journeys/ac1fcb6a8bd24c00a1a213f59052f66e/commands",
+      "at": 36.403,
+      "action": "start"
+    },
+    {
+      "method": "POST",
+      "url": "https://pickup-pact-demo.onrender.com/api/route/journeys/ac1fcb6a8bd24c00a1a213f59052f66e/commands",
+      "at": 37.266,
+      "action": "advance"
+    },
+    {
+      "method": "POST",
+      "url": "https://pickup-pact-demo.onrender.com/api/route/journeys/ac1fcb6a8bd24c00a1a213f59052f66e/commands",
+      "at": 37.701,
+      "action": "ready"
+    },
+    {
+      "method": "POST",
+      "url": "https://pickup-pact-demo.onrender.com/api/route/journeys/ac1fcb6a8bd24c00a1a213f59052f66e/commands",
+      "at": 38.632,
+      "action": "claim"
+    },
+    {
+      "method": "POST",
+      "url": "https://pickup-pact-demo.onrender.com/api/route/transfer-comparison",
+      "at": 49.668,
+      "action": null
     }
   ],
-  "editing": "Real browser recording; between-scene waiting/preparation omitted. Normal-speed scenes. Virtual clock and simulated payments.",
-  "edited_duration_seconds": 38.16,
+  "comparison_semantic_sha256": "b2a8f70e55f59415a988f4026bf81d9d8a75dd4b1eb82c0eb3af3033d4bb5084",
+  "editing": "Actual public Chromium recording. Normal-speed scene clips; between-scene waiting and virtual preparation steps omitted. Independent synthetic merchants, simulated payments.",
+  "edited_duration_seconds": 39.72,
   "media_sha256": {
-    "07-merchant.png": "f8999d66076fc90706c03cca152741a578874a16bf6c3ac2be188c12b4bc940d",
-    "mobile-restored.png": "17e1f2983fe3ba9b28f2f36bbce1c3ba0a3ca1900e322ebd1a93c83836795027",
-    "04-delay.png": "e218fad54559bc9f1df66953aee9d2fe23d645c33ce8bf805340c42ff83f25d8",
-    "mobile-home.png": "88d5588573128fbacc61c1eb0681a776f186719382698c97c6062a67af886512",
-    "02-benefits.png": "4caec190c62e436f82e9ca74762351298404d93c9e5d2afe45ba830376955ff7",
-    "pickup-pact-demo.mp4": "291ae8376c850a253c6c24b8f7fc25944b48893bc1a0a04cb6deddd16d49afd5",
-    "pickup-pact-preview.gif": "729d11ec0d48c0fa8446f126db336038195d3c2cce1b31db7b63ca0c77e755a0",
-    "06-transfer.png": "bfd9c294ed56f4f8178a6c4d0a004e14cf8b79dc3215118340af89d09a658ab2",
-    "01-home.png": "6bb3f47bded4fecde4d6f4587306ef7a1446eda9ac7cf2d66f95af257499db4d",
-    "03-order.png": "d13e17af2b9c9cf19c422dbfea5e16e286474c78f50113c1266641aa1cfdb7ef",
-    "09-receipt.png": "ee29148dfc1fbb37fa2f2e72839c27a4a98774bd6b06d2cffbd8edd5036f03b2",
-    "08-pickup.png": "b0e1ef77a863c624a2ae7547ad1ac8e21e09b7bd49556ad6ca83739bd16a4e39",
-    "05-consent.png": "25433d2813966e853c0f72bdce10c032e1ea66fb35f840570c9bc5f10a008c63",
-    "mobile-consent.png": "732817d1f9965c40aadc70e3e38e4fff784a3c539bcb8f1839094de4ea5dfb70"
+    "07-pickup.png": "43a300eabf90822cb8e182a902173b0a472a23fd2789f9ff184105a76e78b1d5",
+    "mobile-recovered.png": "e596581f32ff765f99c523e615d6496da5aa2c101939ac8c7586461a3e519870",
+    "mobile-home.png": "755d1a4d037f75f74cbc5f13f8ba5ec80c09ee11000f00a62059186c9dd30769",
+    "pickup-pact-demo.mp4": "e3aef8feb7cfbdaff7c7d97180c42353c253e030624c5b63dee73f06ef4c502a",
+    "pickup-pact-preview.gif": "00ab55d6133e81f55213634fc838c8e9e250719228fb420d5016b1eedd9b40f7",
+    "mobile-pending.png": "5969828c6e2369dcadeefe607c1fd56ec07ddb968977c981a39c13db82a3b5be",
+    "04-automatic-recovery.png": "a5d8cc4f4bd9c8b3dd7ea98fa34a5cc6690e8045aec72b745ee2ed2dfcbc02e2",
+    "01-home.png": "5b2c45181cd34d2fe4f8bb5da5d0220ce810c061cf0bb810f1049c264319b80d",
+    "04-pending.png": "478cc7439e411f5b11bf817b1db54d9242d20012fe66ca4125add84ef17e2c2e",
+    "03-refused.png": "f1293807d9e77ec96bc1fde315dc343eb987faf48b629b1bd59289a8cd3d3056",
+    "09-comparison.png": "e1da53ede236bf63a20f33658dcbd0fd868360fa7769134f9d7614db4c304e87",
+    "08-receipt.png": "4b39aa529590e55a923834dcd12d18b1f53b6404843875a6804b4335bf146c0a",
+    "02-order.png": "7648fcd1539c56485e5640e2ab3cd758ecfd8605f0228ba04dbee29f9b4f1a6b",
+    "06-merchant.png": "d7ff18ceec506a6d2321824d6f799b0efd6b9e40aee0804b1dfe0568df1e51d5",
+    "05-recovered.png": "fff472dd70deaeae0d4eb97a9ae02c16314866225bff0347eeed90c95edebdb7"
   },
-  "caption_correction": {
-    "date": "2026-09-25",
-    "source_mp4_sha256": "06dab7cf7f29ef1ec8ec42c7f6ee1c365285defc0e7b8b9baaf41768ed935fd3",
-    "old_caption": "11분 빠른 도착 예상 / 쿠폰 상실로 1,400원 추가",
-    "new_caption": "매장 변경: 메뉴 차액 400원 + 전용 쿠폰 미적용 1,000원 = 1,400원 추가",
-    "first_frame": 426,
-    "last_frame_inclusive": 601,
-    "start_seconds": 17.04,
-    "end_seconds_exclusive": 24.08,
-    "changed_area": "caption band only: y=900..949; original footer retained",
-    "reencoded": true,
+  "unadjusted_wall_clock_scenes": [
+    {
+      "name": "01-home",
+      "caption": "매장이 거절해도, 원래 주문은 남아요",
+      "start": 2.7967447239999927,
+      "duration": 3.0085222149999993
+    },
+    {
+      "name": "02-order",
+      "caption": "전 매장 쿠폰과 1,000P를 적용해 주문해요",
+      "start": 5.878711363999997,
+      "duration": 5.000686999999999
+    },
+    {
+      "name": "03-refused",
+      "caption": "새 매장이 거절하면, 원래 주문과 혜택을 유지해요",
+      "start": 15.230524130999996,
+      "duration": 6.001567795
+    },
+    {
+      "name": "04-automatic-recovery",
+      "caption": "응답이 끊겨도, 서버가 같은 작업을 다시 확인해요",
+      "start": 22.471496648,
+      "duration": 7.708386090999994
+    },
+    {
+      "name": "05-recovered",
+      "caption": "복구 후에도 같은 주문 · 쿠폰과 포인트 그대로",
+      "start": 30.703087712,
+      "duration": 5.002329443999997
+    },
+    {
+      "name": "07-pickup",
+      "caption": "체험 시계를 진행해 수령 · 결제는 한 번만",
+      "start": 38.568924429999996,
+      "duration": 5.000557400000005
+    },
+    {
+      "name": "08-receipt",
+      "caption": "같은 주문의 영수증 · 3,200원 / 1,000P 사용·32P 적립",
+      "start": 44.563009303,
+      "duration": 5.001741723999999
+    },
+    {
+      "name": "09-comparison",
+      "caption": "취소 후 재주문과 비교 · 같았던 결과도 함께 공개해요",
+      "start": 59.35226869399999,
+      "duration": 5.001819005000016
+    }
+  ],
+  "timeline_review": {
+    "raw_sha256": "3db869173b8f74f5a42d9057e1b3d5f6c7a493db0ec24d4e40a0f8afd121e455",
+    "basis": "reviewed source-video PTS, not wall-clock action timestamps",
+    "speed": 1.0,
     "new_browser_recording": false,
-    "reason": "400 KRW menu difference plus 1000 KRW store-specific coupon not applicable; not time-expiry surcharge"
+    "application_pixels_changed": false,
+    "note": "Original WebM retained. Remove only between-scene waits and virtual preparation. Captions remain outside app frame."
   }
 }
