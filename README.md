@@ -4,6 +4,14 @@
 
 현재 제품 화면은 `/`와 `/go`, 기존 주문·점주 화면은 `/classic`, 증거 복구 작업대는 `/repair-lab`입니다. 브랜치 변경이 배포됐는지는 `/health.release_commit`으로 확인합니다.
 
+## 주문을 잃지 않는 매장 변경 — 자동 복구와 실제 HTTP
+
+새 매장이 수락하기 전에는 기존 주문을 취소하지 않습니다. 거절되면 원래 주문과 혜택을 유지하고, 응답이 끊기면 서버가 저장된 작업을 자동으로 다시 확인합니다. 화면을 닫아도 복구를 이어가며, 수동 재확인도 가능합니다. 매장별 독립 저장소의 마지막 자리 경쟁과 강제 종료 후 복구를 시험합니다. 취소 후 재주문도 같은 조건으로 비교하며, 정상 처리와 응답 재시도에서 같았던 결과를 함께 보여줍니다.
+
+[처리 순서·실패 조건·비교 방법](docs/transfer-recovery.md) · [실제 HTTP 확인 스크립트](scripts/verify_handoff_http.py) · [브라우저 확인 스크립트](scripts/verify_handoff_browser.py)
+
+**아래 38초 영상은 이전 주문 흐름입니다.** 자동 복구 버전은 현재 commit의 CI·공개 배포 결과와 함께 확인하세요. 신규 브라우저 시험은 `/api/route/runtime`에서 `http`와 자동 복구 활성화를 확인하고, 재확인 POST 없이 복구되는지를 검사합니다. 이전 영상으로 새 기능의 실행을 대신하지 않습니다.
+
 ## 데모 영상과 실제 화면
 
 [![공개 데모: 쿠폰·포인트부터 매장 변경과 영수증까지](docs/media/pickup-pact-preview.gif)](https://github.com/sokldjs554/pickup-pact/raw/refs/heads/main/docs/media/pickup-pact-demo.mp4)
@@ -40,9 +48,9 @@
 
 거리순 선택과의 비교는 공개한 단순 기준 정책이지 패스오더의 실제 알고리즘이 아닙니다. 패스오더의 예약·같이 주문 기능은 차별점으로 주장하지 않습니다. [제품 설계 및 공개 자료 대조](docs/superpowers/specs/2026-09-24-time-first-coffee.md)
 
-**실제 지도/GPS·가맹점·결제를 연결한 상용 서비스가 아닙니다.** 가상 출발지 고정, 합성 매장과 시계, SQLite 트랜잭션 기반의 동작하는 제품 실험입니다. 대체 매장은 현재 체험 시각과 고정 출발지에서 보수적으로 재계산하며 이동 중 실시간 위치 재탐색을 주장하지 않습니다. 시간은 모델 예상값이며 실제 도착 보장이 아닙니다. 제조가 시작됐거나 조건을 만족하는 매장이 없으면 이동을 거절합니다.
+**실제 지도/GPS·가맹점·결제를 연결한 상용 서비스가 아닙니다.** 가상 출발지 고정, 합성 매장과 시계, 주문 DB와 매장별 독립 SQLite DB를 사용하는 제품 실험입니다. 같은 체험 회차에서 제조 자리를 공유하지만 실제 가맹점 서버를 연결한 것은 아닙니다. 대체 매장은 현재 체험 시각과 고정 출발지에서 보수적으로 재계산하며 이동 중 실시간 위치 재탐색을 주장하지 않습니다. 시간은 모델 예상값이며 실제 도착 보장이 아닙니다. 제조가 시작됐거나 조건을 만족하는 매장이 없으면 이동을 거절합니다.
 
-실행: `python -m pip install -r demo/requirements.txt` 다음 `python -m uvicorn demo.main:app --host 127.0.0.1 --port 10000`. Windows PowerShell은 동일한 명령을 사용합니다. 새 제품 DB는 `ROUTE_DB`로 설정하며 무료 Render 임시 디스크는 재배포 후 초기화될 수 있습니다.
+실행: `python -m pip install -r demo/requirements.txt` 다음 `python -m uvicorn demo.main:app --host 127.0.0.1 --port 10000`. Windows PowerShell은 동일한 명령을 사용합니다. 시작 시 별도 매장 HTTP 프로세스와 서버 복구 작업자가 함께 실행됩니다. 매장 프로세스가 종료되면 감독 스레드가 같은 저장소와 포트로 재시작합니다. `GET /api/route/runtime`으로 실제 실행 방식을 확인할 수 있습니다. 새 제품 DB는 `ROUTE_DB`로 설정하며 무료 Render 임시 디스크는 재배포 후 초기화될 수 있습니다.
 
 새 검증: `PYTHONPATH=.:services/reconciler python -m pytest -q tests/route`. 실제 브라우저는 `python scripts/verify_route_browser.py --base-url http://127.0.0.1:10000 --repeat 3`. CI의 route-product는 기존 Python 검증을 함께 반복하고 desktop/mobile 고객-매장-영수증 전체 흐름을 실행합니다.
 

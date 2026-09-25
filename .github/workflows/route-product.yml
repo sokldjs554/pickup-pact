@@ -9,7 +9,7 @@ permissions:
 jobs:
   customer-outcomes:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     env:
       PYTHONPATH: .:services/reconciler
       ROUTE_DB: /tmp/pickup-pact-route-ci.sqlite
@@ -22,6 +22,12 @@ jobs:
       - run: python -m playwright install --with-deps chromium
       - name: Verify presentation labels without changing event records
         run: node scripts/verify_copy_labels.cjs
+      - name: Verify version-fenced automatic status refresh
+        run: node scripts/verify_recovery_ui.cjs
+      - name: Reject misleading pending and refused UI success
+        run: node scripts/verify_handoff_labels.cjs
+      - name: Reproduce three policies through real command handlers
+        run: python scripts/run_transfer_comparison.py --repeat 3 --output verification/route-product/transfer-comparison
       - name: Repeat all Python boundaries
         run: |
           set -euo pipefail
@@ -51,6 +57,10 @@ jobs:
             sleep 1
           done
           exit 1
+      - name: Recoverable merchant transfer over real HTTP
+        run: python scripts/verify_handoff_http.py --repeat 3 --output verification/route-product/handoff-http
+      - name: Rejection and uncertain transfer in real desktop/mobile browsers
+        run: python scripts/verify_handoff_browser.py --repeat 3 --output verification/route-product/handoff-browser
       - name: Customer rescue and receipt desktop/mobile three times
         run: python scripts/verify_route_browser.py --repeat 3 --output verification/route-product/browser
       - name: Coupon loss, restoration and one-time point settlement in real browsers
@@ -91,6 +101,13 @@ jobs:
               time.sleep(8)
           else: raise SystemExit('matching deployment not observed')
           PY
+      - name: Same-commit public recoverable transfers
+        if: github.ref == 'refs/heads/main'
+        run: >-
+          python scripts/verify_handoff_browser.py --repeat 3
+          --base-url https://pickup-pact-demo.onrender.com
+          --expected-commit '${{ github.sha }}'
+          --output verification/route-live/handoff-browser
       - name: Same-commit public customer product
         if: github.ref == 'refs/heads/main'
         run: >-
