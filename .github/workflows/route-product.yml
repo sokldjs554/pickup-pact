@@ -28,6 +28,8 @@ jobs:
         run: node scripts/verify_handoff_labels.cjs
       - name: Verify slow comparison feedback and independent order controls
         run: node scripts/verify_comparison_ui.cjs
+      - name: Verify fault selection occurs after the prior response
+        run: python -m pytest -q tests/route/test_browser_fault_configuration.py
       - name: Reproduce three policies through real command handlers
         run: python scripts/run_transfer_comparison.py --repeat 3 --output verification/route-product/transfer-comparison
       - name: Repeat all Python boundaries
