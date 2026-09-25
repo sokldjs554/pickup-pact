@@ -1,6 +1,7 @@
 """One persisted journey across customer, merchant, rescue and receipt views.
 
-SQLite serializes this synthetic environment only, not live merchant services.
+Pricing and benefits finalize in the coordinator DB; modeled merchants commit
+to independent files through durable operations. No live merchant API is used.
 """
 from __future__ import annotations
 from contextlib import contextmanager
@@ -22,14 +23,22 @@ def require(condition,code,message):
     if not condition: raise Conflict(code,message)
 
 class JourneyStore:
-    def __init__(self,path):
+    def __init__(self,path, fleet=None):
+        self.automatic_recovery_enabled = False
         self.path=str(path); Path(path).parent.mkdir(parents=True,exist_ok=True)
         with self.connection() as db:
             db.executescript('''PRAGMA journal_mode=WAL;
               CREATE TABLE IF NOT EXISTS route_journeys(id TEXT PRIMARY KEY, body TEXT NOT NULL);
               CREATE TABLE IF NOT EXISTS route_commands(journey_id TEXT NOT NULL,
                 request_id TEXT NOT NULL,fingerprint TEXT NOT NULL,
+                PRIMARY KEY(journey_id,request_id));
+              CREATE TABLE IF NOT EXISTS route_controls(journey_id TEXT NOT NULL,
+                request_id TEXT NOT NULL,fingerprint TEXT NOT NULL,
                 PRIMARY KEY(journey_id,request_id));''')
+        from .merchant_fleet import MerchantFleet
+        from .durable_operations import DurableOperations
+        self.fleet = fleet or MerchantFleet(self.path + '.merchants')
+        self.operations = DurableOperations(self)
 
     @contextmanager
     def connection(self):
@@ -50,9 +59,10 @@ class JourneyStore:
     def event(s,kind,title,**data):
         s['events'].append(dict(seq=len(s['events'])+1,type=kind,title=title,at=s['clock'],data=data))
 
-    def create(self,intent):
+    def create(self,intent,world_id=None):
         s=dict(id=uuid4().hex,version=1,clock=0,arrival_delay=0,intent=intent,
                stores=deepcopy(STORES),order=None,events=[],mode='synthetic',wallet=benefits.initial_wallet())
+        s['world_id'] = world_id or s['id']
         self.event(s,'INTENT_CREATED','일정과 커피 조건을 저장했어요',intent=intent)
         with self.connection() as db: self._save(db,s)
         return self.view(s)
@@ -62,6 +72,7 @@ class JourneyStore:
 
     def view(self,s,duplicate=False):
         out=deepcopy(s); rows=plans(s); order=out['order']; current=None
+        out['automatic_recovery_enabled'] = self.automatic_recovery_enabled
         if order:
             current=next(p for p in rows if p['store_id']==order['store_id'])
             if order['state'] in {'PREPARING','READY','PICKED_UP'}:
@@ -97,9 +108,25 @@ class JourneyStore:
         out.update(all_plans=rows,recommendations=recommendations,current_plan=current,
                    risk=dict(needs_attention=risk,can_transfer=bool(order and order['state']=='RESERVED'),
                        reasons=current['reasons'] if risk else []), receipt=receipt, duplicate=duplicate)
+        if 'world_id' in s:
+            try:
+                out['merchant_capacity'] = self.fleet.snapshot(s['world_id'])
+                out['merchant_connection'] = 'available'
+            except OSError:
+                out['merchant_capacity'] = {}
+                out['merchant_connection'] = 'unavailable'
+            out['handoff'] = deepcopy(s.get('handoff'))
+            out['handoff_pending'] = bool(s.get('active_operation'))
+            if out['handoff_pending']:
+                out['recommendations'] = []
+                out['risk']['can_transfer'] = False
         return out
 
     def command(self,sid,c):
+        result = self.operations.command(sid,c)
+        return result if result is not None else self._command_local(sid,c)
+
+    def _command_local(self,sid,c):
         fp=digest(c)
         with self.connection() as db:
             db.execute('BEGIN IMMEDIATE')
@@ -111,6 +138,7 @@ class JourneyStore:
                     require(previous[0]==fp,'IDEMPOTENCY_CONFLICT','같은 요청 번호로 다른 작업을 보낼 수 없어요.')
                     db.execute('COMMIT'); return self.view(s,True)
                 require(s['version']==c['expected_version'],'STALE_VERSION','상태가 바뀌었어요. 새로 확인한 뒤 다시 선택해 주세요.')
+                require(not s.get('active_operation'),'TRANSFER_PENDING','매장 확인이 끝나지 않았어요. 먼저 다시 확인해 주세요.')
                 self._apply(s,c)
                 s['version']+=1
                 self._save(db,s)
@@ -129,6 +157,11 @@ class JourneyStore:
 
     def _apply(self,s,c):
         action=c['action']; order=s['order']
+        if action=='reorder':
+            require(order is not None and order['state']=='CANCELLED','INVALID_STATE','먼저 기존 주문을 취소해야 다시 주문할 수 있어요.')
+            s.setdefault('previous_orders',[]).append(deepcopy(order))
+            s['order']=None
+            return self._apply(s,{**c,'action':'reserve'})
         if action=='reserve':
             require(order is None,'ORDER_EXISTS','이미 주문한 일정이에요. 새 결제 대신 주문을 옮길 수 있어요.')
             p=self._quote(s,c.get('quote_id'))
@@ -214,3 +247,36 @@ class JourneyStore:
             self.event(s,'ORDER_CANCELLED','주문 취소 · 모의 승인 해제',amount=order['price'])
         else:
             raise Conflict('INVALID_COMMAND','지원하지 않는 명령이에요.')
+
+    def transfer_control(self,sid,c):
+        """Bounded demo controls; never mutate another visitor's world."""
+        if c['action'] in {'occupy','clear'}:
+            return self.operations.control(sid,c)
+        from .durable_operations import FAULTS
+        from .merchant_fleet import CAPACITY
+        fp=digest(c)
+        with self.connection() as db:
+            db.execute('BEGIN IMMEDIATE')
+            try:
+                s=self._load(db,sid)
+                require('world_id' in s,'LEGACY_JOURNEY','새 체험에서 매장 변경을 확인해 주세요.')
+                previous=db.execute('SELECT fingerprint FROM route_controls WHERE journey_id=? AND request_id=?',(sid,c['request_id'])).fetchone()
+                if previous:
+                    require(previous[0]==fp,'IDEMPOTENCY_CONFLICT','이미 보낸 설정과 내용이 달라요.')
+                    db.execute('COMMIT')
+                    return self.view(s,True)
+                require(s['version']==c['expected_version'],'STALE_VERSION','주문 상태를 다시 확인해 주세요.')
+                require(not s.get('active_operation'),'TRANSFER_PENDING','먼저 매장의 처리 결과를 확인해 주세요.')
+                if c['action']=='fault':
+                    require(c.get('fault') in FAULTS,'INVALID_COMMAND','지원하지 않는 체험 설정이에요.')
+                    s['next_transfer_fault']=c['fault']
+                else:
+                    require(False,'INVALID_COMMAND','지원하지 않는 체험 설정이에요.')
+                s['version']+=1
+                self._save(db,s)
+                db.execute('INSERT INTO route_controls VALUES(?,?,?)',(sid,c['request_id'],fp))
+                db.execute('COMMIT')
+                return self.view(s)
+            except BaseException:
+                if db.in_transaction: db.execute('ROLLBACK')
+                raise

@@ -56,9 +56,19 @@ function couponMessage(pricing) {
 let state=null,catalog=null,drink='latte',activeView='customer',pendingPlan=null,busy=false,toastTimer;
 function notify(message,error=false){clearTimeout(toastTimer);$('notice').textContent=message;$('notice').className=error?'error':'';$('notice').hidden=false;toastTimer=setTimeout(()=>$('notice').hidden=true,6500);}
 async function api(path,body){const r=await fetch(path,{method:body===undefined?'GET':'POST',headers:body===undefined?{}:{'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});let data;try{data=await r.json();}catch(_){throw Error('화면을 불러오지 못했어요. 잠시 후 다시 눌러주세요.');}if(!r.ok){const e=Error(friendlyRouteError(data.detail,r.status));e.status=r.status;throw e;}return data;}
-async function run(fn){if(busy)return;busy=true;document.body.classList.add('busy');try{await fn();}catch(e){notify(e.message,true);if(e.status===409&&state){try{state=await api('/api/route/journeys/'+state.id);render();}catch(_){}}}finally{busy=false;document.body.classList.remove('busy');}}
+async function run(fn){if(busy)return;busy=true;document.body.classList.add('busy');try{await fn();}catch(e){notify(e.message,true);if(state&&(e.status===409||!e.status)){try{state=await api('/api/route/journeys/'+state.id);render();}catch(_){}}}finally{busy=false;document.body.classList.remove('busy');}}
 function requestId(){return (globalThis.crypto?.randomUUID?.()||Date.now()+'-'+Math.random().toString(36).slice(2)).replaceAll('-','');}
-async function cmd(action,extra={}){state=await api('/api/route/journeys/'+state.id+'/commands',{action,expected_version:state.version,request_id:requestId(),...extra});render();return state;}
+async function cmd(action,extra={}){
+  state=await api('/api/route/journeys/'+state.id+'/commands',{action,expected_version:state.version,request_id:requestId(),...extra});
+  render();
+  // An HTTP 200 can report a durable pending/rejected operation. Never let
+  // the caller show its old unconditional success toast in either case.
+  const op=state.handoff;
+  if(state.handoff_pending || (op?.status==='REJECTED' && (op.action===action||action==='recover'))){
+    throw Error(op?.message||'매장 확인이 아직 끝나지 않았어요. 다시 확인해 주세요.');
+  }
+  return state;
+}
 function labelIntent(intent){return (intent.drink==='latte'?'카페라떼':'아메리카노')+(intent.milk==='oat'?' · 오트':'')+(intent.decaf?' · 디카페인':'');}
 function switchView(view){activeView=view;for(const v of ['customer','merchant','receipt'])$(v+'View').hidden=v!==view;document.querySelectorAll('.nav').forEach(b=>b.classList.toggle('active',b.dataset.view===view));renderAux();}
 function adjustDeadline(){const n=Number($('deadline').value);$('deadlineValue').textContent=n;$('deadlineClock').textContent=time(n)+'까지';}
