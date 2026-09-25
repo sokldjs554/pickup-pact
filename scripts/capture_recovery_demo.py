@@ -145,11 +145,31 @@ def capture(base: str, expected: str, output: Path) -> dict:
             mp.goto(base+'/',wait_until='networkidle',timeout=60000)
             mp.screenshot(path=str(output/'mobile-home.png'),full_page=True)
             mp.locator('#coupon').select_option('welcome500'); mp.locator('#points').fill('1000')
-            mp.locator('#findRoutes').click(); mp.locator('.route-card[data-hover=wave] [data-quote]').click()
-            mp.locator('#orderArea [data-action=busy]').click()
-            mp.locator('#handoffFault').select_option('after_target_hold'); mp.locator('#setHandoffFault').click()
+            mobile_requests=[]
+            def mobile_response(response):
+                if response.request.method=='POST' and response.url.startswith(base+'/api/route/'):
+                    mobile_requests.append({'url':response.url,'request':response.request.post_data_json,
+                        'status':response.status,'response':response.json()})
+                    (output/'mobile-commands.json').write_text(json.dumps(mobile_requests,ensure_ascii=False,indent=2))
+            mp.on('response',mobile_response)
+            mp.locator('#findRoutes').click()
             mp.wait_for_function("!document.body.classList.contains('busy')")
-            mp.locator('.route-card[data-hover=oat] [data-quote]').click(); mp.locator('#confirmTransfer').click()
+            mp.locator('.route-card[data-hover=wave] [data-quote]').click()
+            mp.wait_for_function("!document.body.classList.contains('busy')")
+            mp.locator('#orderArea [data-action=busy]').click()
+            mp.wait_for_function("!document.body.classList.contains('busy')")
+            # Wait for the busy command's re-render before editing the select.
+            # Otherwise its response can reset a selection made on the old DOM.
+            mp.locator('#handoffFault').select_option('after_target_hold')
+            with mp.expect_response(lambda r:r.url.endswith('/transfer-controls') and r.request.method=='POST') as fault_response:
+                mp.locator('#setHandoffFault').click()
+            configured=fault_response.value.json()
+            assert configured['next_transfer_fault']=='after_target_hold', configured
+            mp.wait_for_function("!document.body.classList.contains('busy')")
+            mp.locator('.route-card[data-hover=oat] [data-quote]').click()
+            with mp.expect_response(lambda r:r.url.endswith('/commands') and r.request.method=='POST' and r.request.post_data_json.get('action')=='transfer') as transfer_response:
+                mp.locator('#confirmTransfer').click()
+            assert transfer_response.value.json()['handoff_pending'] is True
             expect(mp.locator('#recoverHandoff')).to_be_visible()
             mp.locator('#handoffPanel').scroll_into_view_if_needed()
             mp.screenshot(path=str(output/'mobile-pending.png'),full_page=False)
