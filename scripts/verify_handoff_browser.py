@@ -7,6 +7,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import time
 from pathlib import Path
 from urllib.request import urlopen
 from playwright.sync_api import sync_playwright,expect
@@ -18,17 +19,24 @@ def verify(base,output,repeat,expected_commit=None):
     if expected_commit:assert health.get('release_commit')==expected_commit,health
     with urlopen(base+'/api/route/runtime',timeout=20) as r:runtime=json.load(r)
     automatic=runtime['automatic_recovery']
+    if expected_commit:
+        assert automatic and runtime['merchant_transport']=='http',runtime
     with sync_playwright() as p:
         options={'headless':True}
         if os.environ.get('ROUTE_BROWSER_PATH'):options['executable_path']=os.environ['ROUTE_BROWSER_PATH']
         browser=p.chromium.launch(**options)
+        context=None;page=None
         try:
             for repetition in range(1,repeat+1):
                 for mode,width,height in [('desktop',1440,1000),('mobile',390,844)]:
                     kwargs={'viewport':{'width':width,'height':height}}
                     if repetition==1 and mode=='desktop':
                         kwargs.update(record_video_dir=str(output/'recording'),record_video_size={'width':1280,'height':900})
-                    context=browser.new_context(**kwargs);page=context.new_page();errors=[]
+                    context=browser.new_context(**kwargs);page=context.new_page();errors=[];network=[]
+                    started=time.monotonic()
+                    page.on('request',lambda req:network.append(dict(kind='request',at=time.monotonic()-started,method=req.method,url=req.url)))
+                    page.on('response',lambda res:network.append(dict(kind='response',at=time.monotonic()-started,status=res.status,url=res.url)))
+                    page.on('requestfailed',lambda req:network.append(dict(kind='failed',at=time.monotonic()-started,url=req.url,failure=req.failure)))
                     page.on('pageerror',lambda err:errors.append(str(err)))
                     def snapshot():
                         sid=page.evaluate("localStorage.getItem('pickup-pact.route-journey')")
@@ -84,19 +92,43 @@ def verify(base,output,repeat,expected_commit=None):
                     final=snapshot();assert final['receipt']['capture_count']==1 and final['receipt']['net_paid']==3200
                     assert final['wallet']['spent']==1000 and final['wallet']['earned']==32
                     page.locator('nav [data-view="receipt"]').click();shot('05-receipt')
-                    page.locator('nav [data-view="customer"]').click();page.locator('#compareHandoff').click()
+                    page.locator('nav [data-view="customer"]').click()
+                    # Distinguish request emission, computation, and DOM render.
+                    # The isolated 18-command comparison took 7.8s on the public
+                    # host; it is not an instantaneous UI update. All six results
+                    # are still required, with a separately bounded HTTP wait.
+                    compare_start=time.monotonic()
+                    with page.expect_response(lambda r:r.url.endswith('/api/route/transfer-comparison') and r.request.method=='POST',timeout=30000) as response_event:
+                        with page.expect_request(lambda r:r.url.endswith('/api/route/transfer-comparison') and r.method=='POST',timeout=5000):
+                            page.locator('#compareHandoff').click()
+                        assert page.evaluate('!document.body.classList.contains("busy")'), 'comparison must not lock order navigation'
+                    response=response_event.value
+                    assert response.status==200,(response.status,response.text())
+                    payload=response.json();assert len(payload['cases'])==6
+                    comparison_seconds=round(time.monotonic()-compare_start,3)
                     expect(page.locator('#handoffComparisonResult tbody tr')).to_have_count(6)
+                    expect(page.locator('#compareHandoff')).to_be_enabled()
+                    (output/f'{mode}-{repetition}-network.json').write_text(json.dumps(network,ensure_ascii=False,indent=2))
                     expect(page.locator('#handoffComparisonResult')).to_contain_text('기존 매장에서 주문 유지');shot('06-comparison')
                     assert errors==[],errors
                     runs.append(dict(repetition=repetition,viewport=mode,result='passed',page_errors=errors,
                         order_id=oid,release_commit=health.get('release_commit'),base_url=base,
-                        automatic_recovery=automatic,merchant_transport=runtime['merchant_transport']))
+                        automatic_recovery=automatic,merchant_transport=runtime['merchant_transport'],
+                        comparison_seconds=comparison_seconds,comparison_cases=len(payload['cases']),
+                        comparison_semantic_sha256=payload['semantic_sha256']))
                     (output/'browser-results.json').write_text(json.dumps(runs,ensure_ascii=False,indent=2))
-                    context.close()
+                    context.close();context=None
         except Exception as e:
+            if page is not None and not page.is_closed():
+                page.screenshot(path=str(output/'failure.png'),full_page=True)
+                (output/'failure-network.json').write_text(json.dumps(network,ensure_ascii=False,indent=2))
             (output/'browser-failure.json').write_text(json.dumps(dict(result='failed',error=str(e),completed_runs=runs),ensure_ascii=False,indent=2))
             raise
-        finally:browser.close()
+        finally:
+            if context is not None:context.close()  # Flush recording even on failure.
+            browser.close()
+    with urlopen(base+'/health',timeout=20) as r:after=json.load(r)
+    if expected_commit:assert after.get('release_commit')==expected_commit,after
     return runs
 
 if __name__=='__main__':
