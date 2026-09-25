@@ -26,6 +26,8 @@ jobs:
         run: node scripts/verify_recovery_ui.cjs
       - name: Reject misleading pending and refused UI success
         run: node scripts/verify_handoff_labels.cjs
+      - name: Verify slow comparison feedback and independent order controls
+        run: node scripts/verify_comparison_ui.cjs
       - name: Reproduce three policies through real command handlers
         run: python scripts/run_transfer_comparison.py --repeat 3 --output verification/route-product/transfer-comparison
       - name: Repeat all Python boundaries

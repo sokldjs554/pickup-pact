@@ -8,7 +8,7 @@
     after_target_activation:'새 매장 인계 뒤 응답 끊김'};
   const steps=['FREEZE','HOLD','DECIDE','RELEASE_SOURCE','ACTIVATE','FINALIZE'];
   const labels=['원래 매장 대기','새 자리 확보','변경 내용 저장','기존 자리 반환','새 매장 연결','주문·혜택 확인'];
-  let comparison=null;
+  let comparison=null, comparisonPending=false;
   const main=document.querySelector('.main-column');
   const assurance=document.createElement('section');assurance.id='handoffPanel';assurance.hidden=true;
   $('orderArea').insertAdjacentElement('afterend',assurance);
@@ -86,16 +86,49 @@
     const title=!row.has_order?'진행할 주문 없음':row.original_preserved?'기존 매장에서 주문 유지':row.same_order?'같은 주문으로 매장 변경':'새 주문으로 접수';
     return `<b class="${row.has_order?'outcome-kept':'outcome-empty'}">${title}</b><span>${row.has_order?'결제 예정 '+won(row.cash_due):'새 주문·결제 없음'}</span><small>실행 요청 ${row.customer_commands}회${row.same_request_retries?' · 동일 요청 재확인 '+row.same_request_retries+'회 포함':''}</small>`;
   }
-  $('compareHandoff').addEventListener('click',()=>run(async()=>{
-    const intent=state?.intent||{destination:$('destination').value,deadline_minutes:Number($('deadline').value),
+  async function fetchComparison(intent,signal){
+    // A timeout is safe here because this endpoint executes isolated comparison
+    // worlds; do not apply this cancellation policy to order mutation requests.
+    const response=await fetch('/api/route/transfer-comparison',{
+      method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({intent}),signal
+    });
+    const payload=await response.json();
+    if(!response.ok){
+      const error=new Error(friendlyRouteError(payload.detail,response.status));
+      error.status=response.status;throw error;
+    }
+    return payload;
+  }
+  $('compareHandoff').addEventListener('click',async()=>{
+    if(comparisonPending)return;
+    const button=$('compareHandoff'),result=$('handoffComparisonResult');
+    const intent=JSON.parse(JSON.stringify(state?.intent||{destination:$('destination').value,deadline_minutes:Number($('deadline').value),
       drink,milk:$('oat').checked?'oat':'regular',decaf:$('decaf').checked,budget:Number($('budget').value),
-      max_detour:Number($('detour').value),priority:$('priority').value,coupon_id:$('coupon').value||null,points:Number($('points').value)||0};
-    comparison=await api('/api/route/transfer-comparison',{intent});
-    $('handoffComparisonResult').innerHTML=`<p class="handoff-note">${esc(comparison.disclosure)}</p><div class="handoff-table-wrap"><table><thead><tr><th>같은 상황</th><th>취소 후 다시 주문</th><th>확인 후 주문 이어가기</th></tr></thead><tbody>${comparison.cases.map(r=>`<tr><th scope="row">${esc(r.label)}</th><td>${outcome(r.cancel_reorder)}</td><td>${outcome(r.guarded_transfer)}</td></tr>`).join('')}</tbody></table></div><p class="handoff-note">실행 요청 수는 서버 명령 횟수이며 사용자의 클릭이나 소요 시간을 측정한 값은 아니에요. 정상 처리에서는 예상 도착 시간과 금액이 같을 수 있어요. 차이는 새 매장이 받지 못했을 때 원래 주문이 남는지예요. 쿠폰 기간 사례만 비교를 위해 전 매장 정률 쿠폰과 90분 마감을 사용해요.</p><details><summary>기존 매장 유지 결과도 보기</summary><div class="handoff-stay">${comparison.cases.map(r=>`<p><b>${esc(r.label)}</b><span>${r.stay.has_order?time(r.stay.predicted_arrival)+' 도착 예상 / '+won(r.stay.cash_due):'처음부터 주문 불가'}</span></p>`).join('')}</div></details><button type="button" class="secondary" id="downloadHandoffComparison">조건·전체 실행 기록 받기</button>`;
+      max_detour:Number($('detour').value),priority:$('priority').value,coupon_id:$('coupon').value||null,points:Number($('points').value)||0}));
+    // This is a read-only, isolated comparison: do not hold the order-command
+    // lock or silently use conditions changed while the response is pending.
+    comparisonPending=true;button.disabled=true;button.textContent='비교 결과 확인 중…';
+    result.setAttribute('aria-busy','true');
+    result.innerHTML='<p class="handoff-note" role="status">6가지 상황을 실제 주문 코드로 비교하고 있어요. 잠시만 기다려 주세요. 내 주문은 그대로 이용할 수 있어요.</p>';
+    const controller=new AbortController();
+    const timeout=setTimeout(()=>controller.abort(),35000);
+    try{
+    comparison=await fetchComparison(intent,controller.signal);
+    $('handoffComparisonResult').innerHTML=`<p class="handoff-note">비교를 시작할 때의 조건: ${esc(labelIntent(intent))} · ${time(intent.deadline_minutes)}까지 · 할인 후 결제 한도 ${won(intent.budget)}</p><p class="handoff-note">${esc(comparison.disclosure)}</p><div class="handoff-table-wrap"><table><thead><tr><th>같은 상황</th><th>취소 후 다시 주문</th><th>확인 후 주문 이어가기</th></tr></thead><tbody>${comparison.cases.map(r=>`<tr><th scope="row">${esc(r.label)}</th><td>${outcome(r.cancel_reorder)}</td><td>${outcome(r.guarded_transfer)}</td></tr>`).join('')}</tbody></table></div><p class="handoff-note">실행 요청 수는 서버 명령 횟수이며 사용자의 클릭이나 소요 시간을 측정한 값은 아니에요. 정상 처리에서는 예상 도착 시간과 금액이 같을 수 있어요. 차이는 새 매장이 받지 못했을 때 원래 주문이 남는지예요. 쿠폰 기간 사례만 비교를 위해 전 매장 정률 쿠폰과 90분 마감을 사용해요.</p><details><summary>기존 매장 유지 결과도 보기</summary><div class="handoff-stay">${comparison.cases.map(r=>`<p><b>${esc(r.label)}</b><span>${r.stay.has_order?time(r.stay.predicted_arrival)+' 도착 예상 / '+won(r.stay.cash_due):'처음부터 주문 불가'}</span></p>`).join('')}</div></details><button type="button" class="secondary" id="downloadHandoffComparison">조건·전체 실행 기록 받기</button>`;
     $('downloadHandoffComparison').addEventListener('click',()=>{
       const url=URL.createObjectURL(new Blob([JSON.stringify(comparison,null,2)],{type:'application/json'}));
       const a=document.createElement('a');a.href=url;a.download='pickup-pact-transfer-comparison.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
     });
     notify('세 가지 방식을 같은 상황에서 실행했어요. 같았던 결과와 실패한 결과도 함께 확인하세요.');
-  }));
+    }catch(error){
+      const message=error.name==='AbortError'
+        ? '비교 결과를 아직 받지 못했어요. 주문은 바뀌지 않았어요. 잠시 후 다시 비교해 주세요.'
+        : error.status===429 ? error.message : '비교 결과를 불러오지 못했어요. 내 주문은 그대로예요. 잠시 후 다시 눌러주세요.';
+      result.innerHTML=`<p class="handoff-note" role="alert">${esc(message)}</p>`;
+      notify(message,true);
+    }finally{
+      clearTimeout(timeout);comparisonPending=false;button.disabled=false;
+      button.textContent='세 가지 방식 직접 비교';result.setAttribute('aria-busy','false');
+    }
+  });
 })();
