@@ -64,7 +64,7 @@ def capture(base,expected,output):
             page.locator('[data-action=busy]').click()
             expect(page.locator('#orderComparison')).to_contain_text('11분')
             page.locator('#orderComparison').scroll_into_view_if_needed()
-        with scene('05-consent','11분 빠른 도착 예상 / 쿠폰 상실로 1,400원 추가',7):
+        with scene('05-consent','매장 변경: 메뉴 차액 400원 + 전용 쿠폰 미적용 1,000원 = 1,400원 추가',7):
             page.locator('.route-card[data-hover=oat] [data-quote]').click()
             expect(page.locator('#couponLossWarning')).to_contain_text('1,000원')
             expect(page.locator('#dialogBody .benefit-total')).to_contain_text('3,700원')

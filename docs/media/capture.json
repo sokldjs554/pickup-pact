@@ -46,7 +46,7 @@
     },
     {
       "name": "05-consent",
-      "caption": "11분 빠른 도착 예상 / 쿠폰 상실로 1,400원 추가",
+      "caption": "매장 변경: 메뉴 차액 400원 + 전용 쿠폰 미적용 1,000원 = 1,400원 추가",
       "start": 19.78796387499999,
       "duration": 7.003318765000017
     },
@@ -138,8 +138,8 @@
     "04-delay.png": "e218fad54559bc9f1df66953aee9d2fe23d645c33ce8bf805340c42ff83f25d8",
     "mobile-home.png": "88d5588573128fbacc61c1eb0681a776f186719382698c97c6062a67af886512",
     "02-benefits.png": "4caec190c62e436f82e9ca74762351298404d93c9e5d2afe45ba830376955ff7",
-    "pickup-pact-demo.mp4": "06dab7cf7f29ef1ec8ec42c7f6ee1c365285defc0e7b8b9baaf41768ed935fd3",
-    "pickup-pact-preview.gif": "e318b39024f88034ca1f71de4732d2f4a55162d479a1333c98603b89d9362967",
+    "pickup-pact-demo.mp4": "291ae8376c850a253c6c24b8f7fc25944b48893bc1a0a04cb6deddd16d49afd5",
+    "pickup-pact-preview.gif": "729d11ec0d48c0fa8446f126db336038195d3c2cce1b31db7b63ca0c77e755a0",
     "06-transfer.png": "bfd9c294ed56f4f8178a6c4d0a004e14cf8b79dc3215118340af89d09a658ab2",
     "01-home.png": "6bb3f47bded4fecde4d6f4587306ef7a1446eda9ac7cf2d66f95af257499db4d",
     "03-order.png": "d13e17af2b9c9cf19c422dbfea5e16e286474c78f50113c1266641aa1cfdb7ef",
@@ -147,5 +147,19 @@
     "08-pickup.png": "b0e1ef77a863c624a2ae7547ad1ac8e21e09b7bd49556ad6ca83739bd16a4e39",
     "05-consent.png": "25433d2813966e853c0f72bdce10c032e1ea66fb35f840570c9bc5f10a008c63",
     "mobile-consent.png": "732817d1f9965c40aadc70e3e38e4fff784a3c539bcb8f1839094de4ea5dfb70"
+  },
+  "caption_correction": {
+    "date": "2026-09-25",
+    "source_mp4_sha256": "06dab7cf7f29ef1ec8ec42c7f6ee1c365285defc0e7b8b9baaf41768ed935fd3",
+    "old_caption": "11분 빠른 도착 예상 / 쿠폰 상실로 1,400원 추가",
+    "new_caption": "매장 변경: 메뉴 차액 400원 + 전용 쿠폰 미적용 1,000원 = 1,400원 추가",
+    "first_frame": 426,
+    "last_frame_inclusive": 601,
+    "start_seconds": 17.04,
+    "end_seconds_exclusive": 24.08,
+    "changed_area": "caption band only: y=900..949; original footer retained",
+    "reencoded": true,
+    "new_browser_recording": false,
+    "reason": "400 KRW menu difference plus 1000 KRW store-specific coupon not applicable; not time-expiry surcharge"
   }
 }

@@ -10,7 +10,7 @@
 
 **[약 38초 데모 영상](https://github.com/sokldjs554/pickup-pact/raw/refs/heads/main/docs/media/pickup-pact-demo.mp4)** · [직접 체험하기](https://pickup-pact-demo.onrender.com) · [촬영 기록](docs/media/capture.json)
 
-쿠폰·1,000P 적용 → 매장 대기 추가 → 쿠폰 할인이 사라져 1,400원 추가되는지 확인 → 같은 주문으로 매장 변경 → 수령·영수증.
+쿠폰·1,000P 적용 → 매장 대기 추가 → 매장 변경 전 메뉴 차액 400원과 전용 쿠폰 미적용 1,000원을 확인 → 같은 주문으로 매장 변경 → 수령·영수증.
 
 문구를 바꾼 공개 사이트를 실제 Chromium으로 다시 녹화했습니다. 가상 시계를 사용하는 제조 조작과 장면 사이 대기는 일부 생략했으며, 각 장면은 정상 속도입니다. 실제 주문·결제는 하지 않습니다. 촬영한 앱 커밋은 `838222ef5f1512ce49a001c7423aed1f815eff17`이며, 녹화 전후 `/health`가 일치합니다.
 
