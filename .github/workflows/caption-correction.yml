@@ -33,9 +33,8 @@ jobs:
           p.write_text(text.replace(old,new))
           old='쿠폰 할인이 사라져 1,400원 추가되는지 확인'
           new='매장 변경 전 메뉴 차액 400원과 전용 쿠폰 미적용 1,000원을 확인'
-          for name in ('README.md','.github/workflows/demo-media.yml'):
-              p=Path(name); text=p.read_text(); assert text.count(old)==1, name
-              p.write_text(text.replace(old,new))
+          p=Path('README.md'); text=p.read_text(); assert text.count(old)==1
+          p.write_text(text.replace(old,new))
           source=Path('verification/corrected-caption'); target=Path('docs/media')
           report=json.loads((source/'capture.json').read_text())
           assert report['same_order'] and report['cash_due']==3700 and report['capture_count']==1
@@ -54,10 +53,10 @@ jobs:
         with:
           name: corrected-caption-evidence
           path: verification/corrected-caption
-      - name: Commit caption correction on the review branch only
+      - name: Commit content correction on the review branch only
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add README.md .github/workflows/demo-media.yml scripts/capture_readme_demo.py docs/media/pickup-pact-demo.mp4 docs/media/pickup-pact-preview.gif docs/media/capture.json docs/media/caption-verification.json
+          git add README.md scripts/capture_readme_demo.py docs/media/pickup-pact-demo.mp4 docs/media/pickup-pact-preview.gif docs/media/capture.json docs/media/caption-verification.json
           git commit -m 'docs: distinguish menu price difference from store-only coupon loss'
           git push origin HEAD:fix/demo-caption-price-reason
