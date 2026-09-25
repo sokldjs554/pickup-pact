@@ -1,0 +1,61 @@
+name: recovery-media-cut-review
+on:
+  push:
+    branches: [docs/recovery-release-media]
+    paths: ['scripts/edit_recovery_recording.py','.github/workflows/recovery-media-cut-review.yml']
+permissions:
+  contents: write
+  actions: read
+jobs:
+  reviewed-video-pts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: |
+          pip install playwright
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg fonts-noto-cjk
+      - uses: actions/download-artifact@v4
+        with:
+          name: public-recovery-recording
+          run-id: 36161012075
+          github-token: ${{ github.token }}
+          path: verification/recovery-media
+      - name: Render the reviewed real-video cuts without retiming
+        run: python scripts/edit_recovery_recording.py --output verification/recovery-media
+      - name: Decode complete video and GIF
+        run: |
+          ffmpeg -v error -xerror -i verification/recovery-media/pickup-pact-demo.mp4 -f null -
+          ffmpeg -v error -xerror -i verification/recovery-media/pickup-pact-preview.gif -f null -
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: reviewed-recovery-media
+          path: verification/recovery-media
+      - name: Replace only reviewed media and duration label
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json,hashlib,shutil,re
+          src=Path('verification/recovery-media'); report=json.loads((src/'capture.json').read_text())
+          assert report['timeline_review']['speed']==1.0
+          assert report['recorded_release_commit']=='000a106cc5fda6a3be595a83f938087096c3ad63'
+          for name in ('pickup-pact-demo.mp4','pickup-pact-preview.gif'):
+              assert hashlib.sha256((src/name).read_bytes()).hexdigest()==report['media_sha256'][name]
+              shutil.copy2(src/name,Path('docs/media')/name)
+          shutil.copy2(src/'capture.json',Path('docs/media/capture.json'))
+          p=Path('README.md');text=p.read_text()
+          text,count=re.subn(r'\[약 \d+초 데모 영상\]',f"[약 {round(report['edited_duration_seconds'])}초 데모 영상]",text)
+          assert count==1
+          p.write_text(text)
+          PY
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add README.md docs/media/pickup-pact-demo.mp4 docs/media/pickup-pact-preview.gif docs/media/capture.json
+          git commit -m 'docs: align recovery captions to reviewed source-video scene times'
+          git push origin HEAD:docs/recovery-release-media
