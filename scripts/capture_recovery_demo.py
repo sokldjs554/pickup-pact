@@ -105,8 +105,22 @@ def record(base: str, expected: str, output: Path) -> dict:
         assert final['order']['id']==oid and not recover_posts
         scene('07-receipt','수령까지 주문은 하나. 체험 결제 3,200원과 포인트 사용·적립도 한 번.','#receiptContent',5)
         page.locator('nav [data-view="customer"]').click()
-        page.locator('#compareHandoff').click()
-        expect(page.locator('#handoffComparisonResult tbody tr')).to_have_count(6)
+        compare_started=time.monotonic()
+        try:
+            with page.expect_response(lambda r: r.url.endswith('/api/route/transfer-comparison'), timeout=30000) as response_info:
+                page.locator('#compareHandoff').click()
+            response=response_info.value
+            payload=response.json()
+            (output/'comparison-response.json').write_text(json.dumps({
+                'status':response.status,'elapsed_seconds':time.monotonic()-compare_started,
+                'response':payload},ensure_ascii=False,indent=2)+'\n')
+            assert response.status==200, (response.status,payload)
+            expect(page.locator('#handoffComparisonResult tbody tr')).to_have_count(6)
+        except Exception:
+            page.screenshot(path=str(output/'comparison-failure.png'),full_page=True)
+            (output/'comparison-failure.html').write_text(page.content())
+            context.close();browser.close()
+            raise
         scene('08-comparison','취소 후 재주문과 같은 조건으로 비교해요. 같거나 실패한 결과도 남겼어요.','#handoffComparisonResult',5)
         assert errors==[]
         after=health()
