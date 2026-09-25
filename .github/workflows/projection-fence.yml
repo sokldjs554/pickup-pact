@@ -1,0 +1,53 @@
+name: projection-fence
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  real-postgres-fence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: pickuppact
+          POSTGRES_PASSWORD: test-only
+          POSTGRES_DB: pickuppact
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U pickuppact -d pickuppact"
+          --health-interval 2s --health-timeout 5s --health-retries 30
+    env:
+      PYTHONPATH: .:services/reconciler
+      PROJECTION_TEST_DSN: postgresql://pickuppact:test-only@localhost:5432/pickuppact
+      POSTGRES_DSN: postgresql://pickuppact:test-only@localhost:5432/pickuppact
+      PERSIST_RECONCILIATION: 'false'
+      AI_PROVIDER: offline
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install -r requirements-workbench.txt 'psycopg[binary]>=3.2,<4'
+      - name: Actual PostgreSQL and API regression, three independent passes
+        run: |
+          set -euo pipefail
+          mkdir -p verification/projection-fence
+          for pass in 1 2 3; do
+            python -m pytest -q services/reconciler/integration/test_projection_fence_postgres.py --junitxml=verification/projection-fence/postgres-$pass.xml | tee verification/projection-fence/postgres-$pass.log
+          done
+      - name: Preserve source identity and evidence even on failure
+        if: always()
+        run: |
+          mkdir -p verification/projection-fence
+          git rev-parse HEAD > verification/projection-fence/tested-commit.txt
+          git archive --format=zip --output=verification/projection-fence/tested-source.zip HEAD
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: projection-fence-evidence
+          path: verification/projection-fence/
