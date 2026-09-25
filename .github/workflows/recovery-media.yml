@@ -1,0 +1,114 @@
+name: recovery-media
+on:
+  push:
+    branches: [docs/recovery-release-media]
+    paths: ['scripts/capture_recovery_demo.py','.github/workflows/recovery-media.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+jobs:
+  record-reviewed-public-recovery:
+    if: github.ref == 'refs/heads/docs/recovery-release-media'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      EXPECTED_COMMIT: 000a106cc5fda6a3be595a83f938087096c3ad63
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install recording tools
+        run: |
+          pip install playwright
+          python -m playwright install --with-deps chromium
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg fonts-noto-cjk
+      - name: Require all nine checks and exact public app before recording
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY'
+          import json,os,time,urllib.request
+          expected=os.environ['EXPECTED_COMMIT']
+          needed={'ci','demo-ci','ui-e2e','repair-workbench','repair-evidence-audit','release-gate','route-product','live-demo-smoke','live-repair-review'}
+          for attempt in range(100):
+              req=urllib.request.Request(f'https://api.github.com/repos/sokldjs554/pickup-pact/actions/runs?head_sha={expected}&per_page=100',headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json'})
+              with urllib.request.urlopen(req,timeout=20) as response: payload=json.load(response)
+              latest={}
+              for run in payload['workflow_runs']:
+                  if run['head_sha']==expected and run['name'] not in latest: latest[run['name']]=run
+              failed={name:run['conclusion'] for name,run in latest.items() if name in needed and run['status']=='completed' and run['conclusion']!='success'}
+              if failed: raise SystemExit(f'Release failed; do not record: {failed}')
+              if needed <= {name for name,run in latest.items() if run['conclusion']=='success'}:
+                  with urllib.request.urlopen('https://pickup-pact-demo.onrender.com/health',timeout=40) as response: health=json.load(response)
+                  assert health['release_commit']==expected,health
+                  break
+              time.sleep(8)
+          else: raise SystemExit('Release gate not observed; no recording')
+          PY
+      - name: Record real automatic recovery and refusal without manual retry
+        run: python scripts/capture_recovery_demo.py --expected-commit "$EXPECTED_COMMIT"
+      - name: Decode every video and GIF frame
+        run: |
+          ffmpeg -v error -xerror -i verification/recovery-media/pickup-pact-demo.mp4 -f null -
+          ffmpeg -v error -xerror -i verification/recovery-media/pickup-pact-preview.gif -f null -
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: public-recovery-recording
+          path: verification/recovery-media
+          retention-days: 30
+      - name: Publish only verified media and matching README text on this branch
+        run: |
+          python - <<'PY'
+          import hashlib,json,os,shutil
+          from pathlib import Path
+          source=Path('verification/recovery-media'); target=Path('docs/media'); report=json.loads((source/'capture.json').read_text())
+          assert report['recorded_release_commit']==os.environ['EXPECTED_COMMIT']
+          assert report['same_order'] and report['refusal_preserved_order_and_benefits'] and report['recovery_without_manual_command']
+          assert report['cash_due']==3200 and report['capture_count']==1 and report['points_spent']==1000 and report['points_earned']==32
+          assert report['page_errors']==[]
+          names=['pickup-pact-demo.mp4','pickup-pact-preview.gif','01-home.png','03-refused.png','04-pending.png','05-recovered.png','06-merchant.png','08-receipt.png','09-comparison.png','mobile-home.png','mobile-pending.png','mobile-recovered.png']
+          for name in names:
+              data=(source/name).read_bytes();assert 0<len(data)<25000000,name
+              assert hashlib.sha256(data).hexdigest()==report['media_sha256'][name],name
+              shutil.copy2(source/name,target/name)
+          shutil.copy2(source/'capture.json',target/'capture.json')
+          p=Path('README.md'); text=p.read_text(); start=text.index('## 데모 영상과 실제 화면');end=text.index('## 쿠폰·포인트와 동일 조건 비교',start)
+          block=f'''## 데모 영상과 실제 화면
+
+          [![거절·응답 끊김에도 같은 주문을 이어가는 공개 데모](docs/media/pickup-pact-preview.gif)](https://github.com/sokldjs554/pickup-pact/raw/refs/heads/main/docs/media/pickup-pact-demo.mp4)
+
+          **[약 {round(report['edited_duration_seconds'])}초 데모 영상](https://github.com/sokldjs554/pickup-pact/raw/refs/heads/main/docs/media/pickup-pact-demo.mp4)** · [직접 체험하기](https://pickup-pact-demo.onrender.com) · [촬영·검증 기록](docs/media/capture.json)
+
+          쿠폰·1,000P 주문 → 새 매장 거절과 원래 주문 보존 → 수락 뒤 응답 끊김 → 다시 누르지 않아도 자동 복구 → 같은 주문의 수령·영수증 → 취소 후 재주문과 비교.
+
+          공개 앱 `{report['recorded_release_commit']}`를 실제 Chromium에서 녹화했습니다. 촬영 전후 health가 일치하고, 수동 recover 명령 없이 같은 주문이 복구됐습니다. 가상 매장·모의 결제이며 실제 가맹점 장애를 일으킨 영상은 아닙니다. 장면은 정상 속도이고, 장면 사이 대기와 가상 제조 시계 조작 일부만 생략했습니다. 매장 HTTP 프로세스와 자동 복구가 켜진 공개 버전입니다.
+
+          | 새 매장 거절 | 응답 확인 중 | 자동 복구 후 같은 주문 |
+          |---|---|---|
+          | ![원래 주문·혜택 보존](docs/media/03-refused.png) | ![서버가 자동 재확인](docs/media/04-pending.png) | ![같은 주문으로 변경 완료](docs/media/05-recovered.png) |
+
+          <details>
+          <summary>주문·영수증·비교와 모바일 화면</summary>
+
+          ![주문 화면](docs/media/01-home.png)
+          ![수령 영수증](docs/media/08-receipt.png)
+          ![세 가지 방식 비교](docs/media/09-comparison.png)
+
+          <img src="docs/media/mobile-pending.png" alt="모바일 자동 확인 중" width="280"> <img src="docs/media/mobile-recovered.png" alt="모바일 복구 후 주문" width="280">
+
+          </details>
+
+          '''
+          block='\n'.join(line[10:] if line.startswith('          ') else line for line in block.splitlines())+'\n'
+          p.write_text(text[:start]+block+text[end:])
+          PY
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add README.md docs/media
+          git commit -m 'docs: publish same-release refusal and automatic recovery recording'
+          git push origin HEAD:docs/recovery-release-media
