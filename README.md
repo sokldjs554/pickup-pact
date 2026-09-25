@@ -16,7 +16,7 @@
 
 [![거절·응답 끊김에도 같은 주문을 이어가는 공개 데모](docs/media/pickup-pact-preview.gif)](https://github.com/sokldjs554/pickup-pact/raw/refs/heads/main/docs/media/pickup-pact-demo.mp4)
 
-**[약 42초 데모 영상](https://github.com/sokldjs554/pickup-pact/raw/refs/heads/main/docs/media/pickup-pact-demo.mp4)** · [직접 체험하기](https://pickup-pact-demo.onrender.com) · [촬영·검증 기록](docs/media/capture.json)
+**[약 40초 데모 영상](https://github.com/sokldjs554/pickup-pact/raw/refs/heads/main/docs/media/pickup-pact-demo.mp4)** · [직접 체험하기](https://pickup-pact-demo.onrender.com) · [촬영·검증 기록](docs/media/capture.json)
 
 쿠폰·1,000P 주문 → 새 매장 거절과 원래 주문 보존 → 수락 뒤 응답 끊김 → 다시 누르지 않아도 자동 복구 → 같은 주문의 수령·영수증 → 취소 후 재주문과 비교.
 
