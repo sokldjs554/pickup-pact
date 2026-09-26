@@ -61,7 +61,7 @@ class JourneyStore:
 
     def create(self,intent,world_id=None):
         s=dict(id=uuid4().hex,version=1,clock=0,arrival_delay=0,intent=intent,
-               stores=deepcopy(STORES),order=None,events=[],mode='synthetic',wallet=benefits.initial_wallet())
+               stores=deepcopy(STORES),order=None,events=[],mode='synthetic',wallet=benefits.initial_wallet(),transfer_agreement_version=1)
         s['world_id'] = world_id or s['id']
         self.event(s,'INTENT_CREATED','일정과 커피 조건을 저장했어요',intent=intent)
         with self.connection() as db: self._save(db,s)
@@ -100,6 +100,8 @@ class JourneyStore:
                      payable=order['price'] if active else 0,
                      authorization_count=sum(e['type']=='PAYMENT_AUTHORIZED' for e in s['events']),
                      transfers=[e for e in s['events'] if e['type']=='ORDER_TRANSFERRED'])
+        settlement=[e['data'] for e in s['events'] if e['type']=='MERCHANT_SETTLEMENT_SIMULATED' and (not order or e['data'].get('order_id')==order['id'])]
+        receipt['settlement']=deepcopy(settlement[-1]) if settlement else None
         pricing=order.get('pricing', benefits.legacy_pricing(order)) if order else None
         receipt.update(pricing=pricing, coupon_discount=pricing['coupon_discount'] if pricing else 0,
                        points_spent=benefits.wallet_for(s)['spent'], points_earned=benefits.wallet_for(s)['earned'])
@@ -157,6 +159,23 @@ class JourneyStore:
 
     def _apply(self,s,c):
         action=c['action']; order=s['order']
+        if action=='reserve_first_reorder':
+            # Strong comparison policy, not exposed as a customer API action.
+            # The same persisted handoff protocol protects both orders. Only
+            # after acceptance does the candidate cancel/requalify/re-authorize.
+            require(order is not None and order['state']=='RESERVED','ALREADY_PREPARING','제조 전 주문만 새 자리를 확보해 다시 주문해요.')
+            chosen=self._quote(s,c.get('quote_id'))
+            require(chosen['store_id']!=order['store_id'],'SAME_STORE','다른 매장을 선택해 주세요.')
+            target=chosen['store_id']
+            self._apply(s,{'action':'cancel'})
+            s.setdefault('previous_orders',[]).append(deepcopy(s['order']))
+            s['order']=None
+            fresh=next(p for p in plans(s) if p['store_id']==target)
+            require(fresh['feasible'],'REORDER_PREFLIGHT_REJECTED','새 주문에 적용할 조건을 만족하지 않아요.')
+            require(type(c.get('accepted_cash_due')) is int and fresh['price']==c['accepted_cash_due'],
+                    'REORDER_PRICE_CHANGED','새 주문의 결제 금액을 먼저 확인해야 해요.')
+            self._apply(s,{'action':'reserve','quote_id':fresh['quote_id']})
+            return
         if action=='reorder':
             require(order is not None and order['state']=='CANCELLED','INVALID_STATE','먼저 기존 주문을 취소해야 다시 주문할 수 있어요.')
             s.setdefault('previous_orders',[]).append(deepcopy(order))
@@ -168,6 +187,8 @@ class JourneyStore:
             s['order']=dict(id='PCT-'+uuid4().hex[:10].upper(),store_id=p['store_id'],
                 store_name=p['name'],state='RESERVED',price=p['price'],pricing=deepcopy(p['pricing']),plan=p,ready_at=p['ready_at'],departure_at=s['clock'],
                 pickup_code=f'{secrets.randbelow(1_000_000):06d}',original_store=p['name'])
+            if p.get('transfer_terms'):
+                s['order']['commercial_terms']=deepcopy(p['transfer_terms'])
             benefits.hold(s,p['pricing'])
             self.event(s,'BENEFITS_HELD','쿠폰·포인트 사용을 보류했어요',pricing=p['pricing'])
             self.event(s,'PAYMENT_AUTHORIZED','모의 결제 승인 1건',amount=p['price'])
@@ -206,7 +227,10 @@ class JourneyStore:
             old_arrival=current_plan(s)['arrival_at']
             benefits.hold(s,p['pricing'])
             order.update(store_id=p['store_id'],store_name=p['name'],price=p['price'],pricing=deepcopy(p['pricing']),plan=p,ready_at=p['ready_at'],departure_at=s['clock'])
+            if p.get('transfer_terms'):
+                order['commercial_terms']=deepcopy(p['transfer_terms'])
             self.event(s,'ORDER_TRANSFERRED',old_name+' → '+p['name'],
+                       accepted_terms=deepcopy(p.get('transfer_terms')),
                        from_store=old_store,to_store=p['store_id'],from_name=old_name,to_name=p['name'],
                        old_price=old_price,new_price=p['price'],difference=p['price']-old_price,order_id=order['id'],
                        old_pricing=old_pricing,new_pricing=p['pricing'],
@@ -236,6 +260,10 @@ class JourneyStore:
             order['picked_up_at']=s['clock']
             self.event(s,'PICKUP_COMPLETED','같은 주문으로 커피를 받았어요')
             self.event(s,'PAYMENT_CAPTURED','모의 결제를 한 번 확정했어요',amount=order['price'])
+            if order.get('commercial_terms'):
+                from .agreement import funding
+                self.event(s,'MERCHANT_SETTLEMENT_SIMULATED','수령 매장의 모의 수취액을 기록했어요',
+                           order_id=order['id'],**funding(order['store_id'],pricing))
         elif action=='cancel':
             if order['state']=='CANCELLED': return
             require(order['state']=='RESERVED','ALREADY_PREPARING','제조 시작 후에는 자동 취소하지 않아요.')

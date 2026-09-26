@@ -20,10 +20,11 @@ function setup(){
   AbortController:class{constructor(){this.signal={aborted:false};}abort(){this.signal.aborted=true;}},
   URL:{createObjectURL:()=>'',revokeObjectURL:()=>{}},Blob:class{},
  });
+ vm.runInContext(fs.readFileSync('demo/route/selection-state.js','utf8'),ctx);
  vm.runInContext(fs.readFileSync('demo/route/handoff-ui.js','utf8'),ctx);
  return {ctx,nodes,timers,calls,notices,resolve,reject,runCount:()=>runs,click:()=>element('compareHandoff').handlers.click()};
 }
-function response(){const row={has_order:true,original_preserved:true,same_order:true,cash_due:3200,customer_commands:2,same_request_retries:0,predicted_arrival:9};return {intent:{drink:'latte'},disclosure:'실제 이용 통계가 아닌 비교',cases:Array.from({length:6},(_,i)=>({label:'상황'+i,cancel_reorder:row,guarded_transfer:row,stay:row}))};}
+function response(){const row={has_order:true,original_preserved:true,same_order:true,cash_due:3200,customer_commands:2,same_request_retries:0,predicted_arrival:9};return {intent:{drink:'latte'},disclosure:'실제 이용 통계가 아닌 비교',cases:Array.from({length:6},(_,i)=>({label:'상황'+i,cancel_reorder:row,reserve_first_reorder:row,guarded_transfer:row,stay:row}))};}
 const tests=[
  ['pending feedback and independent order controls',async()=>{const t=setup();const done=t.click();assert.equal(t.calls.length,1);assert.equal(t.nodes.compareHandoff.disabled,true);assert.equal(t.nodes.handoffComparisonResult.attrs['aria-busy'],'true');assert.match(t.nodes.handoffComparisonResult.innerHTML,/비교하고/);assert.equal(t.runCount(),0,'a read-only comparison must not acquire the global order command lock');t.resolve(response());await done;assert.equal(t.nodes.compareHandoff.disabled,false);assert.equal(t.nodes.handoffComparisonResult.attrs['aria-busy'],'false');assert.equal((t.nodes.handoffComparisonResult.innerHTML.match(/<tr>/g)||[]).length,7);} ],
  ['duplicate click sends only one request',async()=>{const t=setup();const a=t.click(),b=t.click();assert.equal(t.calls.length,1);t.resolve(response());await Promise.all([a,b]);}],

@@ -49,7 +49,7 @@ def capture(base,expected,output):
             r=page.request.get(base+'/api/route/journeys/'+sid);assert r.ok
             return r.json()
         with scene('01-home','일정에 맞춘 커피 주문 · 실제 공개 데모',3):
-            expect(page.locator('h1').first).to_contain_text('커피 한 잔')
+            expect(page.locator('h1').first).to_contain_text('매장 변경이 막혀도')
         with scene('02-benefits','매장 전용 쿠폰과 1,000P를 골라요',5):
             page.locator('#coupon').scroll_into_view_if_needed()
             page.locator('#coupon').select_option('wave1000');page.locator('#points').fill('1000')

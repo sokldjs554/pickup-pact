@@ -9,14 +9,14 @@
   const steps=['FREEZE','HOLD','DECIDE','RELEASE_SOURCE','ACTIVATE','FINALIZE'];
   const labels=['원래 매장 대기','새 자리 확보','변경 내용 저장','기존 자리 반환','새 매장 연결','주문·혜택 확인'];
   let comparison=null, comparisonPending=false;
+  const controlDrafts=new PickupSelectionState();
   const main=document.querySelector('.main-column');
   const assurance=document.createElement('section');assurance.id='handoffPanel';assurance.hidden=true;
   $('orderArea').insertAdjacentElement('afterend',assurance);
   const evidence=document.createElement('section');evidence.id='handoffComparison';evidence.className='handoff-comparison panel';
-  evidence.innerHTML='<div class="eyebrow">취소하고 다시 주문하는 것과 무엇이 다를까요?</div><h2>안 되면, 원래 주문은 남을까요?</h2><p>정상 처리부터 거절·응답 끊김까지 같은 조건으로 실행해 보세요. 기존 매장 유지도 함께 비교해요.</p><button type="button" id="compareHandoff" class="primary">세 가지 방식 직접 비교</button><div id="handoffComparisonResult" aria-live="polite"></div>';
+  evidence.innerHTML='<div class="eyebrow">취소하고 다시 주문하는 것과 무엇이 다를까요?</div><h2>안 되면, 원래 주문은 남을까요?</h2><p>정상 처리부터 거절·응답 끊김까지 같은 조건으로 실행해 보세요. 기존 매장 유지도 함께 비교해요.</p><button type="button" id="compareHandoff" class="primary">네 가지 방식 직접 비교</button><div id="handoffComparisonResult" aria-live="polite"></div>';
   main.append(evidence);
-  const hero=document.querySelector('.hero-copy');
-  if(hero)hero.insertAdjacentHTML('beforeend','<p class="handoff-lead">다른 매장이 받아줄 때만 주문을 바꿔요.<br><b>새 매장이 거절하면, 원래 주문과 혜택은 그대로.</b></p>');
+
 
   function lockPending(s){
     if(!s?.handoff_pending)return;
@@ -36,6 +36,7 @@
   document.addEventListener('route:aux-render',e=>lockPending(e.detail));
   document.addEventListener('route:render',e=>{
     const s=e.detail,order=s.order,op=s.handoff;
+    controlDrafts.begin(s.id);
     assurance.hidden=!order&&!s.handoff_pending;
     if(s.handoff_pending||op?.status==='REJECTED')$('orderArea').insertAdjacentElement('beforebegin',assurance);
     else $('orderArea').insertAdjacentElement('afterend',assurance);
@@ -59,10 +60,12 @@
     }else if(order?.state==='RESERVED'){
       const others=s.stores.filter(p=>p.id!==order.store_id);
       const target=s.recommendations[0]?.store_id||others[0]?.id;
-      html+=`<details class="handoff-controls" open><summary>거절·응답 끊김·마지막 자리 경쟁을 체험해 보세요</summary><div class="handoff-field"><label for="handoffFault">다음 매장 변경에서 생길 상황</label><select id="handoffFault">${Object.entries(faultNames).map(([v,label])=>`<option value="${v}" ${s.next_transfer_fault===v?'selected':''}>${label}</option>`).join('')}</select><button type="button" class="secondary" id="setHandoffFault">이 상황 적용</button></div><div class="handoff-field"><label for="handoffTarget">다른 손님이 먼저 주문한다면?</label><select id="handoffTarget">${others.map(v=>`<option value="${v.id}" ${v.id===target?'selected':''}>${esc(v.name)} · 남은 자리 ${s.merchant_capacity[v.id]?.available??'확인 중'}/${s.merchant_capacity[v.id]?.capacity??'?'}</option>`).join('')}</select><div class="handoff-control-buttons"><button type="button" class="secondary" id="occupyHandoff">다른 손님 주문 추가</button><button type="button" class="secondary" id="clearHandoff">다른 손님 주문 취소</button></div></div><p class="handoff-note">이 체험 회차 안에서만 제조 자리를 공유해요. 실제 가맹점이나 다른 방문자의 주문은 바뀌지 않아요.</p></details>`;
+      html+=`<details class="handoff-controls" open><summary>거절·응답 끊김·마지막 자리 경쟁을 체험해 보세요</summary><div class="handoff-field"><label for="handoffFault">다음 매장 변경에서 생길 상황</label><select id="handoffFault">${Object.entries(faultNames).map(([v,label])=>`<option value="${v}" ${controlDrafts.value('fault',s.next_transfer_fault||'none')===v?'selected':''}>${label}</option>`).join('')}</select><button type="button" class="secondary" id="setHandoffFault">이 상황 적용</button></div><div class="handoff-field"><label for="handoffTarget">다른 손님이 먼저 주문한다면?</label><select id="handoffTarget">${others.map(v=>`<option value="${v.id}" ${v.id===controlDrafts.value('target',target)?'selected':''}>${esc(v.name)} · 남은 자리 ${s.merchant_capacity[v.id]?.available??'확인 중'}/${s.merchant_capacity[v.id]?.capacity??'?'}</option>`).join('')}</select><div class="handoff-control-buttons"><button type="button" class="secondary" id="occupyHandoff">다른 손님 주문 추가</button><button type="button" class="secondary" id="clearHandoff">다른 손님 주문 취소</button></div></div><p class="handoff-note">이 체험 회차 안에서만 제조 자리를 공유해요. 실제 가맹점이나 다른 방문자의 주문은 바뀌지 않아요.</p></details>`;
     }
     assurance.innerHTML=html+'</article>';
     lockPending(s);
+    $('handoffFault')?.addEventListener('change',e=>controlDrafts.choose('fault',e.target.value));
+    $('handoffTarget')?.addEventListener('change',e=>controlDrafts.choose('target',e.target.value));
     $('recoverHandoff')?.addEventListener('click',()=>run(async()=>{await cmd('recover');notify('저장된 작업을 이어서 확인했어요. 주문 결과를 확인하세요.');}));
     async function control(body){
       state=await api(`/api/route/journeys/${state.id}/transfer-controls`,{expected_version:state.version,request_id:requestId(),...body});render();
@@ -71,7 +74,7 @@
       return true;
     }
     $('setHandoffFault')?.addEventListener('click',()=>run(async()=>{
-      const fault=$('handoffFault').value;if(!await control({action:'fault',fault}))return;
+      const fault=$('handoffFault').value;if(!await control({action:'fault',fault}))return;controlDrafts.applied('fault',fault);
       notify(fault==='none'?'문제 없는 상황으로 바꿨어요.':'다음 매장 변경에서 '+faultNames[fault]+' 상황을 확인해 보세요.');
     }));
     $('occupyHandoff')?.addEventListener('click',()=>run(async()=>{if(!await control({action:'occupy',store_id:$('handoffTarget').value}))return;notify('같은 제조 자리에 다른 손님의 주문을 추가했어요.');}));
@@ -114,12 +117,12 @@
     const timeout=setTimeout(()=>controller.abort(),35000);
     try{
     comparison=await fetchComparison(intent,controller.signal);
-    $('handoffComparisonResult').innerHTML=`<p class="handoff-note">비교를 시작할 때의 조건: ${esc(labelIntent(intent))} · ${time(intent.deadline_minutes)}까지 · 할인 후 결제 한도 ${won(intent.budget)}</p><p class="handoff-note">${esc(comparison.disclosure)}</p><div class="handoff-table-wrap"><table><thead><tr><th>같은 상황</th><th>취소 후 다시 주문</th><th>확인 후 주문 이어가기</th></tr></thead><tbody>${comparison.cases.map(r=>`<tr><th scope="row">${esc(r.label)}</th><td>${outcome(r.cancel_reorder)}</td><td>${outcome(r.guarded_transfer)}</td></tr>`).join('')}</tbody></table></div><p class="handoff-note">실행 요청 수는 서버 명령 횟수이며 사용자의 클릭이나 소요 시간을 측정한 값은 아니에요. 정상 처리에서는 예상 도착 시간과 금액이 같을 수 있어요. 차이는 새 매장이 받지 못했을 때 원래 주문이 남는지예요. 쿠폰 기간 사례만 비교를 위해 전 매장 정률 쿠폰과 90분 마감을 사용해요.</p><details><summary>기존 매장 유지 결과도 보기</summary><div class="handoff-stay">${comparison.cases.map(r=>`<p><b>${esc(r.label)}</b><span>${r.stay.has_order?time(r.stay.predicted_arrival)+' 도착 예상 / '+won(r.stay.cash_due):'처음부터 주문 불가'}</span></p>`).join('')}</div></details><button type="button" class="secondary" id="downloadHandoffComparison">조건·전체 실행 기록 받기</button>`;
+    $('handoffComparisonResult').innerHTML=`<p class="handoff-note">비교를 시작할 때의 조건: ${esc(labelIntent(intent))} · ${time(intent.deadline_minutes)}까지 · 할인 후 결제 한도 ${won(intent.budget)}</p><p class="handoff-note">${esc(comparison.disclosure)}</p><p class="handoff-note">${esc(comparison.baseline_design||'')}</p><div class="handoff-table-wrap"><table><thead><tr><th>같은 상황</th><th>취소 후 다시 주문</th><th>새 자리 확보 후 재주문</th><th>같은 주문 이어가기</th></tr></thead><tbody>${comparison.cases.map(r=>`<tr><th scope="row">${esc(r.label)}</th><td>${outcome(r.cancel_reorder)}</td><td>${outcome(r.reserve_first_reorder)}</td><td>${outcome(r.guarded_transfer)}</td></tr>`).join('')}</tbody></table></div><p class="handoff-note">실행 요청 수는 서버 명령 횟수이며 사용자의 클릭이나 소요 시간을 측정한 값은 아니에요. 정상 처리에서는 예상 도착 시간과 금액이 같을 수 있어요. 같은 안전 절차로 새 자리를 먼저 확보하는 재주문도 원래 주문을 지킬 수 있어요. 정상적인 성공에서는 금액·도착 예상이 같고, 주문 번호 유지와 재승인 기록이 달라져요. 쿠폰 기간 사례만 비교를 위해 전 매장 정률 쿠폰과 90분 마감을 사용해요.</p><details><summary>기존 매장 유지 결과도 보기</summary><div class="handoff-stay">${comparison.cases.map(r=>`<p><b>${esc(r.label)}</b><span>${r.stay.has_order?time(r.stay.predicted_arrival)+' 도착 예상 / '+won(r.stay.cash_due):'처음부터 주문 불가'}</span></p>`).join('')}</div></details><button type="button" class="secondary" id="downloadHandoffComparison">조건·전체 실행 기록 받기</button>`;
     $('downloadHandoffComparison').addEventListener('click',()=>{
       const url=URL.createObjectURL(new Blob([JSON.stringify(comparison,null,2)],{type:'application/json'}));
       const a=document.createElement('a');a.href=url;a.download='pickup-pact-transfer-comparison.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
     });
-    notify('세 가지 방식을 같은 상황에서 실행했어요. 같았던 결과와 실패한 결과도 함께 확인하세요.');
+    notify('네 가지 방식을 같은 상황에서 실행했어요. 같았던 결과와 실패한 결과도 함께 확인하세요.');
     }catch(error){
       const message=error.name==='AbortError'
         ? '비교 결과를 아직 받지 못했어요. 주문은 바뀌지 않았어요. 잠시 후 다시 비교해 주세요.'
@@ -128,7 +131,7 @@
       notify(message,true);
     }finally{
       clearTimeout(timeout);comparisonPending=false;button.disabled=false;
-      button.textContent='세 가지 방식 직접 비교';result.setAttribute('aria-busy','false');
+      button.textContent='네 가지 방식 직접 비교';result.setAttribute('aria-busy','false');
     }
   });
 })();

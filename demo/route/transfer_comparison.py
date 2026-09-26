@@ -9,11 +9,12 @@ from copy import deepcopy
 import json
 from pathlib import Path
 import tempfile
+from time import perf_counter
 from uuid import uuid4
 from .planner import digest, plans
 from . import benefits
 
-POLICIES = ['stay', 'cancel_reorder', 'guarded_transfer']
+POLICIES = ['stay', 'cancel_reorder', 'reserve_first_reorder', 'guarded_transfer']
 SCENARIOS = {
     'normal': '새 매장이 정상적으로 받을 때',
     'reject_after_quote': '견적 확인 뒤 새 매장이 주문을 거절할 때',
@@ -24,9 +25,10 @@ SCENARIOS = {
 }
 
 
-def _one(directory: Path, intent: dict, scenario: str, policy: str) -> tuple[dict, dict]:
+def _one(directory: Path, intent: dict, scenario: str, policy: str, shared_store=None) -> tuple[dict, dict]:
     from .store import JourneyStore, Conflict
-    st = JourneyStore(directory / 'orders.sqlite')
+    st = shared_store or JourneyStore(directory / 'orders.sqlite')
+    st.fleet.after_commit = None  # A failure hook never crosses isolated worlds.
     effective = deepcopy(intent)
     if scenario == 'coupon_expired':
         effective.update(coupon_id='morning10', deadline_minutes=90)
@@ -78,7 +80,7 @@ def _one(directory: Path, intent: dict, scenario: str, policy: str) -> tuple[dic
         reason = 'NO_ELIGIBLE_ALTERNATIVE'
     elif policy != 'stay':
         target = candidate['store_id']
-        if policy == 'cancel_reorder':
+        if policy in {'cancel_reorder','reserve_first_reorder'}:
             # A competent baseline checks expected post-cancellation benefits
             # before cancelling; it does not knowingly violate a cash limit.
             with st.connection() as db:
@@ -112,6 +114,8 @@ def _one(directory: Path, intent: dict, scenario: str, policy: str) -> tuple[dic
             try:
                 if policy == 'guarded_transfer':
                     act('transfer', quote_id=q(target)['quote_id'])
+                elif policy == 'reserve_first_reorder':
+                    act('reserve_first_reorder', quote_id=q(target)['quote_id'], accepted_cash_due=estimated['price'])
                 else:
                     act('cancel')
                     act('reorder', quote_id=q(target)['quote_id'])
@@ -130,7 +134,7 @@ def _one(directory: Path, intent: dict, scenario: str, policy: str) -> tuple[dic
         customer_commands=requests, same_request_retries=recoveries,
         authorization_count=s['receipt']['authorization_count'], capture_count=s['receipt']['capture_count'],
         held_points=s['wallet']['held_points'], points_spent=s['wallet']['spent'], reason=reason)
-    raw = dict(intent=effective, observations=observed, commands=trace,
+    raw = dict(world_id=s['world_id'],intent=effective, observations=observed, commands=trace,
                original_order_id=original['id'], final_order_id=(order or {}).get('id'),
                final_merchant_capacity=s['merchant_capacity'], final_wallet=s['wallet'],
                operation=s.get('handoff'))
@@ -138,17 +142,23 @@ def _one(directory: Path, intent: dict, scenario: str, policy: str) -> tuple[dic
 
 
 def run_transfer_comparison(intent: dict) -> dict:
+    from .store import JourneyStore
     cases, executions = [], []
+    began=perf_counter()
     with tempfile.TemporaryDirectory(prefix='pickup-pact-comparison-') as tmp:
         root = Path(tmp)
+        shared_store=JourneyStore(root/'orders.sqlite')
+        initialized=perf_counter()
         for scenario, label in SCENARIOS.items():
             row = dict(scenario=scenario, label=label)
             for policy in POLICIES:
-                metrics, raw = _one(root / scenario / policy, intent, scenario, policy)
+                metrics, raw = _one(root / scenario / policy, intent, scenario, policy, shared_store=shared_store)
                 row[policy] = metrics
                 executions.append(dict(scenario=scenario, policy=policy, **raw))
             cases.append(row)
     semantic = dict(intent=intent, policies=POLICIES, cases=cases)
     return dict(**semantic, semantic_sha256=digest(semantic), executions=executions,
         mode='controlled_command_execution',
+        timing=dict(setup_seconds=round(initialized-began,6),total_seconds=round(perf_counter()-began,6),isolated_worlds=len(executions),storage_durability='SQLite WAL, synchronous FULL (merchant)'),
+        baseline_design='새 자리 확보 후 재주문도 같은 저장된 이관 엔진을 사용해요. 독립적인 경쟁 서비스 구현이 아니며, 안전 절차가 같으면 주문 보존 결과도 같을 수 있어요.',
         disclosure='동일한 가상 조건에서 실제 주문 코드를 실행했어요. 취소·재주문도 조건 확인과 중복 방지 재시도를 사용해요. 시간 차이와 수수료를 임의로 더하지 않았어요. 6가지 상황의 결과이며 실제 이용 빈도나 다른 서비스의 성능을 뜻하지 않아요.')

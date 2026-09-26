@@ -87,7 +87,7 @@ def verify(base:str, output:Path, repeat:int=3, expected_commit:str|None=None)->
         runs.append(dict(repetition=repetition,result='passed',base_url=base,release_commit=health.get('release_commit'),
             order_id=oid,checks=['actual_http','target_rejection_retains_order_wallet','uncertain_reply_not_success',
              'read_reload_retains_pending','competing_action_rejected','recover_same_id','merchant_prepare',
-             '24_concurrent_pickup_retries','one_capture','points_spent_earned_once','three_policy_comparison'],
+             '24_concurrent_pickup_retries','one_capture','points_spent_earned_once','four_policy_comparison'],
              comparison_semantic_sha256=comparison['semantic_sha256']))
     report=dict(mode='actual_http_not_browser',runs=runs,all_passed=True)
     (output/'http-results.json').write_text(json.dumps(report,ensure_ascii=False,indent=2))

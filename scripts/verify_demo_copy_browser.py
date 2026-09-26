@@ -31,7 +31,7 @@ def verify(base, output, repeat=3, expected_commit=None, ops_url=None):
                         page.screenshot(path=str(output / f'{mode}-{name}.png'), full_page=True)
 
                 page.goto(base + '/', wait_until='networkidle')
-                expect(page.locator('h1').first).to_contain_text('커피 한 잔')
+                expect(page.locator('h1').first).to_contain_text('매장 변경이 막혀도')
                 expect(page.locator('.demo-strip')).to_contain_text('실제 주문이나 결제는 되지 않아요.')
                 expect(page.locator('nav [data-view=customer]')).to_have_text('내 주문')
                 expect(page.locator('#map circle')).not_to_have_count(0)

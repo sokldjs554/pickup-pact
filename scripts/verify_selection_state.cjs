@@ -1,0 +1,12 @@
+'use strict';
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
+const ctx=vm.createContext({});
+vm.runInContext(fs.readFileSync('demo/route/selection-state.js','utf8'),ctx);
+const d=new ctx.PickupSelectionState();
+d.begin('a');d.choose('fault','after_target_hold');
+assert.equal(d.value('fault','none'),'after_target_hold','late GET must not reset unsent selection');
+d.begin('a');assert.equal(d.value('fault','none'),'after_target_hold');
+d.applied('fault','target_reject');assert.equal(d.value('fault','none'),'after_target_hold','older reply must not clear a newer edit');
+d.applied('fault','after_target_hold');assert.equal(d.value('fault','none'),'none');
+d.choose('target','oat');d.begin('b');assert.equal(d.value('target','wave'),'wave');
+console.log('5 draft-selection checks passed; no browser simulation claimed');

@@ -43,7 +43,7 @@ def test_three_policy_comparison_exposes_equal_and_failed_cases():
     r=c.post('/api/route/transfer-comparison',json={})
     assert r.status_code==200,r.text
     result=r.json()
-    assert result['policies']==['stay','cancel_reorder','guarded_transfer']
+    assert result['policies']==['stay','cancel_reorder','reserve_first_reorder','guarded_transfer']
     assert len(result['cases'])==6
     same=next(r for r in result['cases'] if r['scenario']=='normal')
     assert same['cancel_reorder']['cash_due']==same['guarded_transfer']['cash_due']

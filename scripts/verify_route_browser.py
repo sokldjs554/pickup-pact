@@ -32,7 +32,7 @@ def verify(base,output,repeat,expected_commit=None):
                 page.on('pageerror',lambda e:errors.append(str(e)))
                 page.on('request',lambda req:requests.append(req.url))
                 page.goto(base+'/',wait_until='networkidle')
-                expect(page.locator('h1').first).to_contain_text('커피 한 잔')
+                expect(page.locator('h1').first).to_contain_text('매장 변경이 막혀도')
                 expect(page.locator('#map circle')).not_to_have_count(0)
                 if run==1: page.screenshot(path=str(output/f'{mode}-01-home.png'),full_page=True)
                 page.locator('#findRoutes').click()

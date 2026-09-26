@@ -42,7 +42,7 @@ def after_step(op: dict, now: float, paused: bool) -> None:
 
 def expire_undecided(op: dict, now: float) -> None:
     recovery = op.setdefault('recovery', initial_schedule(now))
-    if (op['action'] != 'transfer' or op['decision'] != 'UNDECIDED'
+    if (op['action'] not in {'transfer','reserve_first_reorder'} or op['decision'] != 'UNDECIDED'
             or now < recovery['deadline_at']):
         return
     op['decision'] = 'ABORT'
