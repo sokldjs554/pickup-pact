@@ -166,4 +166,14 @@ document.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)r
  if(b.dataset.action){run(async()=>{switch(b.dataset.action){case 'busy':await cmd('disrupt',{store_id:state.order.store_id,minutes:12});notify('매장에 대기 시간이 생겼어요. 도착 예상과 다른 카페를 확인해 보세요.');break;case 'delay':await cmd('delay',{minutes:3});notify('출발 시간을 늦췄어요. 도착 예상도 확인해 주세요.');break;case 'advance':await cmd('advance',{minutes:Number(b.dataset.minutes)});break;case 'start':await cmd('start');notify('커피를 만들기 시작했어요.');break;case 'ready':await cmd('ready');notify('커피가 준비됐어요. 내 주문에서 수령 번호를 확인하세요.');break;case 'cancel':await cmd('cancel');notify('만들기 전에 취소했어요. 사용하려던 혜택도 돌려드렸어요.');break;case 'refresh':state=await api('/api/route/journeys/'+state.id);render();notify('최신 주문 상태를 확인했어요.');break;}});}
 });
 document.addEventListener('mouseover',e=>{const card=e.target.closest('[data-hover]');if(card&&!state?.order){const p=state.all_plans.find(p=>p.store_id===card.dataset.hover);if(p)drawMap(p);}});
-(async()=>{try{catalog=await api('/api/route/catalog');drawMap();const saved=localStorage.getItem('pickup-pact.route-journey');if(saved){try{state=await api('/api/route/journeys/'+saved);fillIntent(state.intent);render();}catch(e){localStorage.removeItem('pickup-pact.route-journey');notify('이전 주문을 찾지 못했어요. 처음부터 다시 시작해 주세요.');}}renderAux();}catch(e){notify('화면을 불러오지 못했어요. 잠시 후 새로고침해 주세요.',true);}})();
+// Route boot: this file is a parser-inserted deferred script. "interactive"
+// does not mean the following deferred benefit/recovery listeners are ready.
+// Restore saved state only after all of those scripts have registered.
+let routeBootStarted=false;
+async function initializeRoute(){
+ if(routeBootStarted)return;
+ routeBootStarted=true;
+ try{catalog=await api('/api/route/catalog');drawMap();const saved=localStorage.getItem('pickup-pact.route-journey');if(saved){try{state=await api('/api/route/journeys/'+saved);fillIntent(state.intent);render();}catch(e){localStorage.removeItem('pickup-pact.route-journey');notify('이전 주문을 찾지 못했어요. 처음부터 다시 시작해 주세요.');}}renderAux();}catch(e){notify('화면을 불러오지 못했어요. 잠시 후 새로고침해 주세요.',true);}
+}
+if(document.readyState==='complete')initializeRoute();
+else document.addEventListener('DOMContentLoaded',initializeRoute,{once:true});
