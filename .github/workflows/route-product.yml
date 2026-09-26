@@ -30,7 +30,11 @@ jobs:
         run: node scripts/verify_comparison_ui.cjs
       - name: Verify fault selection occurs after the prior response
         run: python -m pytest -q tests/route/test_browser_fault_configuration.py
-      - name: Reproduce three policies through real command handlers
+      - name: Preserve unsent user selections
+        run: node scripts/verify_selection_state.cjs
+      - name: Paired comparison setup benchmark
+        run: python scripts/benchmark_comparison_setup.py --output verification/route-product/setup-benchmark.json
+      - name: Reproduce four policies through real command handlers
         run: python scripts/run_transfer_comparison.py --repeat 3 --output verification/route-product/transfer-comparison
       - name: Repeat all Python boundaries
         run: |
@@ -69,6 +73,8 @@ jobs:
         run: python scripts/verify_route_browser.py --repeat 3 --output verification/route-product/browser
       - name: Coupon loss, restoration and one-time point settlement in real browsers
         run: python scripts/verify_benefits_browser.py --repeat 3 --output verification/route-product/benefits-browser
+      - name: Decision terms funding and stronger baseline in real browsers
+        run: python scripts/verify_decision_browser.py --repeat 3 --output verification/route-product/decision-browser
       - name: Start separate ops console for copy verification
         run: |
           python -m flask --app services/ops-console/app.py run --host 127.0.0.1 --port 10001 > verification/route-product/ops-console.log 2>&1 &
@@ -133,6 +139,9 @@ jobs:
           --base-url https://pickup-pact-demo.onrender.com
           --expected-commit '${{ github.sha }}'
           --output verification/route-live/copy-browser
+      - name: Same-commit public terms funding and fair comparison
+        if: github.ref == 'refs/heads/main'
+        run: python scripts/verify_decision_browser.py --repeat 3 --base-url https://pickup-pact-demo.onrender.com --expected-commit '${{ github.sha }}' --output verification/route-live/decision-browser
       - uses: actions/upload-artifact@v4
         if: always() && github.ref == 'refs/heads/main'
         with:
