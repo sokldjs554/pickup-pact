@@ -19,5 +19,9 @@
 .agreement-spec{font-size:11px;line-height:1.6;padding:0 18px 12px;color:#456253}
 .handoff-table-wrap table{min-width:650px}
 .handoff-table-wrap{max-width:100%;overflow:auto}
-#confirmDialog{max-height:90vh;overflow-y:auto}
+#confirmDialog{max-height:90vh;max-height:90dvh;overflow:hidden}
+#confirmDialog[open]{display:flex;flex-direction:column}
+#confirmDialog .dialog-kicker,#dialogTitle,#confirmDialog .dialog-actions{flex-shrink:0}
+#dialogBody{min-height:0;overflow-y:auto;overscroll-behavior:contain;padding-right:6px}
+#confirmDialog .dialog-actions{padding-top:14px;border-top:1px solid #dce5d4}
 @media(max-width:650px){.hero-copy h1{font-size:34px}.hero-points{gap:7px}.transfer-agreement{padding:12px}.agreement-cost dl>div{font-size:11px}}

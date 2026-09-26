@@ -40,10 +40,22 @@ def verify(base,output,repeat=3,expected=None):
                             page.locator('#setHandoffFault').click()
                         assert re.value.json()['next_transfer_fault']==value
                         idle()
+                    def consent_frame():
+                        geometry=page.evaluate("""() => {
+                            const dialog=document.getElementById('confirmDialog').getBoundingClientRect();
+                            const inside=id=>{const r=document.getElementById(id).getBoundingClientRect();
+                                return r.top>=Math.max(0,dialog.top) && r.bottom<=Math.min(innerHeight,dialog.bottom)
+                                    && r.left>=dialog.left && r.right<=dialog.right;};
+                            return {title:inside('dialogTitle'),button:inside('confirmTransfer')};
+                        }""")
+                        assert geometry['title'] and geometry['button'],geometry
                     def choose():
                         idle();page.locator('.route-card[data-hover=oat] [data-quote]').click()
                         expect(page.locator('#transferAgreement')).to_contain_text('360mL')
                         expect(page.locator('#transferAgreement')).to_contain_text('맛은 매장마다')
+                        expect(page.locator('#dialogTitle')).to_be_focused()
+                        assert page.locator('#dialogBody').evaluate('(el)=>el.scrollTop')==0
+                        consent_frame()
                     page.goto(base+'/',wait_until='networkidle',timeout=60000)
                     expect(page.locator('h1').first).to_contain_text('매장 변경이 막혀도');shot('01-home')
                     page.locator('#coupon').select_option('welcome500');page.locator('#points').fill('1000')
@@ -56,7 +68,9 @@ def verify(base,output,repeat=3,expected=None):
                     expect(page.locator('#handoffFault')).to_have_value('target_reject')
                     page.locator('#orderArea [data-action=busy]').click();idle()
                     fault('target_reject');choose();shot('02-terms')
-                    page.locator('#transferAgreement .agreement-cost summary').click();shot('03-funding-preview')
+                    page.locator('#transferAgreement .agreement-cost summary').click()
+                    page.locator('#transferAgreement .agreement-cost').scroll_into_view_if_needed()
+                    consent_frame();shot('03-funding-preview')
                     page.locator('#confirmTransfer').click();idle()
                     expect(page.locator('#handoffMessage')).to_contain_text('원래 주문과 혜택')
                     refused=state();assert refused['order']==original['order'] and refused['wallet']==original['wallet']
@@ -97,7 +111,8 @@ def verify(base,output,repeat=3,expected=None):
                     assert not any(x.get('action')=='recover' for x in requests)
                     runs.append(dict(pass_number=n,viewport=label,result='passed',release_commit=before['release_commit'],
                         base_url=base,page_errors=errors,same_order=oid,unsubmitted_selection_preserved=True,
-                        funding=m,policies=report['policies'],comparison_seconds=time.monotonic()-began))
+                        funding=m,policies=report['policies'],consent_title_and_buttons_pinned=True,
+                        comparison_seconds=time.monotonic()-began))
                     (output/'results.json').write_text(json.dumps(runs,ensure_ascii=False,indent=2)+'\n')
                     ctx.close();ctx=None
         except Exception as error:

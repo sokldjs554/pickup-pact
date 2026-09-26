@@ -22,3 +22,23 @@ def test_terms_and_settlement_display_have_real_server_sources():
     text=response.text
     assert 'transfer_terms' in text and 'receipt.settlement' in text
     assert 'merchant_receivable' in text and 'platform_coupon' in text
+
+
+def test_long_consent_starts_at_title_and_keeps_actions_outside_scroll():
+    """Markup/style contract backed by the actual Chromium geometry check."""
+    from html.parser import HTMLParser
+    class Tags(HTMLParser):
+        found = None
+        def handle_starttag(self, tag, attrs):
+            values = dict(attrs)
+            if values.get('id') == 'dialogTitle':
+                self.found = values
+    page = TestClient(app).get('/').text
+    tags = Tags(); tags.feed(page)
+    assert tags.found and tags.found.get('tabindex') == '-1'
+    assert 'autofocus' in tags.found
+    css = TestClient(app).get('/route-assets/handoff.css').text
+    assert '#confirmDialog[open]{display:flex;flex-direction:column}' in css
+    assert '#dialogBody{min-height:0;overflow-y:auto;' in css
+    script = TestClient(app).get('/route-assets/product.js').text
+    assert "$('dialogBody').scrollTop=0" in script
