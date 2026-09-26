@@ -53,10 +53,35 @@ function couponMessage(pricing) {
     EXPIRED:'체험 시간을 기준으로 사용 기간이 지난 쿠폰이에요.',USED:'이미 사용한 쿠폰이에요.'})[pricing.coupon_reason]||pricing.coupon_message;
 }
 
-let state=null,catalog=null,drink='latte',activeView='customer',pendingPlan=null,busy=false,toastTimer;
-function notify(message,error=false){clearTimeout(toastTimer);$('notice').textContent=message;$('notice').className=error?'error':'';$('notice').hidden=false;toastTimer=setTimeout(()=>$('notice').hidden=true,6500);}
+let state=null,catalog=null,drink='latte',activeView='customer',pendingPlan=null,busy=false,toastTimer,toastOperation=null;
+function notify(message,error=false,operation=null){
+ clearTimeout(toastTimer);
+ toastOperation=operation?{...operation}:null;
+ $('notice').textContent=message;$('notice').className=error?'error':'';$('notice').hidden=false;
+ toastTimer=setTimeout(()=>$('notice').hidden=true,6500);
+}
+function synchronizeOperationNotice(s){
+ if(!toastOperation||!s)return;
+ // Only the operation which produced this notice may replace it. A later
+ // unrelated error resets the scope, and stale snapshots cannot change it.
+ if(s.id!==toastOperation.journeyId){clearTimeout(toastTimer);$('notice').hidden=true;toastOperation=null;return;}
+ if(s.version<toastOperation.version)return;
+ const op=s.handoff;
+ if(op?.id!==toastOperation.operationId){clearTimeout(toastTimer);$('notice').hidden=true;toastOperation=null;return;}
+ toastOperation.version=s.version;
+ if(op.status==='COMPLETED'){notify(op.message||'저장된 작업의 처리를 마쳤어요.');return;}
+ if(op.status==='REJECTED'){notify(op.message||'이 요청은 처리하지 않았어요.',true);return;}
+ if(!s.handoff_pending)return; // Unknown state is not evidence of success.
+ const review=op.recovery?.state==='REVIEW_REQUIRED';
+ const automatic=s.automatic_recovery_enabled&&!review;
+ const message=automatic?'매장 응답을 자동으로 확인하고 있어요. 다시 누르지 않아도 돼요.'
+   :op.message||'매장 연결을 확인할 때까지 주문과 혜택을 보관해요. 추가 확인이 필요해요.';
+ const error=!automatic;
+ // Polling must not continually extend the transient notice's lifetime.
+ if($('notice').textContent!==message||$('notice').className!==(error?'error':''))notify(message,error,toastOperation);
+}
 async function api(path,body){const r=await fetch(path,{method:body===undefined?'GET':'POST',headers:body===undefined?{}:{'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});let data;try{data=await r.json();}catch(_){throw Error('화면을 불러오지 못했어요. 잠시 후 다시 눌러주세요.');}if(!r.ok){const e=Error(friendlyRouteError(data.detail,r.status));e.status=r.status;throw e;}return data;}
-async function run(fn){if(busy)return;busy=true;document.body.classList.add('busy');try{await fn();}catch(e){notify(e.message,true);if(state&&(e.status===409||!e.status)){try{state=await api('/api/route/journeys/'+state.id);render();}catch(_){}}}finally{busy=false;document.body.classList.remove('busy');}}
+async function run(fn){if(busy)return;busy=true;document.body.classList.add('busy');try{await fn();}catch(e){notify(e.message,true,e.operationNotice||null);synchronizeOperationNotice(state);if(state&&(e.status===409||!e.status)){try{state=await api('/api/route/journeys/'+state.id);render();}catch(_){}}}finally{busy=false;document.body.classList.remove('busy');}}
 function requestId(){return (globalThis.crypto?.randomUUID?.()||Date.now()+'-'+Math.random().toString(36).slice(2)).replaceAll('-','');}
 async function cmd(action,extra={}){
   state=await api('/api/route/journeys/'+state.id+'/commands',{action,expected_version:state.version,request_id:requestId(),...extra});
@@ -65,7 +90,9 @@ async function cmd(action,extra={}){
   // the caller show its old unconditional success toast in either case.
   const op=state.handoff;
   if(state.handoff_pending || (op?.status==='REJECTED' && (op.action===action||action==='recover'))){
-    throw Error(op?.message||'매장 확인이 아직 끝나지 않았어요. 다시 확인해 주세요.');
+    const error=Error(op?.message||'매장 확인이 아직 끝나지 않았어요. 다시 확인해 주세요.');
+    if(state.id&&op?.id)error.operationNotice={journeyId:state.id,operationId:op.id,version:state.version};
+    throw error;
   }
   return state;
 }
@@ -128,7 +155,7 @@ function renderReceipt(){if(!state?.order){$('receiptContent').innerHTML=emptyVi
 function renderAux(){renderMerchant();renderReceipt();if(state)document.dispatchEvent(new CustomEvent('route:aux-render',{detail:state}));}
 function render(){if(!state)return;localStorage.setItem('pickup-pact.route-journey',state.id);$('clock').textContent=time(state.clock);$('startHint').hidden=true;document.body.classList.toggle('compact',!!state.order);$('intentForm').hidden=!!state.order;$('lockedIntent').hidden=!state.order;
  if(state.order){$('lockedIntent').innerHTML=`<h3 class="locked-title">${time(state.intent.deadline_minutes)}까지, ${state.intent.destination==='office'?'오피스 타워':'센트럴 파크'}.</h3><div class="locked-info"><span><b>${esc(labelIntent(state.intent))}</b></span><span>예산 <b>${won(state.intent.budget)}</b></span><span>돌아가도 괜찮은 시간 <b>${state.intent.max_detour}분</b></span><span>출발 <b>가상역 2번 출구</b></span></div><p class="locked-statement">음료와 주문 번호는 그대로예요.<br><b>할인이 달라지면 금액을 먼저 알려드려요.</b><br>결제 한도 안에서 직접 선택하세요.</p>`;}
- $('stepLabel').textContent=state.order?(state.order.state==='PICKED_UP'?'04 / 커피 받고 영수증 확인':'03 / 주문 상태 확인하기'):'02 / 들를 카페 고르기';$('stepHint').textContent=state.order?'주문부터 수령까지 한 번에 확인하세요.':'도착 예상과 금액을 보고 골라보세요.';renderOrder();renderRoutes();drawMap();renderAux();document.dispatchEvent(new CustomEvent('route:render',{detail:state}));}
+ $('stepLabel').textContent=state.order?(state.order.state==='PICKED_UP'?'04 / 커피 받고 영수증 확인':'03 / 주문 상태 확인하기'):'02 / 들를 카페 고르기';$('stepHint').textContent=state.order?'주문부터 수령까지 한 번에 확인하세요.':'도착 예상과 금액을 보고 골라보세요.';renderOrder();renderRoutes();drawMap();renderAux();synchronizeOperationNotice(state);document.dispatchEvent(new CustomEvent('route:render',{detail:state}));}
 function transferDialog(p){pendingPlan=p;const o=state.order,d=p.price-o.price;$('dialogBody').innerHTML=`<div class="dialog-box">${esc(o.store_name)}<br><b>↓ ${esc(p.name)}</b></div><div class="dialog-detail"><span>주문 번호</span><b>${esc(o.id)}</b></div><div class="dialog-detail"><span>선택한 음료</span><b>${esc(labelIntent(state.intent))}</b></div><div class="dialog-detail"><span>체험 주문 금액</span><b>${won(o.price)} → ${won(p.price)}</b></div><div class="dialog-detail"><span>금액 차이</span><b>${d>0?'+':''}${won(d)}</b></div><div class="dialog-detail"><span>목적지 도착 예상</span><b>${time(p.arrival_at)} · ${p.margin}분 여유</b></div><p class="muted" style="font-size:10px;margin-top:14px">확인 버튼을 눌러야 매장이 바뀌어요. 바꾸기 직전에 매장 상태와 결제 한도를 다시 확인해요.</p>`;document.dispatchEvent(new CustomEvent('route:transfer-preview',{detail:{state,plan:p}}));$('confirmDialog').showModal();$('dialogBody').scrollTop=0;}
 $('intentForm').addEventListener('submit',e=>{e.preventDefault();run(async()=>{state=await api('/api/route/journeys',{destination:$('destination').value,deadline_minutes:Number($('deadline').value),drink,milk:$('oat').checked?'oat':'regular',decaf:$('decaf').checked,budget:Number($('budget').value),max_detour:Number($('detour').value),priority:$('priority').value,coupon_id:$('coupon').value||null,points:Number($('points').value)});render();notify(state.recommendations.length?'들를 수 있는 카페를 찾았어요.':'맞는 매장이 없어요. 시간이나 결제 한도를 바꿔보세요.',!state.recommendations.length);$('routeArea').scrollIntoView({behavior:'smooth',block:'nearest'});});});
 $('deadline').addEventListener('input',adjustDeadline);$('destination').addEventListener('change',()=>{if(!state)drawMap();});

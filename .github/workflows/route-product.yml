@@ -30,6 +30,8 @@ jobs:
         run: node scripts/verify_comparison_ui.cjs
       - name: Verify fault selection occurs after the prior response
         run: python -m pytest -q tests/route/test_browser_fault_configuration.py
+      - name: Keep operation notices consistent with recovered state
+        run: node scripts/verify_operation_notice.cjs
       - name: Preserve unsent user selections
         run: node scripts/verify_selection_state.cjs
       - name: Paired comparison setup benchmark
