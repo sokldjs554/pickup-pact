@@ -13,7 +13,7 @@ function harness(ready='interactive',saved='saved-order',bad=false){
  const ctx=vm.createContext({catalog:null,state:null,
   document:{readyState:ready,addEventListener:(type,fn,options)=>{
     (events[type]??=[]).push({fn,once:options?.once});}},
-  api:async path=>{requests.push(path);if(bad)throw Error('unavailable');
+  api:async path=>{requests.push(path);if(bad===true || (bad==='order'&&!path.endsWith('/catalog')))throw Error('unavailable');
     return path.endsWith('/catalog')?{stores:[]}:{id:saved,order:{state:'CANCELLED'},wallet:{available_points:2000}};},
   localStorage:{getItem:()=>saved,removeItem:()=>removals++},
   drawMap:()=>{},fillIntent:()=>{},renderAux:()=>{},
@@ -30,6 +30,7 @@ const cases={
  'DOMContentLoaded initializes once, not once per notification':async()=>{const h=harness();h.install();h.ready();h.ready();await flush();assert.equal(h.requests.length,2);assert.equal(h.renders,1);},
  'a fully loaded document can initialize immediately':async()=>{const h=harness('complete');await flush();assert.equal(h.requests.length,2);assert.equal(h.renders,1);},
  'a fresh visit does not invent or fetch an order':async()=>{const h=harness('interactive',null);h.ready();await flush();assert.deepEqual(h.requests,['/api/route/catalog']);assert.equal(h.renders,0);},
+ 'failed saved-order lookup never discards its recovery reference':async()=>{const h=harness('interactive','saved-order','order');h.ready();await flush();assert.equal(h.renders,0);assert.equal(h.removals,0,'temporary lookup failure discarded the saved order reference');assert.equal(h.warnings.length,1);assert.equal(h.warnings[0].error,true);},
  'startup network failure remains an error, not a restored order':async()=>{const h=harness('interactive','saved-order',true);h.ready();await flush();assert.equal(h.renders,0);assert.equal(h.warnings.length,1);assert.equal(h.warnings[0].error,true);}
 };
 (async()=>{let failed=0;for(const [name,test] of Object.entries(cases)){try{await test();console.log('PASS',name);}catch(error){failed++;console.error('FAIL',name,error.message);}}

@@ -173,7 +173,7 @@ let routeBootStarted=false;
 async function initializeRoute(){
  if(routeBootStarted)return;
  routeBootStarted=true;
- try{catalog=await api('/api/route/catalog');drawMap();const saved=localStorage.getItem('pickup-pact.route-journey');if(saved){try{state=await api('/api/route/journeys/'+saved);fillIntent(state.intent);render();}catch(e){localStorage.removeItem('pickup-pact.route-journey');notify('이전 주문을 찾지 못했어요. 처음부터 다시 시작해 주세요.');}}renderAux();}catch(e){notify('화면을 불러오지 못했어요. 잠시 후 새로고침해 주세요.',true);}
+ try{catalog=await api('/api/route/catalog');drawMap();const saved=localStorage.getItem('pickup-pact.route-journey');if(saved){try{state=await api('/api/route/journeys/'+saved);fillIntent(state.intent);render();}catch(e){notify('이전 주문을 불러오지 못했어요. 저장된 주문 번호는 지우지 않았어요. 잠시 후 새로고침해 주세요.',true);}}renderAux();}catch(e){notify('화면을 불러오지 못했어요. 잠시 후 새로고침해 주세요.',true);}
 }
 if(document.readyState==='complete')initializeRoute();
 else document.addEventListener('DOMContentLoaded',initializeRoute,{once:true});
