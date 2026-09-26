@@ -69,7 +69,7 @@
     $('recoverHandoff')?.addEventListener('click',()=>run(async()=>{await cmd('recover');notify('저장된 작업을 이어서 확인했어요. 주문 결과를 확인하세요.');}));
     async function control(body){
       state=await api(`/api/route/journeys/${state.id}/transfer-controls`,{expected_version:state.version,request_id:requestId(),...body});render();
-      if(state.handoff_pending){notify('매장에 처리 결과를 확인하고 있어요. 자동으로 다시 확인할게요.');return false;}
+      if(state.handoff_pending){notify('매장에 처리 결과를 확인하고 있어요.',false,{journeyId:state.id,operationId:state.handoff.id,version:state.version});synchronizeOperationNotice(state);return false;}
       if(state.handoff?.action?.startsWith('control_')&&state.handoff.status==='REJECTED'){notify(state.handoff.message,true);return false;}
       return true;
     }

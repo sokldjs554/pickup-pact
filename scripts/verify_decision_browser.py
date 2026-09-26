@@ -76,7 +76,11 @@ def verify(base,output,repeat=3,expected=None):
                     refused=state();assert refused['order']==original['order'] and refused['wallet']==original['wallet']
                     fault('after_target_hold');choose();page.locator('#confirmTransfer').click()
                     expect(page.locator('#handoffMessage')).to_contain_text('자동으로',timeout=5000)
+                    expect(page.locator('#notice')).to_contain_text('자동')
+                    expect(page.locator('#notice')).not_to_have_class('error')
                     expect(page.locator('#handoffMessage')).to_contain_text('같은 주문으로 매장을 바꿨어요',timeout=15000)
+                    expect(page.locator('#notice')).to_contain_text('같은 주문으로 매장을 바꿨어요')
+                    expect(page.locator('#notice')).not_to_have_class('error')
                     moved=state();assert moved['order']['id']==oid
                     assert moved['order']['commercial_terms']['funding']['customer_cash']==3200
                     page.locator('#handoffPanel').scroll_into_view_if_needed();shot('04-recovered')
@@ -111,7 +115,7 @@ def verify(base,output,repeat=3,expected=None):
                     assert not any(x.get('action')=='recover' for x in requests)
                     runs.append(dict(pass_number=n,viewport=label,result='passed',release_commit=before['release_commit'],
                         base_url=base,page_errors=errors,same_order=oid,unsubmitted_selection_preserved=True,
-                        funding=m,policies=report['policies'],consent_title_and_buttons_pinned=True,
+                        funding=m,policies=report['policies'],consent_title_and_buttons_pinned=True,operation_notice_tracks_recovery=True,
                         comparison_seconds=time.monotonic()-began))
                     (output/'results.json').write_text(json.dumps(runs,ensure_ascii=False,indent=2)+'\n')
                     ctx.close();ctx=None
