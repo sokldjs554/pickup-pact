@@ -4,6 +4,7 @@ from copy import deepcopy
 from hashlib import sha256
 import heapq
 import json
+from . import agreement
 from .benefits import COUPONS, INITIAL_POINTS, price_quote, legacy_pricing
 
 NODES = {
@@ -28,10 +29,13 @@ STORES = [
     dict(id='express', name='에스프레소 바', subtitle='가볍게 들르는 커피 스탠드',
          queue_until=0, prices={'americano':2500}, prep=2, oat=False, decaf=False, online=True),
 ]
+for _shop in STORES:
+    _shop['transfer_policy'] = agreement.default_policy(_shop['id'])
+
 REASONS = {'MENU':'선택한 메뉴가 없어요', 'MILK':'오트 변경이 어려워요',
            'DECAF':'디카페인을 제공하지 않아요', 'BUDGET':'예산을 초과해요',
            'DEADLINE':'도착 마감에 늦어요', 'DETOUR':'허용한 우회보다 멀어요',
-           'OFFLINE':'지금 주문을 받지 않아요'}
+           'OFFLINE':'지금 주문을 받지 않아요', **agreement.REASONS}
 
 def digest(value: object) -> str:
     return sha256(json.dumps(value, sort_keys=True, separators=(',',':'),ensure_ascii=False).encode()).hexdigest()
@@ -85,6 +89,9 @@ def plans(state: dict) -> list[dict]:
         if price>intent['budget']: reasons.append('BUDGET')
         if detour>intent['max_detour']: reasons.append('DETOUR')
         if arrival+1>intent['deadline_minutes']: reasons.append('DEADLINE')
+        terms = agreement.assess(state,store,pricing) if state.get('transfer_agreement_version') == 1 else None
+        if terms:
+            reasons.extend(terms['reason_codes'])
         row=dict(store_id=store['id'], name=store['name'], subtitle=store['subtitle'],
                  walk_to=walk_to, walk_after=walk_after, walk_total=walk_to+walk_after,
                  detour=detour, wait=max(0,ready-depart-walk_to), price=price, pricing=pricing,
@@ -93,6 +100,8 @@ def plans(state: dict) -> list[dict]:
                  queue=max(0,store['queue_until']-now),milk=intent['milk'],decaf=intent['decaf'],
                  route=first+second[1:],first_leg=first,second_leg=second,
                  feasible=not reasons,reasons=reasons,reason_labels=[REASONS[r] for r in reasons])
+        if terms:
+            row['transfer_terms'] = terms
         row['quote_id']=digest({'journey':state['id'],'version':state['version'],'plan':row})[:32]
         rows.append(row)
     key = {'arrival':lambda p:(p['arrival_at'],p['price'],p['walk_total']),

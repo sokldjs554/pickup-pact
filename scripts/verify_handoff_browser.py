@@ -115,7 +115,7 @@ def verify(base,output,repeat,expected_commit=None):
                     page.locator('nav [data-view="receipt"]').click();shot('05-receipt')
                     page.locator('nav [data-view="customer"]').click()
                     # Distinguish request emission, computation, and DOM render.
-                    # The isolated 18-command comparison took 7.8s on the public
+                    # The isolated four-policy comparison took 7.8s on the public
                     # host; it is not an instantaneous UI update. All six results
                     # are still required, with a separately bounded HTTP wait.
                     compare_start=time.monotonic()

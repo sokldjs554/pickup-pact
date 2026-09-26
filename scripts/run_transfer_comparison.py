@@ -30,7 +30,7 @@ def main():
         for row in report['cases']:
             for policy in report['policies']:
                 writer.writerow({'scenario':row['scenario'],'policy':policy,**row[policy]})
-    result=dict(schedules=6,policies=3,repeat=args.repeat,semantic_sha256=previous,
+    result=dict(schedules=6,policies=4,repeat=args.repeat,semantic_sha256=previous,
         note='Repeated executions are not additional independent samples. IDs differ; modeled results are identical. No real-user click latency or market superiority is measured.')
     (args.output/'reproducibility.json').write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\n')
     print(json.dumps(result,ensure_ascii=False,indent=2))

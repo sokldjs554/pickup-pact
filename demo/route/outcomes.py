@@ -90,6 +90,9 @@ def make_case(seed: int, index: int) -> dict:
     s = dict(id=f'case-{seed}-{index}', version=1, clock=0, arrival_delay=0,
              intent=intent, stores=deepcopy(STORES), order=None, events=[], wallet=initial_wallet())
     for store in s['stores']:
+        # Keep the published v1 population independent of later partner policy.
+        # New partner eligibility is assessed in the four-policy command trial.
+        store.pop('transfer_policy',None)
         store['queue_until'] = rng.randint(0, 5)
     initial = next((p for p in plans(s) if p['feasible']), None)
     if initial:

@@ -12,9 +12,10 @@ from .planner import catalogue
 from .store import JourneyStore, Conflict
 from .outcomes import run_experiment
 from .runtime import route_lifespan
+from .response_models import JourneyView, RuntimeView, ReceiptView, ComparisonView
 
 HERE=Path(__file__).parent
-comparison_slots=BoundedSemaphore(2)  # Fixed 18 executions per request, bounded concurrency.
+comparison_slots=BoundedSemaphore(2)  # Fixed 24 executions per request, bounded concurrency.
 class Intent(BaseModel):
     model_config=ConfigDict(extra='forbid')
     destination: Literal['office','park']='office'
@@ -108,7 +109,7 @@ def create_router():
     router=APIRouter(lifespan=route_lifespan, dependencies=[Depends(protect)], responses={
         400: {'description': 'Invalid Unicode in JSON rejected before mutation'},
     })
-    @router.get('/api/route/runtime')
+    @router.get('/api/route/runtime',response_model=RuntimeView,response_model_exclude_unset=True)
     def runtime_status() -> dict:
         return dict(mode='synthetic', merchant_transport='http' if getattr(store.fleet,'handles_response_loss',False) else 'local',
                     automatic_recovery=store.automatic_recovery_enabled,
@@ -116,21 +117,21 @@ def create_router():
                     scope='single_host_independent_process_and_store_databases')
     @router.get('/api/route/catalog')
     def catalog_api()->dict: return catalogue()
-    @router.post('/api/route/journeys',status_code=201)
+    @router.post('/api/route/journeys',status_code=201,response_model=JourneyView,response_model_exclude_unset=True)
     def create_journey(body:Intent)->dict: return store.create(body.model_dump())
     def invoke(fn,*args):
         try: return fn(*args)
         except KeyError as exc: raise HTTPException(404,'이 체험을 찾지 못했어요. 새 일정으로 시작해 주세요.') from exc
         except Conflict as exc: raise HTTPException(409,dict(code=exc.code,message=str(exc))) from exc
-    @router.get('/api/route/journeys/{journey_id}')
+    @router.get('/api/route/journeys/{journey_id}',response_model=JourneyView,response_model_exclude_unset=True)
     def journey(journey_id:UUID)->dict: return invoke(store.get,journey_id.hex)
-    @router.post('/api/route/journeys/{journey_id}/commands',responses={409:{'description':'Stale state, unsafe transfer or invalid lifecycle'}})
+    @router.post('/api/route/journeys/{journey_id}/commands',response_model=JourneyView,response_model_exclude_unset=True,responses={409:{'description':'Stale state, unsafe transfer or invalid lifecycle'}})
     def commands(journey_id:UUID,body:Command)->dict:
         return invoke(store.command,journey_id.hex,body.model_dump())
-    @router.post('/api/route/journeys/{journey_id}/transfer-controls', responses={409:{'description':'Pending operation or changed state'}})
+    @router.post('/api/route/journeys/{journey_id}/transfer-controls', response_model=JourneyView,response_model_exclude_unset=True,responses={409:{'description':'Pending operation or changed state'}})
     def transfer_controls(journey_id:UUID,body:TransferControl)->dict:
         return invoke(store.transfer_control,journey_id.hex,body.model_dump())
-    @router.post('/api/route/transfer-comparison', responses={429:{'description':'Two comparisons are already running in this process'}})
+    @router.post('/api/route/transfer-comparison', response_model=ComparisonView,response_model_exclude_unset=True,responses={429:{'description':'Two comparisons are already running in this process'}})
     def transfer_comparison(body:TransferComparisonRequest)->dict:
         from .transfer_comparison import run_transfer_comparison
         if not comparison_slots.acquire(blocking=False):
@@ -145,7 +146,7 @@ def create_router():
     @router.post('/api/route/experiments')
     def experiment(body:ExperimentRequest)->dict:
         return run_experiment(body.seed,body.cases)
-    @router.get('/api/route/journeys/{journey_id}/receipt')
+    @router.get('/api/route/journeys/{journey_id}/receipt',response_model=ReceiptView,response_model_exclude_unset=True)
     def receipt(journey_id:UUID)->dict:
         s=invoke(store.get,journey_id.hex)
         return dict(mode='synthetic',order=s['order'],receipt=s['receipt'],events=s['events'])
@@ -154,6 +155,6 @@ def create_router():
     def product(): return FileResponse(HERE/'index.html',media_type='text/html',headers={'Cache-Control':'no-store'})
     @router.get('/route-assets/{asset}',include_in_schema=False)
     def asset_file(asset:str):
-        if asset not in {'product.css','product.js','benefits.css','benefits-ui.js','handoff.css','handoff-ui.js','recovery-ui.js'}: raise HTTPException(404)
+        if asset not in {'product.css','product.js','benefits.css','benefits-ui.js','handoff.css','handoff-ui.js','recovery-ui.js','agreement-ui.js','selection-state.js'}: raise HTTPException(404)
         return FileResponse(HERE/asset,headers={'Cache-Control':'no-cache','X-Content-Type-Options':'nosniff'})
     return router

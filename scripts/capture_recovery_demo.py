@@ -71,7 +71,7 @@ def capture(base: str, expected: str, output: Path) -> dict:
             page.goto(base+'/',wait_until='networkidle',timeout=60000)
             expect(page.locator('#map circle')).not_to_have_count(0)
             with scene('01-home','매장이 거절해도, 원래 주문은 남아요',3):
-                expect(page.locator('h1').first).to_contain_text('커피 한 잔')
+                expect(page.locator('h1').first).to_contain_text('매장 변경이 막혀도')
             with scene('02-order','전 매장 쿠폰과 1,000P를 적용해 주문해요',5):
                 page.locator('#coupon').select_option('welcome500')
                 page.locator('#points').fill('1000')

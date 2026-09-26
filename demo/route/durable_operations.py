@@ -14,7 +14,8 @@ from .recovery_worker import initial_schedule, after_step, expire_undecided
 from uuid import uuid4
 from .planner import digest, plans
 
-ACTIONS = {'reserve', 'reorder', 'transfer', 'start', 'ready', 'claim', 'cancel'}
+REPLACEMENTS = {'transfer', 'reserve_first_reorder'}
+ACTIONS = {'reserve', 'reorder', 'transfer', 'reserve_first_reorder', 'start', 'ready', 'claim', 'cancel'}
 FAULTS = {'none', 'target_reject', 'after_target_hold', 'after_source_release', 'after_target_activation'}
 PHASE_TEXT = {
     'FREEZE': '원래 매장에 제조를 잠시 멈춰 달라고 요청해요',
@@ -112,11 +113,11 @@ class DurableOperations:
                     gen = max(gen, s.get('merchant_generation_counter', 0)) + 1
                     s['merchant_generation_counter'] = gen
                     candidate['merchant_generation_counter'] = gen
-                elif c['action'] in {'reserve', 'reorder'}:
+                elif c['action'] in {'reserve', 'reorder', 'reserve_first_reorder'}:
                     gen = 0
                 after_order['merchant_generation'] = gen
                 fault = s.get('next_transfer_fault', 'none') if c['action'] == 'transfer' else 'none'
-                phase = 'FREEZE' if c['action'] == 'transfer' else {
+                phase = 'FREEZE' if c['action'] in REPLACEMENTS else {
                     'reserve': 'ADMIT', 'reorder': 'ADMIT', 'start': 'START',
                     'ready': 'READY', 'claim': 'CLAIM', 'cancel': 'CANCEL'}[c['action']]
                 op = dict(id=oid, sid=sid, action=c['action'], phase=phase, status='PENDING',
@@ -124,6 +125,7 @@ class DurableOperations:
                           history=[], source=before_order['store_id'] if before_order else None,
                           target=after_order['store_id'], attempts=0, fault=fault, fault_consumed=False,
                           candidate=candidate, world=s['world_id'], order_id=after_order['id'],
+                          source_order_id=(before_order or {}).get('id'),
                           before_generation=(before_order or {}).get('merchant_generation', 0),
                           generation=gen, request_id=c['request_id'], fingerprint=fp,
                           recovery=initial_schedule(time.time()))
@@ -272,9 +274,10 @@ class DurableOperations:
             transport_options['lose_reply'] = op['fault'] == {
                 'HOLD': 'after_target_hold', 'RELEASE_SOURCE': 'after_source_release',
                 'ACTIVATE': 'after_target_activation'}.get(phase, '')
-        return self.store.fleet.execute(shop, world=op['world'], order_id=op['order_id'],
+        order_id = (op.get('source_order_id') or op['order_id']) if source_action else op['order_id']
+        return self.store.fleet.execute(shop, world=op['world'], order_id=order_id,
             generation=gen, operation_id=f"{op['id']}:{phase}", action=phase,
-            transfer_id=op['id'] if op['action'] == 'transfer' else '',
+            transfer_id=op['id'] if op['action'] in REPLACEMENTS else '',
             reject=(phase == 'HOLD' and op['fault'] == 'target_reject'), **transport_options)
 
     @staticmethod
@@ -320,11 +323,11 @@ class DurableOperations:
             return False
         if not result['ok']:
             op['failure'] = result['code']
-            if op['action'] == 'transfer' and phase == 'HOLD' and op['decision'] != 'COMMIT':
+            if op['action'] in REPLACEMENTS and phase == 'HOLD' and op['decision'] != 'COMMIT':
                 op['decision'] = 'ABORT'
                 self._next(op, 'ABORT_TARGET')
                 return False
-            if op['action'] != 'transfer' or phase == 'FREEZE':
+            if op['action'] not in REPLACEMENTS or phase == 'FREEZE':
                 op['status'] = 'REJECTED'
                 op['message'] = (ERROR_TEXT.get(result['code'], '현재 매장의 상태가 달라 변경하지 않았어요.')
                                  if op['action'] == 'transfer' else
