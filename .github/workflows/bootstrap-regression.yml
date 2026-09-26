@@ -1,0 +1,36 @@
+name: bootstrap-regression
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  slow-script-restoration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PYTHONPATH: .:services/reconciler
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-workbench.txt playwright
+      - run: python -m playwright install --with-deps chromium
+      - name: Initial state waits for deferred render listeners
+        run: node scripts/verify_bootstrap_order.cjs
+      - name: Slow original script delivery and persisted cancellation over HTTP
+        run: python scripts/verify_bootstrap_browser.py --repeat 3 --output verification/bootstrap
+      - name: Preserve tested source identity
+        if: always()
+        run: |
+          mkdir -p verification/bootstrap
+          git rev-parse HEAD > verification/bootstrap/tested-commit.txt
+          git rev-parse HEAD^{tree} > verification/bootstrap/tested-tree.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bootstrap-regression-evidence
+          path: verification/bootstrap
