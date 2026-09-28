@@ -1,5 +1,8 @@
 # Pickup Pact · 주문을 잃지 않는 매장 변경
 
+**[공개 데모 실행하기](https://pickup-pact-demo.onrender.com)**  
+데모 주소: <https://pickup-pact-demo.onrender.com>
+
 **도착 마감에 맞는 카페를 고르고, 혼잡하면 같은 주문을 다른 매장으로 이어갑니다. 새 매장이 거절하면 원래 주문과 혜택을 유지하고, 응답이 끊기면 서버가 저장된 작업을 다시 확인합니다.**
 
 [직접 체험하기](https://pickup-pact-demo.onrender.com) · [처리 순서와 실패 조건](docs/transfer-recovery.md) · [실행·촬영 검증 기록](docs/recovery-release-verification-2026-09-26.md) · [페이타랩 공고와 구현 대조](docs/jd-traceability.md)
