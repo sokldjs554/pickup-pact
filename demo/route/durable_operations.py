@@ -209,6 +209,11 @@ class DurableOperations:
     def resume(self, sid: str, oid: str, duplicate: bool = False,
                automatic: bool = False, now: float | None = None) -> dict:
         from .store import require
+        if oid:
+            with self.store.connection() as db:
+                protocol=self._op(db,oid).get('protocol_version',1)
+            if protocol==2:
+                return self.store.payment_operations.resume(sid,oid,duplicate,automatic,now)
         # Each iteration commits one coordinator phase. Merchant commit is in
         # a different DB; an exception/process death cannot roll it back.
         for iteration in range(12):

@@ -12,7 +12,7 @@ from .planner import catalogue
 from .store import JourneyStore, Conflict
 from .outcomes import run_experiment
 from .runtime import route_lifespan
-from .response_models import JourneyView, RuntimeView, ReceiptView, ComparisonView
+from .response_models import JourneyView, RuntimeView, ReceiptView, ComparisonView, ReconciliationView
 
 HERE=Path(__file__).parent
 comparison_slots=BoundedSemaphore(2)  # Fixed 24 executions per request, bounded concurrency.
@@ -32,6 +32,25 @@ class Intent(BaseModel):
     def meaningful_milk(self):
         if self.drink=='americano' and self.milk=='oat':
             raise ValueError('아메리카노에는 우유 옵션이 없어요.')
+        return self
+
+class JourneyInput(Intent):
+    payment_card: Literal['demo-approved','demo-declined']='demo-approved'
+    payment_scenario: Literal['none','authorize_reply_lost','capture_reply_lost','void_reply_lost',
+                              'notification_duplicate','notification_late']='none'
+
+class PaymentControl(BaseModel):
+    model_config=ConfigDict(extra='forbid')
+    action: Literal['fault','card']
+    expected_version: StrictInt=Field(ge=1)
+    request_id: str=Field(pattern=r'^[a-zA-Z0-9_-]{1,80}$')
+    fault: Literal['none','authorize_reply_lost','capture_reply_lost','void_reply_lost',
+                   'notification_duplicate','notification_late']|None=None
+    card_token: Literal['demo-approved','demo-declined']|None=None
+    @model_validator(mode='after')
+    def shape(self):
+        if self.action=='fault' and (self.fault is None or self.card_token is not None):raise ValueError('문제 상황만 선택해 주세요.')
+        if self.action=='card' and (self.card_token is None or self.fault is not None):raise ValueError('가상 카드만 선택해 주세요.')
         return self
 
 class Command(BaseModel):
@@ -111,14 +130,24 @@ def create_router():
     })
     @router.get('/api/route/runtime',response_model=RuntimeView,response_model_exclude_unset=True)
     def runtime_status() -> dict:
+        payment_ready=False
+        if store.payment_gateway:
+            try:payment_ready=store.payment_gateway.health().get('storage_ready') is True
+            except OSError:pass
         return dict(mode='synthetic', merchant_transport='http' if getattr(store.fleet,'handles_response_loss',False) else 'local',
                     automatic_recovery=store.automatic_recovery_enabled,
+                    payment_mode='simulator_http_v1' if store.payment_enabled else 'legacy_internal',
+                    payment_transport=getattr(store.payment_gateway,'transport','not_connected'),
+                    payment_connection='available' if payment_ready else 'unavailable',
+                    payment_storage_ready=payment_ready,
                     predecision_timeout_seconds=45, retry_limit=8,
                     scope='single_host_independent_process_and_store_databases')
     @router.get('/api/route/catalog')
     def catalog_api()->dict: return catalogue()
     @router.post('/api/route/journeys',status_code=201,response_model=JourneyView,response_model_exclude_unset=True)
-    def create_journey(body:Intent)->dict: return store.create(body.model_dump())
+    def create_journey(body:JourneyInput)->dict:
+        return store.create(body.model_dump(exclude={'payment_card','payment_scenario'}),
+                            card_token=body.payment_card,payment_fault=body.payment_scenario)
     def invoke(fn,*args):
         try: return fn(*args)
         except KeyError as exc: raise HTTPException(404,'이 체험을 찾지 못했어요. 새 일정으로 시작해 주세요.') from exc
@@ -131,6 +160,10 @@ def create_router():
     @router.post('/api/route/journeys/{journey_id}/transfer-controls', response_model=JourneyView,response_model_exclude_unset=True,responses={409:{'description':'Pending operation or changed state'}})
     def transfer_controls(journey_id:UUID,body:TransferControl)->dict:
         return invoke(store.transfer_control,journey_id.hex,body.model_dump())
+    @router.post('/api/route/journeys/{journey_id}/payment-controls',response_model=JourneyView,response_model_exclude_unset=True,
+                 responses={409:{'description':'Fixed legacy mode, pending work or stale state'}})
+    def payment_controls(journey_id:UUID,body:PaymentControl)->dict:
+        return invoke(store.payment_control,journey_id.hex,body.model_dump(exclude_none=True))
     @router.post('/api/route/transfer-comparison', response_model=ComparisonView,response_model_exclude_unset=True,responses={429:{'description':'Two comparisons are already running in this process'}})
     def transfer_comparison(body:TransferComparisonRequest)->dict:
         from .transfer_comparison import run_transfer_comparison
@@ -146,6 +179,10 @@ def create_router():
     @router.post('/api/route/experiments')
     def experiment(body:ExperimentRequest)->dict:
         return run_experiment(body.seed,body.cases)
+    @router.get('/api/route/journeys/{journey_id}/reconciliation',response_model=ReconciliationView,response_model_exclude_unset=True)
+    def reconciliation(journey_id:UUID)->dict:
+        from .reconciliation import reconcile
+        return invoke(reconcile,store,journey_id.hex)
     @router.get('/api/route/journeys/{journey_id}/receipt',response_model=ReceiptView,response_model_exclude_unset=True)
     def receipt(journey_id:UUID)->dict:
         s=invoke(store.get,journey_id.hex)
@@ -155,6 +192,6 @@ def create_router():
     def product(): return FileResponse(HERE/'index.html',media_type='text/html',headers={'Cache-Control':'no-store'})
     @router.get('/route-assets/{asset}',include_in_schema=False)
     def asset_file(asset:str):
-        if asset not in {'product.css','product.js','benefits.css','benefits-ui.js','handoff.css','handoff-ui.js','recovery-ui.js','agreement-ui.js','selection-state.js','guide-flow.js','guide.css'}: raise HTTPException(404)
+        if asset not in {'product.css','product.js','benefits.css','benefits-ui.js','handoff.css','handoff-ui.js','recovery-ui.js','agreement-ui.js','selection-state.js','guide-flow.js','guide.css','payment-ui.js','payment.css'}: raise HTTPException(404)
         return FileResponse(HERE/asset,headers={'Cache-Control':'no-cache','X-Content-Type-Options':'nosniff'})
     return router

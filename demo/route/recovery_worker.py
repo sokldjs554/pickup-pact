@@ -72,6 +72,8 @@ class RecoveryWorker:
             raise ValueError('recovery batch must be between 1 and 64')
         injected_now = now
         now = time.time() if now is None else now
+        if getattr(self.store,'payment_inbox',None):
+            self.store.payment_inbox.wake_operations(now)
         with self.store.connection() as db:
             rows = db.execute('''SELECT id,journey_id FROM route_operations
                 WHERE json_extract(body,'$.status')='PENDING'

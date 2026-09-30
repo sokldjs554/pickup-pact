@@ -83,18 +83,26 @@ class MerchantProcess:
 
 @asynccontextmanager
 async def route_lifespan(app):
+    from contextlib import ExitStack
     from . import api
+    from .payments.runtime import PaymentProcess
+    from .payments.notifications import NotificationServer
     store=api.store
-    previous_fleet=store.fleet
-    # A bounded demo role is reached over real HTTP. The older JVM services
-    # remain a separate topology, and the comparison harness stays local.
-    with MerchantProcess(store.path+'.merchants') as fleet:
-        store.fleet=fleet
-        store.automatic_recovery_enabled=True
-        try:
-            with RecoveryWorker(store) as worker:
-                app.state.route_recovery_worker=worker
-                yield
-        finally:
-            store.automatic_recovery_enabled=False
-            store.fleet=previous_fleet
+    previous_fleet,previous_pg,previous_enabled=store.fleet,store.payment_gateway,store.payment_enabled
+    mode=os.environ.get('ROUTE_PAYMENT_MODE','simulator_http_v1')
+    if mode not in {'simulator_http_v1','legacy'}:raise ValueError('unsupported synthetic payment mode')
+    try:
+        with ExitStack() as stack:
+            store.fleet=stack.enter_context(MerchantProcess(store.path+'.merchants'))
+            if mode=='simulator_http_v1':
+                receiver=stack.enter_context(NotificationServer(store.payment_inbox))
+                process=stack.enter_context(PaymentProcess(store.path+'.payments',receiver.url,store.payment_inbox.secret))
+                store.payment_gateway=process.client
+                store.payment_enabled=True
+            store.automatic_recovery_enabled=True
+            worker=stack.enter_context(RecoveryWorker(store))
+            app.state.route_recovery_worker=worker
+            yield
+    finally:
+        store.automatic_recovery_enabled=False
+        store.fleet,store.payment_gateway,store.payment_enabled=previous_fleet,previous_pg,previous_enabled

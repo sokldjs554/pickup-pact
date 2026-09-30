@@ -70,6 +70,19 @@ class HttpMerchantFleet:
             raise OSError('merchant snapshot not confirmed')
         return data['merchants']
 
+    def evidence(self, world: str, order_id: str) -> dict:
+        if not KEY.fullmatch(world) or not KEY.fullmatch(order_id):raise ValueError('invalid evidence identity')
+        data=self._request('/v1/orders/'+world+'/'+order_id)
+        if data.get('world_id')!=world or data.get('order_id')!=order_id or set(data.get('merchants',{}))!=set(CAPACITY):
+            raise OSError('merchant evidence not bound to order')
+        for shop,entry in data['merchants'].items():
+            row=entry.get('reservation')
+            if type(entry.get('revision')) is not int or entry['revision']<0:
+                raise OSError('merchant evidence has no revision')
+            if row and (row.get('world')!=world or row.get('order_id')!=order_id):
+                raise OSError('merchant evidence includes another order')
+        return data
+
     def set_accepting(self, shop: str, world: str, accepting: bool) -> None:
         self._request('/v1/policy',dict(shop=shop,world=world,accepting=accepting))
 
@@ -107,6 +120,12 @@ def serve(directory: str, token: str, host: str = '127.0.0.1', port: int = 0,
             if self.path == '/health':
                 return self.send(200,dict(status='ok',mode='synthetic-http',pid=os.getpid()))
             if not self.authenticated():return self.send(403,dict(error='forbidden'))
+            if self.path.startswith('/v1/orders/'):
+                parts=self.path[len('/v1/orders/'):].split('/')
+                if len(parts)==2 and all(KEY.fullmatch(p) for p in parts):
+                    try:return self.send(200,fleet.evidence(*parts))
+                    except sqlite3.Error:return self.send(503,dict(error='storage_unavailable'))
+                return self.send(422,dict(error='invalid_identity'))
             prefix='/v1/snapshot/'
             if self.path.startswith(prefix) and KEY.fullmatch(self.path[len(prefix):]):
                 world=self.path[len(prefix):]

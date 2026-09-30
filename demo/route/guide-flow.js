@@ -6,8 +6,8 @@
     milk:'regular',decaf:false,budget:5500,max_detour:5,priority:'arrival',
     coupon_id:'welcome500',points:1000});
   function stageFor(s) {
-    if (!s?.order) return 'reserve';
-    if (s.handoff_pending) return s.handoff?.recovery?.state === 'REVIEW_REQUIRED' ? 'review' : 'waiting';
+    if (s?.handoff_pending) return s.handoff?.recovery?.state === 'REVIEW_REQUIRED' ? 'review' : 'waiting';
+    if (!s?.order) return s?.payment?.state==='DECLINED' || s?.handoff?.status==='REJECTED' ? 'declined' : 'reserve';
     const o=s.order;
     if (o.state==='CANCELLED') return 'cancelled';
     if (o.state==='PICKED_UP') return 'receipt';
@@ -22,6 +22,7 @@
   }
   const key='pickup-pact.guided-journey';
   const text={
+    declined:['01 / 승인 거절','가상 카드 승인이 거절됐어요.','주문이나 혜택을 소모하지 않았어요. 상세 설정에서 다른 가상 카드로 바꾼 뒤 다시 시도할 수 있어요.','주문·결제 결과 확인'],
     reserve:['01 / 주문','주문할 매장을 확인해요.','서버가 계산한 웨이브의 금액과 자리를 확인한 뒤 주문해요.','웨이브에서 주문하기'],
     busy:['02 / 문제 만들기','쿠폰과 포인트를 적용했어요.','이제 주문한 매장이 바빠지는 상황을 만들어 보세요. 실제 매장의 주문에는 영향이 없어요.','매장이 밀리면?'],
     reject:['03 / 거절 확인','다른 매장이 거절하면 어떻게 될까요?','새 매장 거절을 설정하고 변경 조건을 확인해요. 확인 버튼을 눌러야 요청을 보내요.','새 매장 거절 체험'],
@@ -49,11 +50,12 @@
     $('guideStep').textContent=row[0];$('guideTitle').textContent=row[1];$('guideText').textContent=row[2];
     button.textContent=row[3];button.disabled=stage==='waiting';
     const o=s.order;
-    $('guideOrderId').textContent=o?.id||'아직 주문 전';
+    $('guideOrderId').textContent=o?.id||s.pending_order_id||'아직 주문 전';
     $('guideStore').textContent=o?.store_name||'매장 확인 중';
     $('guidePoints').textContent=(s.wallet?.held_points||s.wallet?.spent||0).toLocaleString('ko-KR')+'P';
-    $('guidePayment').textContent=(s.receipt?.capture_count||0)+'건';
-    $('guideProof').hidden=!o;
+    $('guidePayment').textContent=s.handoff_pending?'결과 확인 중':(s.receipt?.capture_count||0)+'건';
+    $('guideProof').hidden=!o&&!s.pending_order_id;
+    if(s.handoff_pending){$('guideTitle').textContent=s.payment?.state==='CONFIRMING_APPROVAL'?'승인 결과를 확인하고 있어요.':'매장·결제 기록을 확인하고 있어요.';}
     // Extra controls stay available, but do not crowd the guided next action.
     const controls=document.querySelector('.handoff-controls');
     if(controls)controls.open=false;
@@ -68,7 +70,7 @@
     if(!initialized || state || localStorage.getItem('pickup-pact.route-journey'))return;
     start.disabled=true;
     try {
-      state=await api('/api/route/journeys',{...PRESET});
+      state=await api('/api/route/journeys',{...PRESET,...(window.pickupPaymentOptions?.()||{})});
       localStorage.setItem(key,state.id);
       render();
       await reservePreset();
@@ -110,6 +112,7 @@
       $('claimCode').value=code;await cmd('claim',{pickup_code:code});return;
     }
     if(current==='receipt'||current==='cancelled'){switchView('receipt');return;}
+    if(current==='declined'){document.getElementById('paymentEvidence').scrollIntoView({behavior:'smooth'});return;}
     if(current==='review'){$('handoffPanel').scrollIntoView({behavior:'smooth',block:'start'});}
   }));
   document.addEventListener('route:render',e=>renderGuide(e.detail));

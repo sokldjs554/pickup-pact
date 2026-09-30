@@ -48,7 +48,7 @@
     const status=transfer?op.status:s.handoff_pending?'PENDING':'IDLE';
     const heading=status==='PENDING'?'응답이 없어도, 새 주문을 만들지 않아요.':status==='REJECTED'?'바꾸지 못했지만, 원래 주문은 남았어요.':status==='COMPLETED'?'새 매장이 받았어요. 주문은 하나예요.':'다른 매장이 받을 때만 바꿔요.';
     const message=transfer||s.handoff_pending?op.message:'새 자리를 확보하기 전에 기존 주문을 취소하지 않아요. 확인 중에는 두 매장이 동시에 만들지 못하게 막아요.';
-    const seen=new Set((op?.history||[]).filter(h=>h.result!=='REPLY_NOT_CONFIRMED').map(h=>h.phase));
+    const seen=new Set((op?.history||[]).filter(h=>['CONFIRMED','COMMIT_RECORDED'].includes(h.result)).map(h=>h.phase));
     let html=`<article class="handoff-card ${status.toLowerCase()}"><span class="eyebrow">주문을 잃지 않는 매장 변경</span><h2>${esc(heading)}</h2><p class="handoff-message" id="handoffMessage">${esc(message)}</p>`;
     if(transfer){html+=`<ol class="handoff-steps">${steps.map((step,i)=>`<li class="${seen.has(step)?'checked':op.phase===step?'current':''}"><span>${seen.has(step)?'✓':i+1}</span>${labels[i]}</li>`).join('')}</ol>`;}
     if(order){
