@@ -77,7 +77,12 @@ async def verify(base: str, output: Path, repeat: int, expected_commit: str):
                         assert proof['payment']['capture_count']==0 and proof['payment']['captured_krw']==0
                         assert proof['payment']['held_krw']==(2800 if final['order']['state']=='PREPARING' else 0)
                         assert final['wallet']['spent']==0 and final['wallet']['held_points']==(1000 if final['order']['state']=='PREPARING' else 0)
-                        for page in [customer,merchant,observer]:
+                        # The idle observer must update from the real refresh
+                        # button alone. Reloading it first would hide stale proof.
+                        await observer.locator('#refreshPaymentEvidence').click()
+                        await expect(observer.locator('#merchantTerminals [data-shop=wave]')).to_contain_text('제조 중' if final['order']['state']=='PREPARING' else '취소')
+                        await expect(observer.locator('#guidePanel')).to_have_attribute('data-stage','ready' if final['order']['state']=='PREPARING' else 'cancelled')
+                        for page in [customer,merchant]:
                             await page.reload(wait_until='networkidle')
                             await expect(page.locator('#guideOrderId')).to_have_text(oid)
                             assert await page.evaluate('document.documentElement.scrollWidth<=innerWidth+1')
@@ -88,7 +93,7 @@ async def verify(base: str, output: Path, repeat: int, expected_commit: str):
                         assert after['release_commit']==expected_commit
                         reports.append(dict(repetition=repetition,viewport=mode,order_id=oid,result='passed',
                             release_commit=expected_commit,requests=requests,http_statuses=responses,
-                            final_order_state=final['order']['state'],proof=proof,page_errors=errors,
+                            final_order_state=final['order']['state'],proof=proof,page_errors=errors,observer_refreshed_without_reload=True,
                             transport_note='Two original UI requests paused until both arrived; payloads/responses unchanged.'))
                         (output/'results.json').write_text(json.dumps(reports,ensure_ascii=False,indent=2))
                         if repetition==1:

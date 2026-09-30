@@ -81,7 +81,21 @@
       const response=await fetch(`/api/route/journeys/${encodeURIComponent(id)}/reconciliation`,{signal:active.signal,cache:'no-store'});
       if(!response.ok)throw Error('evidence not available');
       const result=await response.json();
-      if(ticket!==serial||!acceptsEvidence(result,current))return;
+      if(ticket!==serial)return;
+      if(!current||current.id!==id||result.journey_id!==id||!Number.isSafeInteger(result.journey_version))throw Error('evidence identity not confirmed');
+      if(result.journey_version>current.version){
+        // Another tab may have finished a command while this tab was idle.
+        // Reconcile its new coordinator version with a GET; never retain the
+        // old green proof or replay the command that changed the order.
+        last=null;paint(null);byId('paymentStatus').textContent='다른 화면에서 바뀐 주문을 다시 확인하고 있어요.';
+        const updated=await fetch(`/api/route/journeys/${encodeURIComponent(id)}`,{signal:active.signal,cache:'no-store'});
+        if(!updated.ok)throw Error('latest order unavailable');
+        const newer=await updated.json();
+        if(ticket!==serial)return;
+        if(newer.id!==id||!Number.isSafeInteger(newer.version)||newer.version<result.journey_version||state?.id!==id)throw Error('latest order identity not confirmed');
+        state=newer;render();return;
+      }
+      if(!acceptsEvidence(result,current))throw Error('evidence revision not confirmed');
       last=result;paint(result);
     }catch(error){
       if(ticket===serial){last=null;paint(null);}
