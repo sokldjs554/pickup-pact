@@ -93,7 +93,7 @@ def capture(base: str, expected: str, output: Path) -> dict:
             after=get('/health');assert after['release_commit']==expected
             report={'base_url':base,'recorded_release_commit':expected,'health_before':before,'health_after':after,
                 'recording_scope':'public' if base.startswith('https://pickup-pact-demo.onrender.com') else 'ci_local_http',
-                'runtime':runtime,'browser':browser.version,'source_video':str(Path(video.path()).relative_to(output)),
+                'runtime':runtime,'browser':browser.version,'source_video':str(Path(video.path()).resolve().relative_to(output.resolve())),
                 'scenes':scenes,'same_order':True,'refusal_preserved_order_and_benefits':True,
                 'recovery_without_manual_command':True,'order_id':oid,'cash_due':3200,'capture_count':1,
                 'points_spent':1000,'points_earned':32,'page_errors':errors,'requests':requests,
