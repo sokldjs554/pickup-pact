@@ -1,0 +1,323 @@
+{
+  "base_url": "http://127.0.0.1:10000",
+  "recorded_release_commit": "c048868fc2fd808952a66946525eb29c2bcbcfa7",
+  "health_before": {
+    "status": "ok",
+    "service": "pickup-pact-demo",
+    "engine": "services/reconciler/app/engine.py",
+    "release_commit": "c048868fc2fd808952a66946525eb29c2bcbcfa7"
+  },
+  "health_after": {
+    "status": "ok",
+    "service": "pickup-pact-demo",
+    "engine": "services/reconciler/app/engine.py",
+    "release_commit": "c048868fc2fd808952a66946525eb29c2bcbcfa7"
+  },
+  "recording_scope": "ci_local_http",
+  "runtime": {
+    "mode": "synthetic",
+    "merchant_transport": "http",
+    "automatic_recovery": true,
+    "predecision_timeout_seconds": 45.0,
+    "retry_limit": 8,
+    "scope": "single_host_independent_process_and_store_databases"
+  },
+  "browser": "153.0.8010.12",
+  "source_video": "raw/page@7f2bc04b263e6390ad7b3020974af465.webm",
+  "scenes": [
+    {
+      "name": "01-home",
+      "caption": "설정 없이 시작 · 실제 서버를 사용하는 주문 체험",
+      "start": 0.7089046739999958,
+      "duration": 4.00275809499999
+    },
+    {
+      "name": "02-order",
+      "caption": "500원 쿠폰과 1,000P로 주문 · 주문 번호는 서버에 저장",
+      "start": 4.7727916570000275,
+      "duration": 3.9999508749999677
+    },
+    {
+      "name": "03-consent",
+      "caption": "금액과 변경 조건을 직접 확인 · 동의 전에는 옮기지 않아요",
+      "start": 9.117297638000025,
+      "duration": 5.002671598999996
+    },
+    {
+      "name": "04-rejected",
+      "caption": "새 매장이 거절해도 원래 주문·쿠폰·포인트는 그대로",
+      "start": 14.234407847,
+      "duration": 6.002625518000002
+    },
+    {
+      "name": "05-automatic-recovery",
+      "caption": "응답만 끊긴 상황 · 다시 누르지 않아도 서버가 자동 확인",
+      "start": 20.411689905999992,
+      "duration": 7.002620304000004
+    },
+    {
+      "name": "06-recovered",
+      "caption": "같은 주문 번호로 새 매장에 연결 · 중복 결제 없이 이어가요",
+      "start": 27.50156235100002,
+      "duration": 4.000038229999973
+    },
+    {
+      "name": "07-merchant",
+      "caption": "체험 시간을 앞당겨 제조 · 실제 대기 시간 측정은 아니에요",
+      "start": 31.557957887999976,
+      "duration": 5.00181395900006
+    },
+    {
+      "name": "08-receipt",
+      "caption": "수령 후 3,200원 모의 결제 1건 · 1,000P 사용·32P 적립",
+      "start": 36.61278806599995,
+      "duration": 6.002136133000022
+    }
+  ],
+  "same_order": true,
+  "refusal_preserved_order_and_benefits": true,
+  "recovery_without_manual_command": true,
+  "order_id": "PCT-7A4E916500",
+  "cash_due": 3200,
+  "capture_count": 1,
+  "points_spent": 1000,
+  "points_earned": 32,
+  "page_errors": [],
+  "requests": [
+    {
+      "url": "http://127.0.0.1:10000/",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "url": "http://127.0.0.1:10000/route-assets/product.css",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "url": "http://127.0.0.1:10000/route-assets/benefits.css",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "url": "http://127.0.0.1:10000/route-assets/product.js",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "url": "http://127.0.0.1:10000/route-assets/benefits-ui.js",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "url": "http://127.0.0.1:10000/route-assets/handoff.css",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "url": "http://127.0.0.1:10000/route-assets/selection-state.js",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "url": "http://127.0.0.1:10000/route-assets/handoff-ui.js",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "url": "http://127.0.0.1:10000/route-assets/recovery-ui.js",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "url": "http://127.0.0.1:10000/route-assets/agreement-ui.js",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "url": "http://127.0.0.1:10000/route-assets/guide.css",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "url": "http://127.0.0.1:10000/route-assets/guide-flow.js",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "url": "http://127.0.0.1:10000/api/route/catalog",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "url": "http://127.0.0.1:10000/api/route/journeys",
+      "method": "POST",
+      "body": {
+        "destination": "office",
+        "deadline_minutes": 16,
+        "drink": "latte",
+        "milk": "regular",
+        "decaf": false,
+        "budget": 5500,
+        "max_detour": 5,
+        "priority": "arrival",
+        "coupon_id": "welcome500",
+        "points": 1000
+      }
+    },
+    {
+      "url": "http://127.0.0.1:10000/api/route/journeys/302be2edfbcc4e2e9ec46016822e29ea/commands",
+      "method": "POST",
+      "body": {
+        "action": "reserve",
+        "expected_version": 1,
+        "request_id": "a8c63be2a8414a14a9a4d083e69732b1",
+        "quote_id": "9b2587e5880bcde373bc22995bb5787a"
+      }
+    },
+    {
+      "url": "http://127.0.0.1:10000/api/route/journeys/302be2edfbcc4e2e9ec46016822e29ea/commands",
+      "method": "POST",
+      "body": {
+        "action": "disrupt",
+        "expected_version": 4,
+        "request_id": "72b467431ddd4ed5a9e5440fbf3a4438",
+        "store_id": "wave",
+        "minutes": 12
+      }
+    },
+    {
+      "url": "http://127.0.0.1:10000/api/route/journeys/302be2edfbcc4e2e9ec46016822e29ea/transfer-controls",
+      "method": "POST",
+      "body": {
+        "action": "fault",
+        "fault": "target_reject",
+        "expected_version": 5,
+        "request_id": "2fa786193b55492393ff0315c47bf77c"
+      }
+    },
+    {
+      "url": "http://127.0.0.1:10000/api/route/journeys/302be2edfbcc4e2e9ec46016822e29ea/commands",
+      "method": "POST",
+      "body": {
+        "action": "transfer",
+        "expected_version": 6,
+        "request_id": "5deed1c150784293a75fde5a0caaa3e2",
+        "quote_id": "945001b8502d15652af4dd7d30d3fe7b"
+      }
+    },
+    {
+      "url": "http://127.0.0.1:10000/api/route/journeys/302be2edfbcc4e2e9ec46016822e29ea",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "url": "http://127.0.0.1:10000/api/route/journeys/302be2edfbcc4e2e9ec46016822e29ea/transfer-controls",
+      "method": "POST",
+      "body": {
+        "action": "fault",
+        "fault": "after_target_hold",
+        "expected_version": 11,
+        "request_id": "465a93b1f7d24ea596f7677de6eefe0f"
+      }
+    },
+    {
+      "url": "http://127.0.0.1:10000/api/route/journeys/302be2edfbcc4e2e9ec46016822e29ea/commands",
+      "method": "POST",
+      "body": {
+        "action": "transfer",
+        "expected_version": 12,
+        "request_id": "334639e8dc45489992390b5561aecdd9",
+        "quote_id": "b867f02fcd703c969cf0c29dbf3cb6c3"
+      }
+    },
+    {
+      "url": "http://127.0.0.1:10000/api/route/journeys/302be2edfbcc4e2e9ec46016822e29ea",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "url": "http://127.0.0.1:10000/api/route/journeys/302be2edfbcc4e2e9ec46016822e29ea",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "url": "http://127.0.0.1:10000/api/route/journeys/302be2edfbcc4e2e9ec46016822e29ea",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "url": "http://127.0.0.1:10000/api/route/journeys/302be2edfbcc4e2e9ec46016822e29ea",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "url": "http://127.0.0.1:10000/api/route/journeys/302be2edfbcc4e2e9ec46016822e29ea",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "url": "http://127.0.0.1:10000/api/route/journeys/302be2edfbcc4e2e9ec46016822e29ea/commands",
+      "method": "POST",
+      "body": {
+        "action": "advance",
+        "expected_version": 20,
+        "request_id": "d23ab3c77540449b9ead0ba1e19de3c7",
+        "minutes": 2
+      }
+    },
+    {
+      "url": "http://127.0.0.1:10000/api/route/journeys/302be2edfbcc4e2e9ec46016822e29ea/commands",
+      "method": "POST",
+      "body": {
+        "action": "start",
+        "expected_version": 21,
+        "request_id": "2a9b92299b914d8698ad1fc77cf700f8"
+      }
+    },
+    {
+      "url": "http://127.0.0.1:10000/api/route/journeys/302be2edfbcc4e2e9ec46016822e29ea/commands",
+      "method": "POST",
+      "body": {
+        "action": "advance",
+        "expected_version": 24,
+        "request_id": "e877609f28594772b935f75f3563b35e",
+        "minutes": 5
+      }
+    },
+    {
+      "url": "http://127.0.0.1:10000/api/route/journeys/302be2edfbcc4e2e9ec46016822e29ea/commands",
+      "method": "POST",
+      "body": {
+        "action": "ready",
+        "expected_version": 25,
+        "request_id": "dfed528087664369ab38d4a249170d99"
+      }
+    },
+    {
+      "url": "http://127.0.0.1:10000/api/route/journeys/302be2edfbcc4e2e9ec46016822e29ea/commands",
+      "method": "POST",
+      "body": {
+        "action": "claim",
+        "expected_version": 28,
+        "request_id": "c453f62813624c229bd37d3a990fd81c",
+        "pickup_code": "261551"
+      }
+    }
+  ],
+  "editing": "Original Chromium pixels; normal-speed scene cuts and caption padding only. Virtual clock advances are explicit.",
+  "edited_duration_seconds": 41.12,
+  "media_sha256": {
+    "07-merchant.png": "f495fa5da485065e8344995645140a66b8a16fbaa69211310a54e1a373c6437f",
+    "05-automatic-recovery.png": "898f6ef50911893ddf5277ab27ac05e458be0e180ee89052b65c54e3a3a33257",
+    "04-rejected.png": "79e505cb980e15b84a5286a8ee602b0e9d6c4db525dcc0c4f84b043f73e695d8",
+    "06-recovered.png": "ebfd54671f7d7d8615739a5e46594c8f07b616cea697131a7da95ba91b392df3",
+    "01-home.png": "700dd1ae117173f103fcda7e02b6c169f80698a8b3a93428972b059d07cdf783",
+    "03-consent.png": "7583702481fd619de20e0280912c889a7472c708a8972d16759d968b6c97e84a",
+    "pickup-pact-guided.gif": "fb4dfcabe19199087044c0782c883f95152ec79f435e9054bd790f506dbbc2a6",
+    "05-pending.png": "ff18c47ac669eb71a52f58aed77be438238834f94ae4e94f05274f77866aa0b6",
+    "08-receipt.png": "33ee77ed3d13ce9babf69751cabc1b2abc5e09e95849a034bf8c5a4caadaf886",
+    "02-order.png": "74ce1069dc6143312861bd8134beb368b45ab8eb8e8509f8c63076b98dea03eb",
+    "pickup-pact-guided.mp4": "8b921ff87de8a1c0737c648a78a42f7e18928f9f8b14dcdacc8e9fc46750265a"
+  }
+}

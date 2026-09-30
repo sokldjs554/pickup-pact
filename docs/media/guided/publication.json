@@ -1,0 +1,22 @@
+{
+  "artifact_id": 11081832755,
+  "run_id": 36681288764,
+  "artifact_sha256": "6ffe17428a977946e242bf8ca86a14a8eb3c788be18a4b4e5b605e24237ae3a0",
+  "recorded_commit": "c048868fc2fd808952a66946525eb29c2bcbcfa7",
+  "feature_commit": "2fc77ae08247554957343e04f49db798d46867df",
+  "scope": "CI actual HTTP server, not public Render deployment",
+  "files": {
+    "mobile-recovered.png": "ab298215dfa638249a123e50836357b4a3c1910bee4503b3c545a737ffe7ac8a",
+    "mobile-home.png": "aabadb39fae2ef6ee72816fcb656a9a2c4826982eab31bb3062086b85e73b193",
+    "04-rejected.png": "79e505cb980e15b84a5286a8ee602b0e9d6c4db525dcc0c4f84b043f73e695d8",
+    "06-recovered.png": "ebfd54671f7d7d8615739a5e46594c8f07b616cea697131a7da95ba91b392df3",
+    "01-home.png": "700dd1ae117173f103fcda7e02b6c169f80698a8b3a93428972b059d07cdf783",
+    "capture.json": "b18724f965746f13be322cc3230253dd3906c7c0e189588ba03748bf0f2438f7",
+    "pickup-pact-guided.gif": "fb4dfcabe19199087044c0782c883f95152ec79f435e9054bd790f506dbbc2a6",
+    "05-pending.png": "ff18c47ac669eb71a52f58aed77be438238834f94ae4e94f05274f77866aa0b6",
+    "08-receipt.png": "33ee77ed3d13ce9babf69751cabc1b2abc5e09e95849a034bf8c5a4caadaf886",
+    "browser-results.json": "06a60de64bfcf172de32b651465dbd12ddac6c068336ed00646d206e126f182f",
+    "pickup-pact-guided.mp4": "8b921ff87de8a1c0737c648a78a42f7e18928f9f8b14dcdacc8e9fc46750265a",
+    "raw/page@7f2bc04b263e6390ad7b3020974af465.webm": "cccba6888b1c4842883755a30fa66b5f7ffade925e07a848e9f5782fdbc6a9ae"
+  }
+}

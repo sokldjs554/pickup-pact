@@ -1,0 +1,74 @@
+[
+  {
+    "repetition": 1,
+    "viewport": "desktop",
+    "result": "passed",
+    "order_id": "PCT-F20DA14DC0",
+    "capture_count": 1,
+    "paid": 3200,
+    "recovery_without_page": true,
+    "manual_recover_requests": 0,
+    "release_commit": "c048868fc2fd808952a66946525eb29c2bcbcfa7",
+    "base_url": "http://127.0.0.1:10000"
+  },
+  {
+    "repetition": 1,
+    "viewport": "mobile",
+    "result": "passed",
+    "order_id": "PCT-E78E10E30B",
+    "capture_count": 1,
+    "paid": 3200,
+    "recovery_without_page": true,
+    "manual_recover_requests": 0,
+    "release_commit": "c048868fc2fd808952a66946525eb29c2bcbcfa7",
+    "base_url": "http://127.0.0.1:10000"
+  },
+  {
+    "repetition": 2,
+    "viewport": "desktop",
+    "result": "passed",
+    "order_id": "PCT-91B09C738E",
+    "capture_count": 1,
+    "paid": 3200,
+    "recovery_without_page": true,
+    "manual_recover_requests": 0,
+    "release_commit": "c048868fc2fd808952a66946525eb29c2bcbcfa7",
+    "base_url": "http://127.0.0.1:10000"
+  },
+  {
+    "repetition": 2,
+    "viewport": "mobile",
+    "result": "passed",
+    "order_id": "PCT-AE1C0F8938",
+    "capture_count": 1,
+    "paid": 3200,
+    "recovery_without_page": true,
+    "manual_recover_requests": 0,
+    "release_commit": "c048868fc2fd808952a66946525eb29c2bcbcfa7",
+    "base_url": "http://127.0.0.1:10000"
+  },
+  {
+    "repetition": 3,
+    "viewport": "desktop",
+    "result": "passed",
+    "order_id": "PCT-EF48F1B868",
+    "capture_count": 1,
+    "paid": 3200,
+    "recovery_without_page": true,
+    "manual_recover_requests": 0,
+    "release_commit": "c048868fc2fd808952a66946525eb29c2bcbcfa7",
+    "base_url": "http://127.0.0.1:10000"
+  },
+  {
+    "repetition": 3,
+    "viewport": "mobile",
+    "result": "passed",
+    "order_id": "PCT-8FC4F2D495",
+    "capture_count": 1,
+    "paid": 3200,
+    "recovery_without_page": true,
+    "manual_recover_requests": 0,
+    "release_commit": "c048868fc2fd808952a66946525eb29c2bcbcfa7",
+    "base_url": "http://127.0.0.1:10000"
+  }
+]

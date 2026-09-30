@@ -16,36 +16,38 @@
 - **새 자리 확보 후 재주문**도 비교합니다. 같은 안전 절차이면 주문 보존은 동률이고, 주문 번호와 재승인 기록이 다릅니다. 이 기준은 같은 내구성 엔진을 사용하며 경쟁사 코드를 재현한 것이 아닙니다.
 - 주문·지갑·견적·이관·비교·영수증 응답 모델을 구체화하고, 아직 적용하지 않은 선택은 화면 갱신에도 유지합니다.
 
-**아래 39.72초 영상은 이전 앱의 자동 복구 녹화입니다.** 이번 참여 규칙·네 정책 비교·새 첫 화면을 촬영한 영상으로 간주하지 마세요. 새 화면은 해당 commit의 `route-product` / `decision-browser` 실제 브라우저 캡처와 결과로 확인합니다. 지원 문서는 이 변경을 사용자에게 제시한 뒤 작성합니다.
+## 새 첫 화면과 41초 체험 영상
 
-## 데모 영상과 실제 화면
+**[41.12초 새 체험 영상](docs/media/guided/pickup-pact-guided.mp4)** · [촬영 원본·장면·검증 기록](docs/media/guided/capture.json) · [이번 변경의 검증 범위](docs/guided-demo-verification-2026-09-30.md)
 
-[![거절·응답 끊김에도 같은 주문을 이어가는 공개 데모](docs/media/pickup-pact-preview.gif)](https://github.com/sokldjs554/pickup-pact/raw/refs/heads/main/docs/media/pickup-pact-demo.mp4)
+[![설정 없이 시작하는 주문 보존 체험](docs/media/guided/pickup-pact-guided.gif)](docs/media/guided/pickup-pact-guided.mp4)
 
-**[약 40초 데모 영상](https://github.com/sokldjs554/pickup-pact/raw/refs/heads/main/docs/media/pickup-pact-demo.mp4)** · [촬영 원본·편집 기록](docs/media/capture.json)
+첫 화면에서 **이 조건으로 체험 시작**을 누르면 웨이브 라떼 1잔에 500원 쿠폰과 1,000P를 적용합니다. 다음 행동은 한 번에 하나씩 안내합니다.
 
-쿠폰·1,000P 주문 → 새 매장 거절과 원래 주문 보존 → 수락 뒤 응답 끊김 → 다시 누르지 않아도 자동 복구 → 같은 주문의 수령·영수증 → 취소 후 재주문과 비교.
+**주문 → 매장 혼잡 → 새 매장 거절 → 응답 끊김 → 서버 자동 확인 → 수령·영수증**
 
-자동 복구와 매장 HTTP 통신이 켜진 공개 앱 `000a106cc5fda6a3be595a83f938087096c3ad63`를 실제 Chromium에서 촬영했습니다. 녹화 전후 `/health`가 일치하고 수동 `recover` 명령 없이 같은 주문이 복구됐습니다. 장면은 정상 속도이며, 장면 사이 대기와 가상 제조 시계 조작 일부만 생략했습니다. 최종 길이는 **39.72초**입니다. 자막은 원본 영상 시점에 맞춰 검토했고, 앱 화면이나 주문 결과를 편집으로 바꾸지 않았습니다.
+금액이 2,800원에서 3,200원으로 바뀌는 이유와 변경 조건은 확인창에서 직접 동의합니다. 시간·음료·예산·혜택을 따로 고르는 기존 설정도 **내 조건으로 고르기**에서 사용할 수 있습니다.
 
-**가상 매장·모의 결제입니다.** 실제 가맹점 장애를 일으키거나 카드 결제를 한 영상이 아닙니다. 이후 미디어 반영 커밋은 앱 코드가 같은지 따로 확인합니다.
+**이 영상은 CI의 실제 HTTP 서버에서 녹화했습니다. 공개 Render 서버의 새 버전 배포를 증명하는 영상은 아닙니다.** 주문·매장별 독립 DB와 자동 복구 작업자를 사용했으며, 서버 응답을 가짜 성공으로 바꾸거나 화면 속 주문·금액을 편집하지 않았습니다. 장면은 정상 속도이고 장면 사이 대기만 덜었습니다. 제조는 화면에 표시한 체험 시계를 앞당겼습니다. 가상 매장·모의 결제이며 실제 카드 결제는 없습니다.
 
-| 새 매장 거절 | 응답 확인 중 | 자동 복구 후 같은 주문 |
+| 쉬운 첫 화면 | 거절 후 주문 보존 | 서버 자동 확인 후 복구 |
 |---|---|---|
-| ![원래 주문·혜택 보존](docs/media/03-refused.png) | ![서버가 자동 재확인](docs/media/04-pending.png) | ![같은 주문으로 변경 완료](docs/media/05-recovered.png) |
+| ![빠른 시작과 접힌 상세 설정](docs/media/guided/01-home.png) | ![원래 주문과 혜택 유지](docs/media/guided/04-rejected.png) | ![같은 주문으로 새 매장 연결](docs/media/guided/06-recovered.png) |
 
 <details>
-<summary>주문·영수증·비교와 모바일 화면</summary>
+<summary>모바일 첫 화면·복구 화면과 수령 영수증</summary>
 
-![주문 화면](docs/media/01-home.png)
-![수령 영수증](docs/media/08-receipt.png)
-![세 가지 방식 비교](docs/media/09-comparison.png)
+<img src="docs/media/guided/mobile-home.png" alt="모바일 빠른 시작" width="280"> <img src="docs/media/guided/mobile-recovered.png" alt="모바일 서버 복구 후 주문" width="280">
 
-<img src="docs/media/mobile-pending.png" alt="모바일 자동 확인 중" width="280"> <img src="docs/media/mobile-recovered.png" alt="모바일 복구 후 주문" width="280">
+![수령 후 한 번만 기록된 모의 결제](docs/media/guided/08-receipt.png)
 
 </details>
 
+**공개 반영 상태:** 이 가이드의 공개 배포와 동일 SHA 검증은 아직 완료로 표시하지 않습니다. 기존 39.72초 영상은 [이전 녹화](docs/media/pickup-pact-demo.mp4)로 보존하며 새 화면의 영상과 구분합니다.
+
 ## 고객이 직접 해보는 흐름
+
+빠른 체험은 첫 화면의 시작 버튼과 상단 안내를 따라갑니다. 아래는 상세 조건을 직접 고르는 방법입니다.
 
 1. 목적지·도착 마감·음료 옵션·할인 후 결제 한도·허용 우회를 정합니다. 거리뿐 아니라 제조 대기와 목적지까지의 이동을 함께 계산합니다.
 2. 주문한 매장을 혼잡하게 만든 뒤 다른 매장을 선택합니다. 음료 조건과 주문 번호는 유지하지만, 메뉴 가격과 쿠폰 조건이 달라지면 차액을 확인하고 동의해야 합니다.
