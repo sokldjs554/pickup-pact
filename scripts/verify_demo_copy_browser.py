@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 from urllib.request import urlopen
 
+from route_browser_helpers import reveal_manual_choices
 from playwright.sync_api import expect, sync_playwright
 
 
@@ -36,8 +37,10 @@ def verify(base, output, repeat=3, expected_commit=None, ops_url=None):
                 expect(page.locator('nav [data-view=customer]')).to_have_text('내 주문')
                 expect(page.locator('#map circle')).not_to_have_count(0)
                 screen('home')
+                reveal_manual_choices(page)
                 page.locator('#budget').select_option('3000')
                 page.locator('#oat').check()
+                reveal_manual_choices(page)
                 page.locator('#findRoutes').click()
                 expect(page.locator('#routeArea .empty-state')).to_be_visible()
                 expect(page.locator('#routeArea')).to_contain_text('도착 시간이나 결제 한도')
@@ -48,8 +51,11 @@ def verify(base, output, repeat=3, expected_commit=None, ops_url=None):
                 expect(page.locator('#receiptContent')).to_contain_text('아직 영수증이 없어요.')
                 page.locator('#reset').click()
                 page.wait_for_load_state('networkidle')
+                reveal_manual_choices(page)
                 page.locator('#coupon').select_option('wave1000')
+                reveal_manual_choices(page)
                 page.locator('#points').fill('1000')
+                reveal_manual_choices(page)
                 page.locator('#findRoutes').click()
                 wave = page.locator('.route-card[data-hover=wave]')
                 expect(wave).to_contain_text('2,300원')

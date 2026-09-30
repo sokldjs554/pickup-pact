@@ -155,6 +155,6 @@ def create_router():
     def product(): return FileResponse(HERE/'index.html',media_type='text/html',headers={'Cache-Control':'no-store'})
     @router.get('/route-assets/{asset}',include_in_schema=False)
     def asset_file(asset:str):
-        if asset not in {'product.css','product.js','benefits.css','benefits-ui.js','handoff.css','handoff-ui.js','recovery-ui.js','agreement-ui.js','selection-state.js'}: raise HTTPException(404)
+        if asset not in {'product.css','product.js','benefits.css','benefits-ui.js','handoff.css','handoff-ui.js','recovery-ui.js','agreement-ui.js','selection-state.js','guide-flow.js','guide.css'}: raise HTTPException(404)
         return FileResponse(HERE/asset,headers={'Cache-Control':'no-cache','X-Content-Type-Options':'nosniff'})
     return router

@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import time
 from urllib.request import urlopen
+from route_browser_helpers import reveal_manual_choices
 from playwright.sync_api import sync_playwright, expect
 
 
@@ -35,6 +36,7 @@ def verify(base,output,repeat,expected_commit=None):
                 expect(page.locator('h1').first).to_contain_text('매장 변경이 막혀도')
                 expect(page.locator('#map circle')).not_to_have_count(0)
                 if run==1: page.screenshot(path=str(output/f'{mode}-01-home.png'),full_page=True)
+                reveal_manual_choices(page)
                 page.locator('#findRoutes').click()
                 expect(page.locator('.route-card')).to_have_count(2)
                 expect(page.locator('#routeArea')).to_contain_text('약속 시간까지')
