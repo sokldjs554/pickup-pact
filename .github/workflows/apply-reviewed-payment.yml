@@ -1,0 +1,31 @@
+name: apply-reviewed-payment
+on:
+  push:
+    branches: [feat/merchant-payment-20260930]
+    paths: ['.review/**', '.github/workflows/apply-reviewed-payment.yml']
+permissions:
+  contents: write
+concurrency:
+  group: apply-reviewed-payment-20260930
+  cancel-in-progress: false
+jobs:
+  exact-source-only:
+    if: github.ref == 'refs/heads/feat/merchant-payment-20260930'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/merchant-payment-20260930
+          fetch-depth: 0
+      - name: Check exact reviewed diff and original source
+        run: |
+          set -euo pipefail
+          test "$(git branch --show-current)" = feat/merchant-payment-20260930
+          git merge-base --is-ancestor edbb52e3bd778f884e90bdade1e90456335e249d HEAD
+          python .review/apply_payment.py
+          git rm -r .review
+          git diff --cached --check
+          test -z "$(git diff --cached --name-only -- .github)"
+          git -c user.name=github-actions\[bot\] -c user.email=41898282+github-actions\[bot\]@users.noreply.github.com commit -m 'feat: 독립 가상 결제와 주문·가맹점 복구 및 원본 대조'
+          git push origin HEAD:refs/heads/feat/merchant-payment-20260930

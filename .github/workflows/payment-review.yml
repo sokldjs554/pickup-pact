@@ -1,0 +1,64 @@
+name: payment-review
+on:
+  pull_request:
+    paths: ['demo/**', 'tests/**', 'scripts/**', 'contracts/**', '.github/workflows/payment-review.yml']
+  push:
+    branches: [main]
+    paths: ['demo/**', 'tests/**', 'scripts/**', 'contracts/**', '.github/workflows/payment-review.yml']
+permissions:
+  contents: read
+jobs:
+  independent-payment-and-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PYTHONPATH: .:services/reconciler
+      ROUTE_DB: /tmp/pickup-payment-review.sqlite
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install actual server and browser dependencies
+        run: |
+          python -m pip install -r requirements-workbench.txt -r services/ops-console/requirements.txt playwright
+          python -m playwright install --with-deps chromium
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg fonts-noto-cjk
+      - name: Repeat full Python application suite three times
+        run: |
+          set -euo pipefail
+          mkdir -p verification/payment-review
+          for pass in 1 2 3; do
+            python -m pytest -q tests/route services/reconciler/tests demo/test_demo.py demo/test_repair_integration.py services/ops-console/tests | tee verification/payment-review/tests-$pass.log
+          done
+      - name: Existing and new browser state boundaries
+        run: |
+          set -euo pipefail
+          for file in scripts/verify_*.cjs; do node "$file"; done
+          python scripts/verify_repo.py
+      - name: Start actual order, merchant, PG and recovery processes
+        run: |
+          echo "RENDER_GIT_COMMIT=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+          RENDER_GIT_COMMIT=$(git rev-parse HEAD) uvicorn demo.main:app --host 127.0.0.1 --port 10000 > verification/payment-review/server.log 2>&1 &
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:10000/health; then exit 0; fi
+            sleep 1
+          done
+          exit 1
+      - name: Guided integrated payment and reconciliation desktop/mobile three times
+        run: python scripts/verify_payment_browser.py --repeat 3 --expected-commit "$RENDER_GIT_COMMIT" --output verification/payment-review/browser
+      - name: Record new payment flow from actual HTTP app
+        run: python scripts/capture_payment_demo.py --expected-commit "$RENDER_GIT_COMMIT" --output verification/payment-review/media
+      - name: Preserve tested source and every result including failures
+        if: always()
+        run: |
+          mkdir -p verification/payment-review
+          git rev-parse HEAD > verification/payment-review/tested-commit.txt
+          git archive --format=zip --output=verification/payment-review/tested-source.zip HEAD
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: payment-review-evidence
+          path: verification/payment-review
+          retention-days: 30
