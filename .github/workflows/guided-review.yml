@@ -1,0 +1,86 @@
+name: guided-review
+on:
+  push:
+    branches: [feat/guided-demo-20260930]
+    paths: ['.review/**', '.github/workflows/guided-review.yml']
+permissions:
+  contents: write
+concurrency:
+  group: guided-review-20260930
+  cancel-in-progress: false
+jobs:
+  reviewed-source-and-browser:
+    if: github.ref == 'refs/heads/feat/guided-demo-20260930'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      PYTHONPATH: .:services/reconciler
+      ROUTE_DB: /tmp/pickup-guided-review.sqlite
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/guided-demo-20260930
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Apply exactly reviewed presentation diff on feature branch only
+        run: |
+          set -euo pipefail
+          test "$(git branch --show-current)" = feat/guided-demo-20260930
+          git merge-base --is-ancestor 2e80bd73b15ead521011424d778d00b5540bf08e HEAD
+          if test -f .review/apply_guided.py; then
+            python .review/apply_guided.py
+            git rm -r .review .github/workflows/guided-review.yml
+            git add demo/route/api.py demo/route/index.html demo/route/product.js scripts/verify_*browser.py .github/workflows/route-product.yml
+            git diff --cached --check
+            git -c user.name=github-actions\[bot\] -c user.email=41898282+github-actions\[bot\]@users.noreply.github.com commit -m 'feat: 기존 서버 복구를 사용하는 쉬운 주문 체험'
+            git push origin HEAD:refs/heads/feat/guided-demo-20260930
+          fi
+          echo "RENDER_GIT_COMMIT=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+      - name: Install actual application and browser dependencies
+        run: |
+          python -m pip install -r requirements-workbench.txt -r services/ops-console/requirements.txt playwright
+          python -m playwright install --with-deps chromium
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg fonts-noto-cjk
+      - name: Repeat Python boundaries without weakening assertions
+        run: |
+          set -euo pipefail
+          mkdir -p verification/guided-review
+          for pass in 1 2 3; do
+            python -m pytest -q tests/route services/reconciler/tests demo/test_demo.py demo/test_repair_integration.py services/ops-console/tests | tee verification/guided-review/tests-$pass.log
+          done
+      - name: Existing and new browser-state regression tests
+        run: |
+          set -euo pipefail
+          for test in guided_stage bootstrap_order recovery_ui handoff_labels comparison_ui operation_notice selection_state copy_labels; do
+            node "scripts/verify_$test.cjs"
+          done
+          python scripts/verify_repo.py
+      - name: Start the real HTTP product and independent merchants
+        run: |
+          mkdir -p verification/guided-review
+          uvicorn demo.main:app --host 127.0.0.1 --port 10000 > verification/guided-review/server.log 2>&1 &
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:10000/health; then exit 0; fi
+            sleep 1
+          done
+          exit 1
+      - name: Guided entry and page-closed server recovery repeated
+        run: python scripts/verify_guided_browser.py --repeat 3 --expected-commit "$RENDER_GIT_COMMIT" --output verification/guided-review/browser
+      - name: Record the new screen on the actual CI HTTP server
+        run: python scripts/capture_guided_demo.py --expected-commit "$RENDER_GIT_COMMIT" --output verification/guided-review/media
+      - name: Preserve exact source identity, including failures
+        if: always()
+        run: |
+          mkdir -p verification/guided-review
+          git rev-parse HEAD > verification/guided-review/tested-commit.txt
+          git archive --format=zip --output=verification/guided-review/tested-source.zip HEAD
+          sha256sum verification/guided-review/tested-source.zip > verification/guided-review/tested-source.sha256
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: guided-review-evidence
+          path: verification/guided-review
+          retention-days: 30
