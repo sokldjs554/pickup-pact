@@ -54,9 +54,14 @@ def capture(base: str, expected: str, output: Path) -> dict:
             with scene('01-home','설정 없이 시작 · 실제 서버를 사용하는 주문 체험',4):
                 expect(page.locator('#coupon')).not_to_be_visible()
             with scene('02-order','승인이 저장된 뒤 응답이 끊겨도 · 같은 승인 번호로 재확인',4):
-                page.locator('#quickStart').click(); stage('busy'); idle()
-                page.locator('#guidePanel').scroll_into_view_if_needed()
+                page.locator('#quickStart').click(); stage('waiting')
+                approval_pending=state()
+                assert approval_pending['order'] is None and approval_pending['pending_order_id']
+                assert approval_pending['payment']['state']=='CONFIRMING_APPROVAL'
+                page.locator('#guidePanel').scroll_into_view_if_needed();shot('02-approval-unknown')
+                stage('busy'); idle()
             original=state();oid=original['order']['id']
+            assert oid==approval_pending['pending_order_id']
             assert original['order']['price']==2800 and original['wallet']['held_points']==1000
             page.locator('#guideAction').click();stage('reject');idle()
             page.locator('#guideAction').click();expect(page.locator('#confirmDialog')).to_be_visible()
@@ -77,9 +82,15 @@ def capture(base: str, expected: str, output: Path) -> dict:
             assert recovered['order']['id']==oid and recovered['order']['store_id']=='oat'
             with scene('06-recovered','같은 주문 번호로 새 매장에 연결 · 중복 결제 없이 이어가요',4):
                 page.locator('#guidePanel').scroll_into_view_if_needed()
-            with scene('07-merchant','체험 시간을 앞당겨 제조 · 실제 대기 시간 측정은 아니에요',5):
+            with scene('07-merchant','두 매장 원본을 확인 · 이전 자리는 해제, 새 매장만 제조',5):
                 page.locator('#guideAction').click();stage('ready');idle()
-                page.locator('#guideAction').click();stage('claim');idle()
+                expect(page.locator('#merchantTerminals [data-shop=oat]')).to_contain_text('제조 중')
+                expect(page.locator('#merchantTerminals [data-shop=wave]')).to_contain_text('이전 매장 자리 해제')
+                page.locator('#merchantTerminals').scroll_into_view_if_needed()
+                merchant_proof=get('/api/route/journeys/'+original['id']+'/reconciliation')
+                assert merchant_proof['merchants']['oat']['reservation']['phase']=='PREPARING'
+                assert merchant_proof['merchants']['wave']['reservation']['phase']=='RELEASED'
+            page.locator('#guideAction').click();stage('claim');idle()
             with scene('08-receipt','주문·매장·결제·혜택 원본 대조 · 3,200원 청구 1건',6):
                 page.locator('#guideAction').click();stage('receipt');idle()
                 page.locator('#guideAction').click();expect(page.locator('#receiptView')).to_be_visible()
@@ -90,6 +101,9 @@ def capture(base: str, expected: str, output: Path) -> dict:
             assert final['receipt']['net_paid']==3200 and final['wallet']['spent']==1000 and final['wallet']['earned']==32
             assert not any(r['body'] and r['body'].get('action')=='recover' for r in requests)
             assert not errors, errors
+            proof=get('/api/route/journeys/'+original['id']+'/reconciliation')
+            assert proof['status']=='MATCH' and proof['terminal'] and proof['order_id']==oid
+            assert proof['payment']['captured_krw']==3200 and proof['payment']['held_krw']==0
             video=page.video;context.close();assert video
             after=get('/health');assert after['release_commit']==expected
             report={'base_url':base,'recorded_release_commit':expected,'health_before':before,'health_after':after,
@@ -98,6 +112,8 @@ def capture(base: str, expected: str, output: Path) -> dict:
                 'scenes':scenes,'same_order':True,'refusal_preserved_order_and_benefits':True,
                 'recovery_without_manual_command':True,'order_id':oid,'cash_due':3200,'capture_count':1,
                 'points_spent':1000,'points_earned':32,'page_errors':errors,'requests':requests,
+                'approval_pending_order_id':approval_pending['pending_order_id'],
+                'merchant_terminal_evidence':merchant_proof,'final_reconciliation':proof,
                 'editing':'Original Chromium pixels; normal-speed scene cuts and caption padding only. Virtual clock advances are explicit.'}
             (output/'capture.json').write_text(json.dumps(report,ensure_ascii=False,indent=2))
             return report

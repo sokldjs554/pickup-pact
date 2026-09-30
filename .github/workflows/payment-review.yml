@@ -48,6 +48,8 @@ jobs:
           exit 1
       - name: Guided integrated payment and reconciliation desktop/mobile three times
         run: python scripts/verify_payment_browser.py --repeat 3 --expected-commit "$RENDER_GIT_COMMIT" --output verification/payment-review/browser
+      - name: Customer and merchant tabs race real start and cancel requests
+        run: python scripts/verify_payment_tabs.py --repeat 3 --expected-commit "$RENDER_GIT_COMMIT" --output verification/payment-review/tabs
       - name: Record new payment flow from actual HTTP app
         run: python scripts/capture_payment_demo.py --expected-commit "$RENDER_GIT_COMMIT" --output verification/payment-review/media
       - name: Preserve tested source and every result including failures

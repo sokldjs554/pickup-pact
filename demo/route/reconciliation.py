@@ -54,10 +54,21 @@ def reconcile(store,sid: str) -> dict:
         for item in result['checks'].values():item['detail']='저장된 작업이 아직 진행 중이에요. 일부 서버의 성공만으로 완료하지 않아요.'
         return finish('PENDING')
     if not order:
-        clean=p1['captured_krw']==0 and p1['held_krw']==0
-        for item in result['checks'].values():item.update(status='MATCH' if clean else 'MISMATCH',detail='확정 주문 없이 종료됐어요. 승인 보류와 청구 내역을 확인하세요.')
+        # Approval rejection cannot conceal a seat or a loyalty hold in another
+        # source. Each green check requires that source's own evidence.
+        wallet=benefits.wallet_view(s1)
+        merchant_ok=all(not v['reservation'] or v['reservation']['phase'] in {'CANCELLED','RELEASED','ABORTED'}
+                        for v in m1['merchants'].values())
+        payment_ok=p1['captured_krw']==0 and p1['capture_count']==0 and p1['held_krw']==0
+        benefits_ok=(wallet['held_points']==wallet['spent']==wallet['earned']==0 and wallet['held_coupon'] is None
+                     and wallet['used_coupons']==[] and wallet['balance']==benefits.INITIAL_POINTS)
+        values={'order':(True,'확정 주문 없이 종료됐어요.'),
+                'merchant':(merchant_ok,'남은 매장 예약과 수령 기록을 확인했어요.'),
+                'payment':(payment_ok,'승인 보류와 확정 청구 잔액을 확인했어요.'),
+                'benefits':(benefits_ok,'보류·사용된 쿠폰과 포인트를 확인했어요.')}
+        for k,(ok,detail) in values.items():result['checks'][k].update(status='MATCH' if ok else 'MISMATCH',detail=detail)
         result['terminal']=True
-        return finish('MATCH' if clean else 'MISMATCH')
+        return finish('MATCH' if all(ok for ok,_ in values.values()) else 'MISMATCH')
     state=order['state'];final=state in {'PICKED_UP','CANCELLED'};price=order['price']
     result['terminal']=final
     entries=m1['merchants'];rows=[(shop,v['reservation']) for shop,v in entries.items() if v['reservation']]
@@ -81,6 +92,9 @@ def reconcile(store,sid: str) -> dict:
     consumed=[e for e in s1['events'] if e['type']=='BENEFITS_CONSUMED']
     benefits_ok=(wallet['spent']==(used if state=='PICKED_UP' else 0) and wallet['earned']==(earned if state=='PICKED_UP' else 0)
                  and wallet['held_points']==(used if not final else 0) and len(consumed)==int(state=='PICKED_UP'))
+    benefits_ok &= (wallet['balance']==benefits.INITIAL_POINTS-wallet['spent']+wallet['earned']
+                    and wallet['held_coupon']==(pricing['coupon_id'] if not final else None)
+                    and wallet['used_coupons']==([pricing['coupon_id']] if state=='PICKED_UP' and pricing['coupon_id'] else []))
     if state=='PICKED_UP':benefits_ok &= p1['captured_krw']==price
     order_ok=s1.get('first_order_id')==oid
     outcomes={'order':(order_ok, '같은 주문 번호 '+oid if order_ok else '처음 주문과 번호가 달라요.'),
