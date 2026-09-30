@@ -1,0 +1,27 @@
+{
+  "artifact_id": 11094890834,
+  "run_id": 36711223851,
+  "artifact_sha256": "2bc1c7aecb4893dcb7c97827cc6f2aa13b34ade5217fced82186ec0821a65e16",
+  "recorded_commit": "878390efecfddd00e97f8243784e13c05b7b0000",
+  "feature_commit": "36db020cb57c2d1d2994fc1dc9890761e95f0200",
+  "scope": "CI actual HTTP application and independent PG/merchant processes; not public deployment",
+  "files": {
+    "tests-3.log": "ef5489644619dad9d2687a6d15aaded00727747de8b289f923db94ad6aa3b723",
+    "07-merchant.png": "639a236f7959b8596907c997c61cd8bce056bb619d9f61cc33d49ba4b3f8f50c",
+    "tests-1.log": "71822db58c8a5b9d46fad1075b88fcc021bcbd652bfdb7b8091c9436c41102d7",
+    "pickup-pact-payment.gif": "9db938e4281e011fc51d724c629e287f82a3165633dd63a63b12683ff621b2cc",
+    "pickup-pact-payment.mp4": "892e94144359ba1896024e8a847627fe93dc334045d3a6b0f134988e75530687",
+    "tabs-results.json": "c1eb73b5c1fa7ca21babf6f97517134744541499482a8c28a84ba2bf04bd6756",
+    "04-rejected.png": "a10b96f65ff59bde6dd55bb970235e02cab147fc1898d5f9452cffff3d73cdfa",
+    "06-recovered.png": "d1fedc0591ddd3609296e21ad69765c485db1547c79cd5bbf9ad644f2c304bf7",
+    "01-home.png": "0f1cc214c20a48d3e1d89b69fd17be357617383fce7c1295caeafbd87f46f0e4",
+    "tests-2.log": "d493ea6b798032c79376cbe4d13413f3c4694d9569c4ed3e28a855f4010161a7",
+    "capture.json": "12e400516dda46ac4ed264d5da846e07661a44e2dc7afad3b01ba013a3583423",
+    "02-approval-unknown.png": "03464bd4fecdb1f6e172f4051b67655aade76bd75e3c595cb688c10d7d0181b7",
+    "05-pending.png": "f0e367d5e9ac03dd2c83bb9d9f4dc5f4d6ce709bdc0318e4777442f4e7beb74f",
+    "08-receipt.png": "a424d4e85a942f4704f0aa23bc2e44a05d4c8863304283fe56ebd9c38a6c1db1",
+    "browser-results.json": "7c0956b4ee5f608fc502f6a7a664eed8fe79a183da7bf754ddc3e92e72c91fae",
+    "mobile-result.png": "0b1d60cd1a778572ad9437a77a37fce4d1b09aba792f46e1b2e7ea469573a81d",
+    "raw/page@b89b56130321abb4107e0fb69ce12107.webm": "fb6cf7bc7d6ded637c7b301cb184e371fd2a9c5150d79fe7e1753b07d37e29d2"
+  }
+}
