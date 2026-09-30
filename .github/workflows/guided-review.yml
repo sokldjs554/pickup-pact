@@ -31,8 +31,8 @@ jobs:
           git merge-base --is-ancestor 2e80bd73b15ead521011424d778d00b5540bf08e HEAD
           if test -f .review/apply_guided.py; then
             python .review/apply_guided.py
-            git rm -r .review .github/workflows/guided-review.yml
-            git add demo/route/api.py demo/route/index.html demo/route/product.js scripts/verify_*browser.py .github/workflows/route-product.yml
+            git rm -r .review
+            git add demo/route/api.py demo/route/index.html demo/route/product.js scripts/verify_*browser.py
             git diff --cached --check
             git -c user.name=github-actions\[bot\] -c user.email=41898282+github-actions\[bot\]@users.noreply.github.com commit -m 'feat: 기존 서버 복구를 사용하는 쉬운 주문 체험'
             git push origin HEAD:refs/heads/feat/guided-demo-20260930
