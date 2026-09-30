@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 from urllib.request import urlopen
+from route_browser_helpers import reveal_manual_choices
 from playwright.sync_api import sync_playwright, expect
 
 
@@ -25,8 +26,11 @@ def verify(base, output, repeat=3, expected_commit=None):
                 sid=None
                 try:
                     page.goto(base+'/',wait_until='networkidle')
+                    reveal_manual_choices(page)
                     page.locator('#coupon').select_option('wave1000')
+                    reveal_manual_choices(page)
                     page.locator('#points').fill('1000')
+                    reveal_manual_choices(page)
                     page.locator('#findRoutes').click()
                     wave=page.locator('.route-card[data-hover=wave]')
                     expect(wave).to_contain_text('2,300원')
@@ -50,7 +54,9 @@ def verify(base, output, repeat=3, expected_commit=None):
                     assert page.request.get(base+'/api/route/journeys/'+sid).json()['wallet']['held_coupon'] is None
                     if n==1:page.screenshot(path=str(output/f'{mode}-restored-wallet.png'),full_page=True)
                     page.locator('#reset').click();page.wait_for_load_state('networkidle')
+                    reveal_manual_choices(page)
                     page.locator('#coupon').select_option('welcome500');page.locator('#points').fill('1000')
+                    reveal_manual_choices(page)
                     page.locator('#findRoutes').click()
                     page.locator('.route-card[data-hover=wave] [data-quote]').click()
                     expect(page.locator('#orderArea .benefit-total')).to_contain_text('2,800원')

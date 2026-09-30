@@ -1,0 +1,58 @@
+name: guided-media
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  actual-http-recording:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHONPATH: .:services/reconciler
+      ROUTE_DB: /tmp/pickup-guided-media.sqlite
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install real product and recording dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install -r requirements-workbench.txt playwright
+          python -m playwright install --with-deps chromium
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg fonts-noto-cjk
+      - name: Check recording paths and guided presentation contracts
+        run: |
+          set -euo pipefail
+          python -m pytest -q tests/route/test_guided_entry.py tests/route/test_recording_paths.py
+          node scripts/verify_guided_stage.cjs
+          echo "RENDER_GIT_COMMIT=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+      - name: Start actual HTTP server and independent merchant stores
+        run: |
+          mkdir -p verification/guided-media
+          uvicorn demo.main:app --host 127.0.0.1 --port 10000 > verification/guided-media/server.log 2>&1 &
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:10000/health; then exit 0; fi
+            sleep 1
+          done
+          exit 1
+      - name: Repeat guided flow and page-closed server recovery
+        run: python scripts/verify_guided_browser.py --repeat 3 --expected-commit "$RENDER_GIT_COMMIT" --output verification/guided-media/browser
+      - name: Record actual screen and encode captioned media
+        run: python scripts/capture_guided_demo.py --expected-commit "$RENDER_GIT_COMMIT" --output verification/guided-media/media
+      - name: Preserve source and original results, including failures
+        if: always()
+        run: |
+          mkdir -p verification/guided-media
+          git rev-parse HEAD > verification/guided-media/tested-commit.txt
+          git archive --format=zip --output=verification/guided-media/tested-source.zip HEAD
+          sha256sum verification/guided-media/tested-source.zip > verification/guided-media/tested-source.sha256
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: guided-media-evidence
+          path: verification/guided-media
+          retention-days: 30

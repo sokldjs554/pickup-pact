@@ -20,6 +20,8 @@ jobs:
           python-version: '3.12'
       - run: python -m pip install -r requirements-workbench.txt -r services/ops-console/requirements.txt playwright
       - run: python -m playwright install --with-deps chromium
+      - name: Guided progress follows persisted server states
+        run: node scripts/verify_guided_stage.cjs
       - name: Verify presentation labels without changing event records
         run: node scripts/verify_copy_labels.cjs
       - name: Verify version-fenced automatic status refresh
@@ -67,6 +69,8 @@ jobs:
             sleep 1
           done
           exit 1
+      - name: Guided quick start and page-closed recovery desktop/mobile three times
+        run: python scripts/verify_guided_browser.py --repeat 3 --output verification/route-product/guided-browser
       - name: Recoverable merchant transfer over real HTTP
         run: python scripts/verify_handoff_http.py --repeat 3 --output verification/route-product/handoff-http
       - name: Rejection and uncertain transfer in real desktop/mobile browsers
@@ -113,6 +117,9 @@ jobs:
               time.sleep(8)
           else: raise SystemExit('matching deployment not observed')
           PY
+      - name: Same-commit public guided entry
+        if: github.ref == 'refs/heads/main'
+        run: python scripts/verify_guided_browser.py --repeat 3 --base-url https://pickup-pact-demo.onrender.com --expected-commit '${{ github.sha }}' --output verification/route-live/guided-browser
       - name: Same-commit public recoverable transfers
         if: github.ref == 'refs/heads/main'
         run: >-

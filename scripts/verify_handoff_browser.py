@@ -10,6 +10,7 @@ import os
 import time
 from pathlib import Path
 from urllib.request import urlopen
+from route_browser_helpers import reveal_manual_choices
 from playwright.sync_api import sync_playwright,expect
 
 
@@ -72,7 +73,9 @@ def verify(base,output,repeat,expected_commit=None):
                         page.wait_for_function("!document.body.classList.contains('busy')")
                         expect(page.locator('#handoffFault')).to_have_value(value)
                     page.goto(base+'/',wait_until='networkidle');shot('01-home')
+                    reveal_manual_choices(page)
                     page.locator('#coupon').select_option('welcome500');page.locator('#points').fill('1000')
+                    reveal_manual_choices(page)
                     page.locator('#findRoutes').click();expect(page.locator('[data-quote]')).not_to_have_count(0)
                     page.locator('.route-card[data-hover="wave"] [data-quote]').click()
                     expect(page.locator('#handoffPanel')).to_be_visible()

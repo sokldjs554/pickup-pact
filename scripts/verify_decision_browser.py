@@ -7,6 +7,7 @@ belong to the checked release. This script does not edit the demo video.
 import argparse,json,os,time
 from pathlib import Path
 from urllib.request import urlopen
+from route_browser_helpers import reveal_manual_choices
 from playwright.sync_api import sync_playwright,expect
 
 
@@ -58,7 +59,9 @@ def verify(base,output,repeat=3,expected=None):
                         consent_frame()
                     page.goto(base+'/',wait_until='networkidle',timeout=60000)
                     expect(page.locator('h1').first).to_contain_text('매장 변경이 막혀도');shot('01-home')
+                    reveal_manual_choices(page)
                     page.locator('#coupon').select_option('welcome500');page.locator('#points').fill('1000')
+                    reveal_manual_choices(page)
                     page.locator('#findRoutes').click();idle()
                     page.locator('.route-card[data-hover=wave] [data-quote]').click();idle()
                     original=state();oid=original['order']['id']

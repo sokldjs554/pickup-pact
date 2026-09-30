@@ -1,0 +1,18 @@
+/* Focus the first visit on one disclosed action. Existing detailed controls remain available. */
+.quick-entry{margin-top:24px;padding:20px;border:1px solid var(--border);border-radius:16px;background:var(--white);max-width:520px}
+.quick-entry h2{font-size:18px;margin-bottom:8px}.quick-entry p{font-size:13px;line-height:1.65}.quick-entry .quick-price{font-weight:750;color:var(--ink);margin-top:5px}
+.quick-entry-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:15px}.quick-entry-actions button{font-size:14px;min-height:46px}
+#customizeOrder>summary{font-size:14px;font-weight:750;cursor:pointer;padding:12px 0;min-height:44px;list-style-position:inside}
+#customizeOrder[open]>summary{border-bottom:1px solid var(--border);margin-bottom:12px}
+.compact #customizeOrder{display:none}.entry-home #handoffComparison,.entry-home #experimentPanel,.entry-home .value-strip{display:none}
+.guide-panel{margin:24px 0;padding:26px;border-radius:20px;background:#e7f0da;border:1px solid #cbdcc0;scroll-margin-top:14px}
+.guide-panel-top{display:flex;justify-content:space-between;align-items:start;gap:25px}.guide-copy{max-width:730px;min-width:0}
+.guide-copy h2{font-size:27px;margin:8px 0 10px}.guide-copy p{font-size:15px;line-height:1.7;color:#486044}.guide-panel .primary{font-size:14px;min-height:48px;flex-shrink:0;align-self:center}
+.guide-panel[data-stage=waiting]{background:#fff3df;border-color:#ead1a4}.guide-panel[data-stage=waiting] .guide-copy p{color:#745125}
+.guide-proof{display:grid;grid-template-columns:1.4fr 1.2fr 1fr 1fr;gap:12px;margin-top:20px;padding-top:18px;border-top:1px solid #c4d5b5}
+.guide-proof div{min-width:0}.guide-proof dt{font-size:11px;color:var(--muted)}.guide-proof dd{margin:4px 0 0;font-size:14px;font-weight:750;overflow-wrap:anywhere}
+.guide-footnote{margin-top:14px;font-size:11px;color:#55654e}.guide-panel:focus-visible,summary:focus-visible{outline:3px solid var(--green);outline-offset:4px}
+.guided-flow .hero{display:none}.guided-flow .handoff-steps{font-size:11px}.guided-flow .journey-heading{padding-top:10px}
+@media(min-width:900px){.entry-home .hero{padding-top:32px;padding-bottom:25px}.entry-home .hero h1{font-size:48px}.entry-home .hero-art{height:340px}.entry-home .hero-points{gap:13px;font-size:11px}}
+@media(max-width:700px){.entry-home .hero{display:block;padding:25px 0 22px}.entry-home .hero-art{display:none}.entry-home .hero h1{font-size:35px;margin:12px 0 14px}.entry-home .hero-points{display:none}.quick-entry{margin-top:18px;padding:16px}.quick-entry-actions{flex-direction:column}.quick-entry-actions button{width:100%}.guide-panel{padding:18px;margin:18px 0}.guide-panel-top{display:block}.guide-copy h2{font-size:24px}.guide-copy p{font-size:14px}.guide-panel .primary{width:100%;margin-top:16px}.guide-proof{grid-template-columns:1fr 1fr;gap:12px}.guide-proof dd{font-size:13px}}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto!important}*,*::before,*::after{transition:none!important;animation:none!important}}
