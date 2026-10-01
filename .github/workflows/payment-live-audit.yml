@@ -1,0 +1,81 @@
+name: payment-live-audit
+on:
+  push:
+    branches: [verify/payment-live-20261001]
+    paths: [.github/workflows/payment-live-audit.yml]
+permissions:
+  contents: read
+concurrency:
+  group: payment-live-audit-20261001
+  cancel-in-progress: false
+jobs:
+  public-payment:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [browser, tabs]
+    env:
+      EXPECTED_COMMIT: dbefc8348a7f21de5ee67e7868145c474cf46239
+      BASE_URL: https://pickup-pact-demo.onrender.com
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: dbefc8348a7f21de5ee67e7868145c474cf46239
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install actual browser runner
+        run: |
+          set -euo pipefail
+          python -m pip install playwright
+          python -m playwright install --with-deps chromium
+      - name: Verify public source and independent payment runtime before testing
+        run: |
+          mkdir -p verification/payment-live
+          python - <<'PY'
+          import json, os, urllib.request
+          from pathlib import Path
+          base=os.environ['BASE_URL']; expected=os.environ['EXPECTED_COMMIT']
+          def read(path):
+              with urllib.request.urlopen(base+path,timeout=60) as response:
+                  assert response.status==200
+                  return json.load(response)
+          health=read('/health');runtime=read('/api/route/runtime')
+          Path('verification/payment-live/before.json').write_text(json.dumps({'health':health,'runtime':runtime},indent=2))
+          assert health['release_commit']==expected,health
+          assert runtime['payment_mode']=='simulator_http_v1',runtime
+          assert runtime['payment_transport']=='http' and runtime['payment_storage_ready'] is True,runtime
+          assert runtime['merchant_transport']=='http' and runtime['automatic_recovery'] is True,runtime
+          PY
+      - name: Run unchanged public payment acceptance script three times
+        run: |
+          set -euo pipefail
+          python scripts/verify_payment_${{ matrix.suite }}.py --repeat 3 --base-url "$BASE_URL" --expected-commit "$EXPECTED_COMMIT" --output verification/payment-live/${{ matrix.suite }} | tee verification/payment-live/execution.log
+      - name: Confirm public release did not change during verification
+        run: |
+          python - <<'PY'
+          import json,os,urllib.request
+          from pathlib import Path
+          with urllib.request.urlopen(os.environ['BASE_URL']+'/health',timeout=60) as response:
+              health=json.load(response)
+          Path('verification/payment-live/after.json').write_text(json.dumps(health,indent=2))
+          assert health['release_commit']==os.environ['EXPECTED_COMMIT'],health
+          PY
+      - name: Preserve exact script identity and environment, including failures
+        if: always()
+        run: |
+          mkdir -p verification/payment-live
+          git rev-parse HEAD > verification/payment-live/tested-commit.txt
+          git status --porcelain > verification/payment-live/source-status.txt
+          sha256sum scripts/verify_payment_browser.py scripts/verify_payment_tabs.py > verification/payment-live/script-sha256.txt
+          python --version > verification/payment-live/python-version.txt
+          python -m pip freeze > verification/payment-live/packages.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: payment-live-${{ matrix.suite }}-dbefc834
+          path: verification/payment-live
+          retention-days: 30
