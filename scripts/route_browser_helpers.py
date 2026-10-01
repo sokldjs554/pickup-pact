@@ -4,4 +4,4 @@
 def reveal_manual_choices(page):
     details = page.locator('#customizeOrder')
     if details.get_attribute('open') is None:
-        details.locator('summary').click()
+        details.locator(':scope > summary').click()
