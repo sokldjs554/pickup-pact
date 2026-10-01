@@ -18,9 +18,9 @@
 
 ## 같은 주문을 매장과 결제 서버까지 이어갑니다
 
-**신규 결제 기능은 PR 검증 버전입니다. 아래 녹화는 CI의 실제 HTTP 서버 결과이며, 기존 공개 주소에 새 결제 버전을 배포했다는 뜻은 아닙니다.**
+**독립 가상 결제와 가맹점 단말을 공개 데모에서 체험할 수 있습니다.** 2026-10-01의 기능 검증 기준은 `dbefc8348a7f21de5ee67e7868145c474cf46239`입니다. [동일 버전 공개 회귀](https://github.com/sokldjs554/pickup-pact/actions/runs/36843864699)에서 기존 주문·매장 변경·혜택·문구·동의·가이드 36회를 확인했습니다. [공개 배포 확인과 원본 구분](docs/payment-public-verification-2026-10-01.md)을 함께 보세요. 아래 42.4초 영상은 CI의 실제 HTTP 서버 녹화이며 공개 서버에서 새로 촬영한 영상은 아닙니다.
 
-**[42.4초 실제 실행 영상](docs/media/payment/pickup-pact-payment.mp4)** · [촬영·원본 대조 기록](docs/media/payment/capture.json) · [검증 범위](docs/payment-release-verification-2026-09-30.md)
+**[42.4초 실제 실행 영상](docs/media/payment/pickup-pact-payment.mp4)** · [촬영·원본 대조 기록](docs/media/payment/capture.json) · [배포 전 구현·촬영 기록](docs/payment-release-verification-2026-09-30.md)
 
 [![승인 응답 끊김, 두 가맹점 단말, 마지막 원본 대조](docs/media/payment/pickup-pact-payment.gif)](docs/media/payment/pickup-pact-payment.mp4)
 
