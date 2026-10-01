@@ -12,6 +12,23 @@ from uuid import uuid4
 from .http_client import PaymentClient, origin
 
 
+def _wait_ready_json(ready: Path, process, stop: threading.Event, deadline: float) -> dict:
+    """Wait until the child readiness file contains one complete JSON document."""
+    while time.monotonic() < deadline:
+        if process.poll() is not None:
+            raise RuntimeError('child process exited during startup')
+        if ready.exists():
+            try:
+                data=json.loads(ready.read_text())
+                if isinstance(data,dict) and isinstance(data.get('url'),str):
+                    return data
+            except (OSError,json.JSONDecodeError):
+                pass
+        if stop.wait(.025):
+            raise RuntimeError('child process startup cancelled')
+    raise RuntimeError('child process readiness timed out')
+
+
 class PaymentProcess:
     def __init__(self,directory: str|Path,callback_url: str|None=None,notify_secret: str|None=None):
         self.directory=Path(directory);self.directory.mkdir(parents=True,exist_ok=True)
@@ -30,11 +47,8 @@ class PaymentProcess:
                                        'ROUTE_PAYMENT_NOTIFY_SECRET':self.notify_secret},stdout=self._log,stderr=self._log)
         try:
             deadline=time.monotonic()+8
-            while time.monotonic()<deadline and not ready.exists():
-                if self.process.poll() is not None:raise RuntimeError('payment process startup failed')
-                if self._stop.wait(.025):raise RuntimeError('payment startup cancelled')
-            if not ready.exists():raise RuntimeError('payment readiness timed out')
-            url=json.loads(ready.read_text())['url'];self.port=int(url.rsplit(':',1)[1])
+            data=_wait_ready_json(ready,self.process,self._stop,deadline)
+            url=data['url'];self.port=int(url.rsplit(':',1)[1])
             self.client=PaymentClient(url,self.token)
             self.client.health()
         except BaseException:
