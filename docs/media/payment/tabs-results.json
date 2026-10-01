@@ -1,0 +1,1066 @@
+[
+  {
+    "repetition": 1,
+    "viewport": "desktop",
+    "order_id": "PCT-A4817E5F81",
+    "result": "passed",
+    "release_commit": "878390efecfddd00e97f8243784e13c05b7b0000",
+    "requests": [
+      {
+        "action": "start",
+        "expected_version": 6,
+        "request_id": "78bf3d8e16534998820f57dacf9ee2a5"
+      },
+      {
+        "action": "cancel",
+        "expected_version": 6,
+        "request_id": "e619581bf34f472781165a0afefa0090"
+      }
+    ],
+    "http_statuses": [
+      409,
+      200
+    ],
+    "final_order_state": "CANCELLED",
+    "proof": {
+      "mode": "synthetic",
+      "scope": "single_host_independent_process_and_store_databases",
+      "journey_id": "57953dafcbd84d8e8e77e0ef32bb8415",
+      "journey_version": 10,
+      "order_id": "PCT-A4817E5F81",
+      "status": "MATCH",
+      "terminal": true,
+      "payment": {
+        "mode": "synthetic",
+        "provider": "DEMO_PLATFORM",
+        "world_id": "57953dafcbd84d8e8e77e0ef32bb8415",
+        "order_id": "PCT-A4817E5F81",
+        "revision": 110,
+        "held_krw": 0,
+        "captured_krw": 0,
+        "capture_count": 0,
+        "authorizations": [
+          {
+            "authorization_id": "AUTH-f97d22710fd340eaac5832d4c49794a8",
+            "world_id": "57953dafcbd84d8e8e77e0ef32bb8415",
+            "order_id": "PCT-A4817E5F81",
+            "amount_krw": 2800,
+            "currency": "KRW",
+            "payment_revision": 1,
+            "quote_fingerprint": "67fb6beeabea4ad36deb4aee06ac42f39b9efb7077a5cc16e38a865538b776c8",
+            "status": "VOIDED",
+            "created_at": 1790769740.604068,
+            "updated_at": 1790769743.2988954
+          }
+        ],
+        "transactions": [
+          {
+            "id": "TX-4660e60c0dca49159ddce69c6ab892b4",
+            "seq": 109,
+            "authorization_id": "AUTH-f97d22710fd340eaac5832d4c49794a8",
+            "world_id": "57953dafcbd84d8e8e77e0ef32bb8415",
+            "order_id": "PCT-A4817E5F81",
+            "kind": "AUTHORIZE",
+            "amount_krw": 2800,
+            "at": 1790769740.604132
+          },
+          {
+            "id": "TX-53f0ce3e945b4ae5a87a77328ac46f3d",
+            "seq": 110,
+            "authorization_id": "AUTH-f97d22710fd340eaac5832d4c49794a8",
+            "world_id": "57953dafcbd84d8e8e77e0ef32bb8415",
+            "order_id": "PCT-A4817E5F81",
+            "kind": "VOID",
+            "amount_krw": 2800,
+            "at": 1790769743.2989502
+          }
+        ],
+        "currency": "KRW"
+      },
+      "merchants": {
+        "wave": {
+          "reservation": {
+            "world": "57953dafcbd84d8e8e77e0ef32bb8415",
+            "order_id": "PCT-A4817E5F81",
+            "generation": 0,
+            "phase": "CANCELLED",
+            "transfer_id": ""
+          },
+          "revision": 240,
+          "last_receipt": {
+            "command_id": "b742b881f60746e083aa36680b3ae259:CANCEL",
+            "action": "CANCEL",
+            "generation": 0,
+            "result": {
+              "code": "ACCEPTED",
+              "ok": true,
+              "seat": {
+                "generation": 0,
+                "order_id": "PCT-A4817E5F81",
+                "phase": "CANCELLED",
+                "transfer_id": "",
+                "world": "57953dafcbd84d8e8e77e0ef32bb8415"
+              }
+            }
+          }
+        },
+        "corner": {
+          "reservation": null,
+          "revision": 0,
+          "last_receipt": null
+        },
+        "oat": {
+          "reservation": null,
+          "revision": 0,
+          "last_receipt": null
+        },
+        "garden": {
+          "reservation": null,
+          "revision": 0,
+          "last_receipt": null
+        },
+        "express": {
+          "reservation": null,
+          "revision": 0,
+          "last_receipt": null
+        }
+      },
+      "checks": {
+        "order": {
+          "status": "MATCH",
+          "label": "주문 번호 유지",
+          "detail": "같은 주문 번호 PCT-A4817E5F81"
+        },
+        "merchant": {
+          "status": "MATCH",
+          "label": "수령 매장 확인",
+          "detail": "현재 매장 상태: CANCELLED"
+        },
+        "payment": {
+          "status": "MATCH",
+          "label": "청구·승인 보류 확인",
+          "detail": "확정 청구 0원 · 0건 / 남은 승인 보류 0원"
+        },
+        "benefits": {
+          "status": "MATCH",
+          "label": "쿠폰·포인트 확인",
+          "detail": "0P 사용 · 0P 적립 / 보류 0P"
+        }
+      },
+      "observation": {
+        "started_at": 1790769743.5157754,
+        "finished_at": 1790769743.6513224,
+        "stable": true,
+        "coordinator_version": 10,
+        "payment_revision": 110,
+        "merchant_revisions": {
+          "wave": 240,
+          "corner": 0,
+          "oat": 0,
+          "garden": 0,
+          "express": 0
+        }
+      },
+      "order": {
+        "id": "PCT-A4817E5F81",
+        "store_id": "wave",
+        "store_name": "웨이브 로스터스",
+        "state": "CANCELLED",
+        "amount_krw": 2800
+      },
+      "benefits": {
+        "spent": 0,
+        "earned": 0,
+        "held_points": 0
+      }
+    },
+    "page_errors": [],
+    "observer_refreshed_without_reload": true,
+    "transport_note": "Two original UI requests paused until both arrived; payloads/responses unchanged."
+  },
+  {
+    "repetition": 1,
+    "viewport": "mobile",
+    "order_id": "PCT-948920F5BA",
+    "result": "passed",
+    "release_commit": "878390efecfddd00e97f8243784e13c05b7b0000",
+    "requests": [
+      {
+        "action": "start",
+        "expected_version": 6,
+        "request_id": "8f6e7ac0299a491190f5ce47767754b9"
+      },
+      {
+        "action": "cancel",
+        "expected_version": 6,
+        "request_id": "0c36306b39664398bf7153b7c0731d08"
+      }
+    ],
+    "http_statuses": [
+      409,
+      200
+    ],
+    "final_order_state": "PREPARING",
+    "proof": {
+      "mode": "synthetic",
+      "scope": "single_host_independent_process_and_store_databases",
+      "journey_id": "68e41da8d4b042aea0c80ccd1ff8dfed",
+      "journey_version": 10,
+      "order_id": "PCT-948920F5BA",
+      "status": "MATCH",
+      "terminal": false,
+      "payment": {
+        "mode": "synthetic",
+        "provider": "DEMO_PLATFORM",
+        "world_id": "68e41da8d4b042aea0c80ccd1ff8dfed",
+        "order_id": "PCT-948920F5BA",
+        "revision": 111,
+        "held_krw": 2800,
+        "captured_krw": 0,
+        "capture_count": 0,
+        "authorizations": [
+          {
+            "authorization_id": "AUTH-3ed48567ecab4335aa1b0f288da92872",
+            "world_id": "68e41da8d4b042aea0c80ccd1ff8dfed",
+            "order_id": "PCT-948920F5BA",
+            "amount_krw": 2800,
+            "currency": "KRW",
+            "payment_revision": 1,
+            "quote_fingerprint": "d2219d46bd2f42f97ce6534c7d1a6ccd058d7f88c9851aa0735774e63e939f72",
+            "status": "AUTHORIZED",
+            "created_at": 1790769746.854814,
+            "updated_at": 1790769746.854814
+          }
+        ],
+        "transactions": [
+          {
+            "id": "TX-df9d7f53f8a7427cbc3150b0b4583769",
+            "seq": 111,
+            "authorization_id": "AUTH-3ed48567ecab4335aa1b0f288da92872",
+            "world_id": "68e41da8d4b042aea0c80ccd1ff8dfed",
+            "order_id": "PCT-948920F5BA",
+            "kind": "AUTHORIZE",
+            "amount_krw": 2800,
+            "at": 1790769746.8548768
+          }
+        ],
+        "currency": "KRW"
+      },
+      "merchants": {
+        "wave": {
+          "reservation": {
+            "world": "68e41da8d4b042aea0c80ccd1ff8dfed",
+            "order_id": "PCT-948920F5BA",
+            "generation": 0,
+            "phase": "PREPARING",
+            "transfer_id": ""
+          },
+          "revision": 242,
+          "last_receipt": {
+            "command_id": "f4d6b4d1bc1144c697621a658bf943ec:START",
+            "action": "START",
+            "generation": 0,
+            "result": {
+              "code": "ACCEPTED",
+              "ok": true,
+              "seat": {
+                "generation": 0,
+                "order_id": "PCT-948920F5BA",
+                "phase": "PREPARING",
+                "transfer_id": "",
+                "world": "68e41da8d4b042aea0c80ccd1ff8dfed"
+              }
+            }
+          }
+        },
+        "corner": {
+          "reservation": null,
+          "revision": 0,
+          "last_receipt": null
+        },
+        "oat": {
+          "reservation": null,
+          "revision": 0,
+          "last_receipt": null
+        },
+        "garden": {
+          "reservation": null,
+          "revision": 0,
+          "last_receipt": null
+        },
+        "express": {
+          "reservation": null,
+          "revision": 0,
+          "last_receipt": null
+        }
+      },
+      "checks": {
+        "order": {
+          "status": "MATCH",
+          "label": "주문 번호 유지",
+          "detail": "같은 주문 번호 PCT-948920F5BA"
+        },
+        "merchant": {
+          "status": "MATCH",
+          "label": "수령 매장 확인",
+          "detail": "현재 매장 상태: PREPARING"
+        },
+        "payment": {
+          "status": "MATCH",
+          "label": "청구·승인 보류 확인",
+          "detail": "확정 청구 0원 · 0건 / 남은 승인 보류 2,800원"
+        },
+        "benefits": {
+          "status": "MATCH",
+          "label": "쿠폰·포인트 확인",
+          "detail": "0P 사용 · 0P 적립 / 보류 1,000P"
+        }
+      },
+      "observation": {
+        "started_at": 1790769749.5414705,
+        "finished_at": 1790769749.7005255,
+        "stable": true,
+        "coordinator_version": 10,
+        "payment_revision": 111,
+        "merchant_revisions": {
+          "wave": 242,
+          "corner": 0,
+          "oat": 0,
+          "garden": 0,
+          "express": 0
+        }
+      },
+      "order": {
+        "id": "PCT-948920F5BA",
+        "store_id": "wave",
+        "store_name": "웨이브 로스터스",
+        "state": "PREPARING",
+        "amount_krw": 2800
+      },
+      "benefits": {
+        "spent": 0,
+        "earned": 0,
+        "held_points": 1000
+      }
+    },
+    "page_errors": [],
+    "observer_refreshed_without_reload": true,
+    "transport_note": "Two original UI requests paused until both arrived; payloads/responses unchanged."
+  },
+  {
+    "repetition": 2,
+    "viewport": "desktop",
+    "order_id": "PCT-9A2AAEDBC3",
+    "result": "passed",
+    "release_commit": "878390efecfddd00e97f8243784e13c05b7b0000",
+    "requests": [
+      {
+        "action": "start",
+        "expected_version": 6,
+        "request_id": "5e9bea399693421fbda484d4b960fa89"
+      },
+      {
+        "action": "cancel",
+        "expected_version": 6,
+        "request_id": "cc04f34947a44b95a51774860f9d78c7"
+      }
+    ],
+    "http_statuses": [
+      409,
+      200
+    ],
+    "final_order_state": "CANCELLED",
+    "proof": {
+      "mode": "synthetic",
+      "scope": "single_host_independent_process_and_store_databases",
+      "journey_id": "8ff77739ee91435695a67db74a4f2698",
+      "journey_version": 10,
+      "order_id": "PCT-9A2AAEDBC3",
+      "status": "MATCH",
+      "terminal": true,
+      "payment": {
+        "mode": "synthetic",
+        "provider": "DEMO_PLATFORM",
+        "world_id": "8ff77739ee91435695a67db74a4f2698",
+        "order_id": "PCT-9A2AAEDBC3",
+        "revision": 113,
+        "held_krw": 0,
+        "captured_krw": 0,
+        "capture_count": 0,
+        "authorizations": [
+          {
+            "authorization_id": "AUTH-0d8bf8b188124beaa59ff394d8000338",
+            "world_id": "8ff77739ee91435695a67db74a4f2698",
+            "order_id": "PCT-9A2AAEDBC3",
+            "amount_krw": 2800,
+            "currency": "KRW",
+            "payment_revision": 1,
+            "quote_fingerprint": "aa1eba545dcf1f04a69d9a6e8a5eecd539b83f233882671142996b1f6bf5682c",
+            "status": "VOIDED",
+            "created_at": 1790769752.9672062,
+            "updated_at": 1790769755.6080372
+          }
+        ],
+        "transactions": [
+          {
+            "id": "TX-16217c2a3d8b4992bcdef73f200e9b8f",
+            "seq": 112,
+            "authorization_id": "AUTH-0d8bf8b188124beaa59ff394d8000338",
+            "world_id": "8ff77739ee91435695a67db74a4f2698",
+            "order_id": "PCT-9A2AAEDBC3",
+            "kind": "AUTHORIZE",
+            "amount_krw": 2800,
+            "at": 1790769752.9672754
+          },
+          {
+            "id": "TX-3aa424b9961f4cc393f5fcc0abcd35da",
+            "seq": 113,
+            "authorization_id": "AUTH-0d8bf8b188124beaa59ff394d8000338",
+            "world_id": "8ff77739ee91435695a67db74a4f2698",
+            "order_id": "PCT-9A2AAEDBC3",
+            "kind": "VOID",
+            "amount_krw": 2800,
+            "at": 1790769755.6081147
+          }
+        ],
+        "currency": "KRW"
+      },
+      "merchants": {
+        "wave": {
+          "reservation": {
+            "world": "8ff77739ee91435695a67db74a4f2698",
+            "order_id": "PCT-9A2AAEDBC3",
+            "generation": 0,
+            "phase": "CANCELLED",
+            "transfer_id": ""
+          },
+          "revision": 244,
+          "last_receipt": {
+            "command_id": "715791465cea4709ad410154070df07b:CANCEL",
+            "action": "CANCEL",
+            "generation": 0,
+            "result": {
+              "code": "ACCEPTED",
+              "ok": true,
+              "seat": {
+                "generation": 0,
+                "order_id": "PCT-9A2AAEDBC3",
+                "phase": "CANCELLED",
+                "transfer_id": "",
+                "world": "8ff77739ee91435695a67db74a4f2698"
+              }
+            }
+          }
+        },
+        "corner": {
+          "reservation": null,
+          "revision": 0,
+          "last_receipt": null
+        },
+        "oat": {
+          "reservation": null,
+          "revision": 0,
+          "last_receipt": null
+        },
+        "garden": {
+          "reservation": null,
+          "revision": 0,
+          "last_receipt": null
+        },
+        "express": {
+          "reservation": null,
+          "revision": 0,
+          "last_receipt": null
+        }
+      },
+      "checks": {
+        "order": {
+          "status": "MATCH",
+          "label": "주문 번호 유지",
+          "detail": "같은 주문 번호 PCT-9A2AAEDBC3"
+        },
+        "merchant": {
+          "status": "MATCH",
+          "label": "수령 매장 확인",
+          "detail": "현재 매장 상태: CANCELLED"
+        },
+        "payment": {
+          "status": "MATCH",
+          "label": "청구·승인 보류 확인",
+          "detail": "확정 청구 0원 · 0건 / 남은 승인 보류 0원"
+        },
+        "benefits": {
+          "status": "MATCH",
+          "label": "쿠폰·포인트 확인",
+          "detail": "0P 사용 · 0P 적립 / 보류 0P"
+        }
+      },
+      "observation": {
+        "started_at": 1790769755.8599987,
+        "finished_at": 1790769755.9857612,
+        "stable": true,
+        "coordinator_version": 10,
+        "payment_revision": 113,
+        "merchant_revisions": {
+          "wave": 244,
+          "corner": 0,
+          "oat": 0,
+          "garden": 0,
+          "express": 0
+        }
+      },
+      "order": {
+        "id": "PCT-9A2AAEDBC3",
+        "store_id": "wave",
+        "store_name": "웨이브 로스터스",
+        "state": "CANCELLED",
+        "amount_krw": 2800
+      },
+      "benefits": {
+        "spent": 0,
+        "earned": 0,
+        "held_points": 0
+      }
+    },
+    "page_errors": [],
+    "observer_refreshed_without_reload": true,
+    "transport_note": "Two original UI requests paused until both arrived; payloads/responses unchanged."
+  },
+  {
+    "repetition": 2,
+    "viewport": "mobile",
+    "order_id": "PCT-3FBD4F7EC0",
+    "result": "passed",
+    "release_commit": "878390efecfddd00e97f8243784e13c05b7b0000",
+    "requests": [
+      {
+        "action": "start",
+        "expected_version": 6,
+        "request_id": "3c7bd94037644a768232d15f86b4b3c7"
+      },
+      {
+        "action": "cancel",
+        "expected_version": 6,
+        "request_id": "8c88121a80a645e295fb7f3109dce288"
+      }
+    ],
+    "http_statuses": [
+      409,
+      200
+    ],
+    "final_order_state": "CANCELLED",
+    "proof": {
+      "mode": "synthetic",
+      "scope": "single_host_independent_process_and_store_databases",
+      "journey_id": "9d006211e20d45e58fe156b98c3a4ac9",
+      "journey_version": 10,
+      "order_id": "PCT-3FBD4F7EC0",
+      "status": "MATCH",
+      "terminal": true,
+      "payment": {
+        "mode": "synthetic",
+        "provider": "DEMO_PLATFORM",
+        "world_id": "9d006211e20d45e58fe156b98c3a4ac9",
+        "order_id": "PCT-3FBD4F7EC0",
+        "revision": 115,
+        "held_krw": 0,
+        "captured_krw": 0,
+        "capture_count": 0,
+        "authorizations": [
+          {
+            "authorization_id": "AUTH-f9111e3ee4384e77b2efcf76169f96fb",
+            "world_id": "9d006211e20d45e58fe156b98c3a4ac9",
+            "order_id": "PCT-3FBD4F7EC0",
+            "amount_krw": 2800,
+            "currency": "KRW",
+            "payment_revision": 1,
+            "quote_fingerprint": "18bd47a50a22f1a2886dc4ccc79914eb4ead75cf6cf0fddf69c47ae93a217470",
+            "status": "VOIDED",
+            "created_at": 1790769758.9986634,
+            "updated_at": 1790769761.5577126
+          }
+        ],
+        "transactions": [
+          {
+            "id": "TX-be4df4d8b91c404793776263c440fea6",
+            "seq": 114,
+            "authorization_id": "AUTH-f9111e3ee4384e77b2efcf76169f96fb",
+            "world_id": "9d006211e20d45e58fe156b98c3a4ac9",
+            "order_id": "PCT-3FBD4F7EC0",
+            "kind": "AUTHORIZE",
+            "amount_krw": 2800,
+            "at": 1790769758.998726
+          },
+          {
+            "id": "TX-983c63d6181d4b5ebd8d6d76cbcd248a",
+            "seq": 115,
+            "authorization_id": "AUTH-f9111e3ee4384e77b2efcf76169f96fb",
+            "world_id": "9d006211e20d45e58fe156b98c3a4ac9",
+            "order_id": "PCT-3FBD4F7EC0",
+            "kind": "VOID",
+            "amount_krw": 2800,
+            "at": 1790769761.557782
+          }
+        ],
+        "currency": "KRW"
+      },
+      "merchants": {
+        "wave": {
+          "reservation": {
+            "world": "9d006211e20d45e58fe156b98c3a4ac9",
+            "order_id": "PCT-3FBD4F7EC0",
+            "generation": 0,
+            "phase": "CANCELLED",
+            "transfer_id": ""
+          },
+          "revision": 246,
+          "last_receipt": {
+            "command_id": "8e7f0329b3c049f689ae08d8cafcc1bd:CANCEL",
+            "action": "CANCEL",
+            "generation": 0,
+            "result": {
+              "code": "ACCEPTED",
+              "ok": true,
+              "seat": {
+                "generation": 0,
+                "order_id": "PCT-3FBD4F7EC0",
+                "phase": "CANCELLED",
+                "transfer_id": "",
+                "world": "9d006211e20d45e58fe156b98c3a4ac9"
+              }
+            }
+          }
+        },
+        "corner": {
+          "reservation": null,
+          "revision": 0,
+          "last_receipt": null
+        },
+        "oat": {
+          "reservation": null,
+          "revision": 0,
+          "last_receipt": null
+        },
+        "garden": {
+          "reservation": null,
+          "revision": 0,
+          "last_receipt": null
+        },
+        "express": {
+          "reservation": null,
+          "revision": 0,
+          "last_receipt": null
+        }
+      },
+      "checks": {
+        "order": {
+          "status": "MATCH",
+          "label": "주문 번호 유지",
+          "detail": "같은 주문 번호 PCT-3FBD4F7EC0"
+        },
+        "merchant": {
+          "status": "MATCH",
+          "label": "수령 매장 확인",
+          "detail": "현재 매장 상태: CANCELLED"
+        },
+        "payment": {
+          "status": "MATCH",
+          "label": "청구·승인 보류 확인",
+          "detail": "확정 청구 0원 · 0건 / 남은 승인 보류 0원"
+        },
+        "benefits": {
+          "status": "MATCH",
+          "label": "쿠폰·포인트 확인",
+          "detail": "0P 사용 · 0P 적립 / 보류 0P"
+        }
+      },
+      "observation": {
+        "started_at": 1790769761.8361135,
+        "finished_at": 1790769761.96784,
+        "stable": true,
+        "coordinator_version": 10,
+        "payment_revision": 115,
+        "merchant_revisions": {
+          "wave": 246,
+          "corner": 0,
+          "oat": 0,
+          "garden": 0,
+          "express": 0
+        }
+      },
+      "order": {
+        "id": "PCT-3FBD4F7EC0",
+        "store_id": "wave",
+        "store_name": "웨이브 로스터스",
+        "state": "CANCELLED",
+        "amount_krw": 2800
+      },
+      "benefits": {
+        "spent": 0,
+        "earned": 0,
+        "held_points": 0
+      }
+    },
+    "page_errors": [],
+    "observer_refreshed_without_reload": true,
+    "transport_note": "Two original UI requests paused until both arrived; payloads/responses unchanged."
+  },
+  {
+    "repetition": 3,
+    "viewport": "desktop",
+    "order_id": "PCT-1F35EF75A0",
+    "result": "passed",
+    "release_commit": "878390efecfddd00e97f8243784e13c05b7b0000",
+    "requests": [
+      {
+        "action": "cancel",
+        "expected_version": 6,
+        "request_id": "bfe6e2f592094614addaf541f7236e42"
+      },
+      {
+        "action": "start",
+        "expected_version": 6,
+        "request_id": "5a3b3b607f54456baf0bd6013ee7babf"
+      }
+    ],
+    "http_statuses": [
+      409,
+      200
+    ],
+    "final_order_state": "CANCELLED",
+    "proof": {
+      "mode": "synthetic",
+      "scope": "single_host_independent_process_and_store_databases",
+      "journey_id": "85f9f2a0055b41b0865c72816622b388",
+      "journey_version": 10,
+      "order_id": "PCT-1F35EF75A0",
+      "status": "MATCH",
+      "terminal": true,
+      "payment": {
+        "mode": "synthetic",
+        "provider": "DEMO_PLATFORM",
+        "world_id": "85f9f2a0055b41b0865c72816622b388",
+        "order_id": "PCT-1F35EF75A0",
+        "revision": 117,
+        "held_krw": 0,
+        "captured_krw": 0,
+        "capture_count": 0,
+        "authorizations": [
+          {
+            "authorization_id": "AUTH-2a2d9a118f084643a252664b9eef6139",
+            "world_id": "85f9f2a0055b41b0865c72816622b388",
+            "order_id": "PCT-1F35EF75A0",
+            "amount_krw": 2800,
+            "currency": "KRW",
+            "payment_revision": 1,
+            "quote_fingerprint": "9844d7032b6e76acf2b7f706be6fdce1eaf79546b9062c6cbc36cd42d2d3c6d2",
+            "status": "VOIDED",
+            "created_at": 1790769764.9716814,
+            "updated_at": 1790769767.5964813
+          }
+        ],
+        "transactions": [
+          {
+            "id": "TX-dc48b3857790414f9d094a78bfcde46c",
+            "seq": 116,
+            "authorization_id": "AUTH-2a2d9a118f084643a252664b9eef6139",
+            "world_id": "85f9f2a0055b41b0865c72816622b388",
+            "order_id": "PCT-1F35EF75A0",
+            "kind": "AUTHORIZE",
+            "amount_krw": 2800,
+            "at": 1790769764.9717455
+          },
+          {
+            "id": "TX-aed2b7f283ca4ad18be43c1852d37b56",
+            "seq": 117,
+            "authorization_id": "AUTH-2a2d9a118f084643a252664b9eef6139",
+            "world_id": "85f9f2a0055b41b0865c72816622b388",
+            "order_id": "PCT-1F35EF75A0",
+            "kind": "VOID",
+            "amount_krw": 2800,
+            "at": 1790769767.5965517
+          }
+        ],
+        "currency": "KRW"
+      },
+      "merchants": {
+        "wave": {
+          "reservation": {
+            "world": "85f9f2a0055b41b0865c72816622b388",
+            "order_id": "PCT-1F35EF75A0",
+            "generation": 0,
+            "phase": "CANCELLED",
+            "transfer_id": ""
+          },
+          "revision": 248,
+          "last_receipt": {
+            "command_id": "0975ec539c374d5bbbb61f0e69c9d78f:CANCEL",
+            "action": "CANCEL",
+            "generation": 0,
+            "result": {
+              "code": "ACCEPTED",
+              "ok": true,
+              "seat": {
+                "generation": 0,
+                "order_id": "PCT-1F35EF75A0",
+                "phase": "CANCELLED",
+                "transfer_id": "",
+                "world": "85f9f2a0055b41b0865c72816622b388"
+              }
+            }
+          }
+        },
+        "corner": {
+          "reservation": null,
+          "revision": 0,
+          "last_receipt": null
+        },
+        "oat": {
+          "reservation": null,
+          "revision": 0,
+          "last_receipt": null
+        },
+        "garden": {
+          "reservation": null,
+          "revision": 0,
+          "last_receipt": null
+        },
+        "express": {
+          "reservation": null,
+          "revision": 0,
+          "last_receipt": null
+        }
+      },
+      "checks": {
+        "order": {
+          "status": "MATCH",
+          "label": "주문 번호 유지",
+          "detail": "같은 주문 번호 PCT-1F35EF75A0"
+        },
+        "merchant": {
+          "status": "MATCH",
+          "label": "수령 매장 확인",
+          "detail": "현재 매장 상태: CANCELLED"
+        },
+        "payment": {
+          "status": "MATCH",
+          "label": "청구·승인 보류 확인",
+          "detail": "확정 청구 0원 · 0건 / 남은 승인 보류 0원"
+        },
+        "benefits": {
+          "status": "MATCH",
+          "label": "쿠폰·포인트 확인",
+          "detail": "0P 사용 · 0P 적립 / 보류 0P"
+        }
+      },
+      "observation": {
+        "started_at": 1790769767.858216,
+        "finished_at": 1790769767.9820585,
+        "stable": true,
+        "coordinator_version": 10,
+        "payment_revision": 117,
+        "merchant_revisions": {
+          "wave": 248,
+          "corner": 0,
+          "oat": 0,
+          "garden": 0,
+          "express": 0
+        }
+      },
+      "order": {
+        "id": "PCT-1F35EF75A0",
+        "store_id": "wave",
+        "store_name": "웨이브 로스터스",
+        "state": "CANCELLED",
+        "amount_krw": 2800
+      },
+      "benefits": {
+        "spent": 0,
+        "earned": 0,
+        "held_points": 0
+      }
+    },
+    "page_errors": [],
+    "observer_refreshed_without_reload": true,
+    "transport_note": "Two original UI requests paused until both arrived; payloads/responses unchanged."
+  },
+  {
+    "repetition": 3,
+    "viewport": "mobile",
+    "order_id": "PCT-E7EC908941",
+    "result": "passed",
+    "release_commit": "878390efecfddd00e97f8243784e13c05b7b0000",
+    "requests": [
+      {
+        "action": "start",
+        "expected_version": 6,
+        "request_id": "b404f00fc8bc4e56b5ce8b751e37af28"
+      },
+      {
+        "action": "cancel",
+        "expected_version": 6,
+        "request_id": "468b5fd1a66a40d1b7155dc5189492b4"
+      }
+    ],
+    "http_statuses": [
+      409,
+      200
+    ],
+    "final_order_state": "CANCELLED",
+    "proof": {
+      "mode": "synthetic",
+      "scope": "single_host_independent_process_and_store_databases",
+      "journey_id": "98f7ceacca534f899d68483bf29bdbf8",
+      "journey_version": 10,
+      "order_id": "PCT-E7EC908941",
+      "status": "MATCH",
+      "terminal": true,
+      "payment": {
+        "mode": "synthetic",
+        "provider": "DEMO_PLATFORM",
+        "world_id": "98f7ceacca534f899d68483bf29bdbf8",
+        "order_id": "PCT-E7EC908941",
+        "revision": 119,
+        "held_krw": 0,
+        "captured_krw": 0,
+        "capture_count": 0,
+        "authorizations": [
+          {
+            "authorization_id": "AUTH-d128d6c667f94fc1b9c1a6fedd1e5245",
+            "world_id": "98f7ceacca534f899d68483bf29bdbf8",
+            "order_id": "PCT-E7EC908941",
+            "amount_krw": 2800,
+            "currency": "KRW",
+            "payment_revision": 1,
+            "quote_fingerprint": "d2dcd14c76b034e17dd166837e88f3b823739c07f6e0103ae7b76e1d2f0dde81",
+            "status": "VOIDED",
+            "created_at": 1790769771.0204036,
+            "updated_at": 1790769773.5880008
+          }
+        ],
+        "transactions": [
+          {
+            "id": "TX-5e40067cddee4d94a60a124d05eb916c",
+            "seq": 118,
+            "authorization_id": "AUTH-d128d6c667f94fc1b9c1a6fedd1e5245",
+            "world_id": "98f7ceacca534f899d68483bf29bdbf8",
+            "order_id": "PCT-E7EC908941",
+            "kind": "AUTHORIZE",
+            "amount_krw": 2800,
+            "at": 1790769771.0204642
+          },
+          {
+            "id": "TX-b919414d085a47acbd40888099855579",
+            "seq": 119,
+            "authorization_id": "AUTH-d128d6c667f94fc1b9c1a6fedd1e5245",
+            "world_id": "98f7ceacca534f899d68483bf29bdbf8",
+            "order_id": "PCT-E7EC908941",
+            "kind": "VOID",
+            "amount_krw": 2800,
+            "at": 1790769773.5880716
+          }
+        ],
+        "currency": "KRW"
+      },
+      "merchants": {
+        "wave": {
+          "reservation": {
+            "world": "98f7ceacca534f899d68483bf29bdbf8",
+            "order_id": "PCT-E7EC908941",
+            "generation": 0,
+            "phase": "CANCELLED",
+            "transfer_id": ""
+          },
+          "revision": 250,
+          "last_receipt": {
+            "command_id": "88134dde96204d1fa973b022ad64918d:CANCEL",
+            "action": "CANCEL",
+            "generation": 0,
+            "result": {
+              "code": "ACCEPTED",
+              "ok": true,
+              "seat": {
+                "generation": 0,
+                "order_id": "PCT-E7EC908941",
+                "phase": "CANCELLED",
+                "transfer_id": "",
+                "world": "98f7ceacca534f899d68483bf29bdbf8"
+              }
+            }
+          }
+        },
+        "corner": {
+          "reservation": null,
+          "revision": 0,
+          "last_receipt": null
+        },
+        "oat": {
+          "reservation": null,
+          "revision": 0,
+          "last_receipt": null
+        },
+        "garden": {
+          "reservation": null,
+          "revision": 0,
+          "last_receipt": null
+        },
+        "express": {
+          "reservation": null,
+          "revision": 0,
+          "last_receipt": null
+        }
+      },
+      "checks": {
+        "order": {
+          "status": "MATCH",
+          "label": "주문 번호 유지",
+          "detail": "같은 주문 번호 PCT-E7EC908941"
+        },
+        "merchant": {
+          "status": "MATCH",
+          "label": "수령 매장 확인",
+          "detail": "현재 매장 상태: CANCELLED"
+        },
+        "payment": {
+          "status": "MATCH",
+          "label": "청구·승인 보류 확인",
+          "detail": "확정 청구 0원 · 0건 / 남은 승인 보류 0원"
+        },
+        "benefits": {
+          "status": "MATCH",
+          "label": "쿠폰·포인트 확인",
+          "detail": "0P 사용 · 0P 적립 / 보류 0P"
+        }
+      },
+      "observation": {
+        "started_at": 1790769773.8709211,
+        "finished_at": 1790769773.9803774,
+        "stable": true,
+        "coordinator_version": 10,
+        "payment_revision": 119,
+        "merchant_revisions": {
+          "wave": 250,
+          "corner": 0,
+          "oat": 0,
+          "garden": 0,
+          "express": 0
+        }
+      },
+      "order": {
+        "id": "PCT-E7EC908941",
+        "store_id": "wave",
+        "store_name": "웨이브 로스터스",
+        "state": "CANCELLED",
+        "amount_krw": 2800
+      },
+      "benefits": {
+        "spent": 0,
+        "earned": 0,
+        "held_points": 0
+      }
+    },
+    "page_errors": [],
+    "observer_refreshed_without_reload": true,
+    "transport_note": "Two original UI requests paused until both arrived; payloads/responses unchanged."
+  }
+]

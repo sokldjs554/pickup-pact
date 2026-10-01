@@ -64,7 +64,7 @@ def verify(base:str, output:Path, repeat:int=3, expected_commit:str|None=None)->
             command('recover')
         assert s['handoff']['status']=='COMPLETED' and s['order']['id']==oid
         assert s['order']['store_id']=='oat' and s['order']['price']==3200
-        assert s['receipt']['authorization_count']==1 and len(s['receipt']['transfers'])==1
+        assert s['receipt']['authorization_count']==(2 if s.get('protocol_version')==2 else 1) and len(s['receipt']['transfers'])==1
         assert s['merchant_capacity']['wave']['used']==0 and s['merchant_capacity']['oat']['used']==1
         if repetition==1:(output/'recovered.json').write_text(json.dumps(s,ensure_ascii=False,indent=2))
         command('advance',minutes=max(0,s['current_plan']['start_at']-s['clock']))

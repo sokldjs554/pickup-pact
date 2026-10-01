@@ -34,7 +34,11 @@ class MerchantFleet:
                 CREATE TABLE IF NOT EXISTS receipts(
                     world TEXT NOT NULL, command_id TEXT NOT NULL,
                     fingerprint TEXT NOT NULL, result TEXT NOT NULL,
-                    PRIMARY KEY(world, command_id));''')
+                    PRIMARY KEY(world, command_id));
+                CREATE TABLE IF NOT EXISTS receipt_context(
+                    world TEXT NOT NULL, command_id TEXT NOT NULL, order_id TEXT NOT NULL,
+                    action TEXT NOT NULL, generation INTEGER NOT NULL,
+                    PRIMARY KEY(world,command_id));''')
 
     @contextmanager
     def connection(self, shop: str):
@@ -78,6 +82,8 @@ class MerchantFleet:
                 result = self._apply(db, shop, row, payload)
                 db.execute('INSERT INTO receipts VALUES(?,?,?,?)',
                            (world, operation_id, fp, json.dumps(result, sort_keys=True)))
+                db.execute('INSERT INTO receipt_context VALUES(?,?,?,?,?)',
+                           (world,operation_id,order_id,action,generation))
                 db.execute('COMMIT')
             except BaseException:
                 if db.in_transaction:
@@ -141,3 +147,20 @@ class MerchantFleet:
                 result[shop] = dict(capacity=limit, used=used, available=limit-used,
                                     reservations=[dict(row) for row in rows])
         return result
+
+    def evidence(self, world: str, order_id: str) -> dict:
+        """Read each independent DB atomically. World receipt rowids fence ABA changes."""
+        out={}
+        for shop in CAPACITY:
+            with self.connection(shop) as db:
+                db.execute('BEGIN')
+                row=self._row(db,world,order_id)
+                revision=db.execute('SELECT COALESCE(MAX(rowid),0) FROM receipts WHERE world=?',(world,)).fetchone()[0]
+                last=db.execute("""SELECT r.command_id,r.result,c.action,c.generation
+                    FROM receipts r JOIN receipt_context c ON r.world=c.world AND r.command_id=c.command_id
+                    WHERE r.world=? AND c.order_id=? ORDER BY r.rowid DESC LIMIT 1""",(world,order_id)).fetchone()
+                receipt=dict(command_id=last['command_id'],action=last['action'],generation=last['generation'],
+                             result=json.loads(last['result'])) if last else None
+                db.execute('COMMIT')
+                out[shop]=dict(reservation=row,revision=revision,last_receipt=receipt)
+        return dict(mode='synthetic',world_id=world,order_id=order_id,merchants=out)

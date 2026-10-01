@@ -1,0 +1,841 @@
+{
+  "base_url": "http://127.0.0.1:10000",
+  "recorded_release_commit": "878390efecfddd00e97f8243784e13c05b7b0000",
+  "health_before": {
+    "status": "ok",
+    "service": "pickup-pact-demo",
+    "engine": "services/reconciler/app/engine.py",
+    "release_commit": "878390efecfddd00e97f8243784e13c05b7b0000"
+  },
+  "health_after": {
+    "status": "ok",
+    "service": "pickup-pact-demo",
+    "engine": "services/reconciler/app/engine.py",
+    "release_commit": "878390efecfddd00e97f8243784e13c05b7b0000"
+  },
+  "recording_scope": "ci_local_http",
+  "runtime": {
+    "mode": "synthetic",
+    "merchant_transport": "http",
+    "automatic_recovery": true,
+    "predecision_timeout_seconds": 45.0,
+    "retry_limit": 8,
+    "scope": "single_host_independent_process_and_store_databases",
+    "payment_mode": "simulator_http_v1",
+    "payment_transport": "http",
+    "payment_connection": "available",
+    "payment_storage_ready": true
+  },
+  "browser": "153.0.8010.12",
+  "source_video": "raw/page@b89b56130321abb4107e0fb69ce12107.webm",
+  "scenes": [
+    {
+      "name": "01-home",
+      "caption": "설정 없이 시작 · 실제 서버를 사용하는 주문 체험",
+      "start": 0.7237708310001381,
+      "duration": 4.011402008999994
+    },
+    {
+      "name": "02-order",
+      "caption": "승인이 저장된 뒤 응답이 끊겨도 · 같은 승인 번호로 재확인",
+      "start": 4.79870798800016,
+      "duration": 5.281128421999938
+    },
+    {
+      "name": "03-consent",
+      "caption": "금액과 변경 조건을 직접 확인 · 동의 전에는 옮기지 않아요",
+      "start": 10.516693280000027,
+      "duration": 5.00458513600006
+    },
+    {
+      "name": "04-rejected",
+      "caption": "새 매장이 거절해도 원래 주문·쿠폰·포인트는 그대로",
+      "start": 15.645198697000069,
+      "duration": 6.003689324000106
+    },
+    {
+      "name": "05-automatic-recovery",
+      "caption": "응답만 끊긴 상황 · 다시 누르지 않아도 서버가 자동 확인",
+      "start": 21.820973247999973,
+      "duration": 7.003136280000035
+    },
+    {
+      "name": "06-recovered",
+      "caption": "같은 주문 번호로 새 매장에 연결 · 중복 결제 없이 이어가요",
+      "start": 28.914464469999984,
+      "duration": 4.000357179000048
+    },
+    {
+      "name": "07-merchant",
+      "caption": "두 매장 원본을 확인 · 이전 자리는 해제, 새 매장만 제조",
+      "start": 32.9634593830001,
+      "duration": 5.001446871000098
+    },
+    {
+      "name": "08-receipt",
+      "caption": "주문·매장·결제·혜택 원본 대조 · 3,200원 청구 1건",
+      "start": 38.365806495000015,
+      "duration": 6.001782580000054
+    }
+  ],
+  "same_order": true,
+  "refusal_preserved_order_and_benefits": true,
+  "recovery_without_manual_command": true,
+  "order_id": "PCT-5DB61DC85A",
+  "cash_due": 3200,
+  "capture_count": 1,
+  "points_spent": 1000,
+  "points_earned": 32,
+  "page_errors": [],
+  "requests": [
+    {
+      "url": "http://127.0.0.1:10000/?payment=authorize_reply_lost",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "url": "http://127.0.0.1:10000/route-assets/product.css",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "url": "http://127.0.0.1:10000/route-assets/benefits.css",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "url": "http://127.0.0.1:10000/route-assets/product.js",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "url": "http://127.0.0.1:10000/route-assets/benefits-ui.js",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "url": "http://127.0.0.1:10000/route-assets/handoff.css",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "url": "http://127.0.0.1:10000/route-assets/selection-state.js",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "url": "http://127.0.0.1:10000/route-assets/handoff-ui.js",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "url": "http://127.0.0.1:10000/route-assets/recovery-ui.js",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "url": "http://127.0.0.1:10000/route-assets/agreement-ui.js",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "url": "http://127.0.0.1:10000/route-assets/guide.css",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "url": "http://127.0.0.1:10000/route-assets/guide-flow.js",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "url": "http://127.0.0.1:10000/route-assets/payment.css",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "url": "http://127.0.0.1:10000/route-assets/payment-ui.js",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "url": "http://127.0.0.1:10000/api/route/catalog",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "url": "http://127.0.0.1:10000/api/route/journeys",
+      "method": "POST",
+      "body": {
+        "destination": "office",
+        "deadline_minutes": 16,
+        "drink": "latte",
+        "milk": "regular",
+        "decaf": false,
+        "budget": 5500,
+        "max_detour": 5,
+        "priority": "arrival",
+        "coupon_id": "welcome500",
+        "points": 1000,
+        "payment_card": "demo-approved",
+        "payment_scenario": "authorize_reply_lost"
+      }
+    },
+    {
+      "url": "http://127.0.0.1:10000/api/route/journeys/fe39838c48a24207af6602be6409bf5e/reconciliation",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "url": "http://127.0.0.1:10000/api/route/journeys/fe39838c48a24207af6602be6409bf5e/commands",
+      "method": "POST",
+      "body": {
+        "action": "reserve",
+        "expected_version": 1,
+        "request_id": "6b5c22bfc3534888967b4dc01f48e856",
+        "quote_id": "048be59698f1ec64777b9e19cdf00f09"
+      }
+    },
+    {
+      "url": "http://127.0.0.1:10000/api/route/journeys/fe39838c48a24207af6602be6409bf5e/reconciliation",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "url": "http://127.0.0.1:10000/api/route/journeys/fe39838c48a24207af6602be6409bf5e",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "url": "http://127.0.0.1:10000/api/route/journeys/fe39838c48a24207af6602be6409bf5e",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "url": "http://127.0.0.1:10000/api/route/journeys/fe39838c48a24207af6602be6409bf5e",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "url": "http://127.0.0.1:10000/api/route/journeys/fe39838c48a24207af6602be6409bf5e/reconciliation",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "url": "http://127.0.0.1:10000/api/route/journeys/fe39838c48a24207af6602be6409bf5e",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "url": "http://127.0.0.1:10000/api/route/journeys/fe39838c48a24207af6602be6409bf5e/reconciliation",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "url": "http://127.0.0.1:10000/api/route/journeys/fe39838c48a24207af6602be6409bf5e/commands",
+      "method": "POST",
+      "body": {
+        "action": "disrupt",
+        "expected_version": 6,
+        "request_id": "2583e61fc25d419ab5a0fadde2b283a6",
+        "store_id": "wave",
+        "minutes": 12
+      }
+    },
+    {
+      "url": "http://127.0.0.1:10000/api/route/journeys/fe39838c48a24207af6602be6409bf5e/reconciliation",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "url": "http://127.0.0.1:10000/api/route/journeys/fe39838c48a24207af6602be6409bf5e/transfer-controls",
+      "method": "POST",
+      "body": {
+        "action": "fault",
+        "fault": "target_reject",
+        "expected_version": 7,
+        "request_id": "a4143fe9bd004ecb9a94a3e6ca13db36"
+      }
+    },
+    {
+      "url": "http://127.0.0.1:10000/api/route/journeys/fe39838c48a24207af6602be6409bf5e/reconciliation",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "url": "http://127.0.0.1:10000/api/route/journeys/fe39838c48a24207af6602be6409bf5e/commands",
+      "method": "POST",
+      "body": {
+        "action": "transfer",
+        "expected_version": 8,
+        "request_id": "3ff877465ddf46908f1eed4fedf79072",
+        "quote_id": "99c686877771b04e6c4fd12b87f8937c"
+      }
+    },
+    {
+      "url": "http://127.0.0.1:10000/api/route/journeys/fe39838c48a24207af6602be6409bf5e/reconciliation",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "url": "http://127.0.0.1:10000/api/route/journeys/fe39838c48a24207af6602be6409bf5e",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "url": "http://127.0.0.1:10000/api/route/journeys/fe39838c48a24207af6602be6409bf5e/transfer-controls",
+      "method": "POST",
+      "body": {
+        "action": "fault",
+        "fault": "after_target_hold",
+        "expected_version": 13,
+        "request_id": "992a65ecf6c44bd7843fd6bee5c251c8"
+      }
+    },
+    {
+      "url": "http://127.0.0.1:10000/api/route/journeys/fe39838c48a24207af6602be6409bf5e/reconciliation",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "url": "http://127.0.0.1:10000/api/route/journeys/fe39838c48a24207af6602be6409bf5e/commands",
+      "method": "POST",
+      "body": {
+        "action": "transfer",
+        "expected_version": 14,
+        "request_id": "4a4a869f10534617ac87bd0b958bfdab",
+        "quote_id": "6bf67e1877a75b08b765bbf22aaf64a8"
+      }
+    },
+    {
+      "url": "http://127.0.0.1:10000/api/route/journeys/fe39838c48a24207af6602be6409bf5e/reconciliation",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "url": "http://127.0.0.1:10000/api/route/journeys/fe39838c48a24207af6602be6409bf5e",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "url": "http://127.0.0.1:10000/api/route/journeys/fe39838c48a24207af6602be6409bf5e",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "url": "http://127.0.0.1:10000/api/route/journeys/fe39838c48a24207af6602be6409bf5e",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "url": "http://127.0.0.1:10000/api/route/journeys/fe39838c48a24207af6602be6409bf5e/reconciliation",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "url": "http://127.0.0.1:10000/api/route/journeys/fe39838c48a24207af6602be6409bf5e",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "url": "http://127.0.0.1:10000/api/route/journeys/fe39838c48a24207af6602be6409bf5e",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "url": "http://127.0.0.1:10000/api/route/journeys/fe39838c48a24207af6602be6409bf5e/reconciliation",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "url": "http://127.0.0.1:10000/api/route/journeys/fe39838c48a24207af6602be6409bf5e/commands",
+      "method": "POST",
+      "body": {
+        "action": "advance",
+        "expected_version": 24,
+        "request_id": "53da515d8521432ea8e419bcb32d54d3",
+        "minutes": 2
+      }
+    },
+    {
+      "url": "http://127.0.0.1:10000/api/route/journeys/fe39838c48a24207af6602be6409bf5e/reconciliation",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "url": "http://127.0.0.1:10000/api/route/journeys/fe39838c48a24207af6602be6409bf5e/commands",
+      "method": "POST",
+      "body": {
+        "action": "start",
+        "expected_version": 25,
+        "request_id": "dbeb1f883bd84601b5946181f8ff3705"
+      }
+    },
+    {
+      "url": "http://127.0.0.1:10000/api/route/journeys/fe39838c48a24207af6602be6409bf5e/reconciliation",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "url": "http://127.0.0.1:10000/api/route/journeys/fe39838c48a24207af6602be6409bf5e/commands",
+      "method": "POST",
+      "body": {
+        "action": "advance",
+        "expected_version": 29,
+        "request_id": "c36bd01b96f8472eb6e6e9d182b8268c",
+        "minutes": 5
+      }
+    },
+    {
+      "url": "http://127.0.0.1:10000/api/route/journeys/fe39838c48a24207af6602be6409bf5e/reconciliation",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "url": "http://127.0.0.1:10000/api/route/journeys/fe39838c48a24207af6602be6409bf5e/commands",
+      "method": "POST",
+      "body": {
+        "action": "ready",
+        "expected_version": 30,
+        "request_id": "cfbb916b35fa4af09e09b5a99227b187"
+      }
+    },
+    {
+      "url": "http://127.0.0.1:10000/api/route/journeys/fe39838c48a24207af6602be6409bf5e/reconciliation",
+      "method": "GET",
+      "body": null
+    },
+    {
+      "url": "http://127.0.0.1:10000/api/route/journeys/fe39838c48a24207af6602be6409bf5e/commands",
+      "method": "POST",
+      "body": {
+        "action": "claim",
+        "expected_version": 34,
+        "request_id": "31aac8e14d6f4b37b735dfe22200d1e4",
+        "pickup_code": "460006"
+      }
+    },
+    {
+      "url": "http://127.0.0.1:10000/api/route/journeys/fe39838c48a24207af6602be6409bf5e/reconciliation",
+      "method": "GET",
+      "body": null
+    }
+  ],
+  "approval_pending_order_id": "PCT-5DB61DC85A",
+  "merchant_terminal_evidence": {
+    "mode": "synthetic",
+    "scope": "single_host_independent_process_and_store_databases",
+    "journey_id": "fe39838c48a24207af6602be6409bf5e",
+    "journey_version": 29,
+    "order_id": "PCT-5DB61DC85A",
+    "status": "MATCH",
+    "terminal": false,
+    "payment": {
+      "mode": "synthetic",
+      "provider": "DEMO_PLATFORM",
+      "world_id": "fe39838c48a24207af6602be6409bf5e",
+      "order_id": "PCT-5DB61DC85A",
+      "revision": 122,
+      "held_krw": 3200,
+      "captured_krw": 0,
+      "capture_count": 0,
+      "authorizations": [
+        {
+          "authorization_id": "AUTH-14424c62c8cc41beab9ed0dd47184d14",
+          "world_id": "fe39838c48a24207af6602be6409bf5e",
+          "order_id": "PCT-5DB61DC85A",
+          "amount_krw": 2800,
+          "currency": "KRW",
+          "payment_revision": 1,
+          "quote_fingerprint": "3600612dc43e280e7eb02771d78132ab24b363c7e7bf26e2cd3593774b2c9a3e",
+          "status": "VOIDED",
+          "created_at": 1790769781.7580545,
+          "updated_at": 1790769802.1613328
+        },
+        {
+          "authorization_id": "AUTH-60566e1c16cb4a019cbdedb90f38ab65",
+          "world_id": "fe39838c48a24207af6602be6409bf5e",
+          "order_id": "PCT-5DB61DC85A",
+          "amount_krw": 3200,
+          "currency": "KRW",
+          "payment_revision": 3,
+          "quote_fingerprint": "e7ab061520d45a3b1c89cac3f0577b0a38de45d4798b89bec0f3d51af6759cdb",
+          "status": "AUTHORIZED",
+          "created_at": 1790769802.053793,
+          "updated_at": 1790769802.053793
+        }
+      ],
+      "transactions": [
+        {
+          "id": "TX-b9898e69b95d42099cb3a11dade2fc4e",
+          "seq": 120,
+          "authorization_id": "AUTH-14424c62c8cc41beab9ed0dd47184d14",
+          "world_id": "fe39838c48a24207af6602be6409bf5e",
+          "order_id": "PCT-5DB61DC85A",
+          "kind": "AUTHORIZE",
+          "amount_krw": 2800,
+          "at": 1790769781.7581344
+        },
+        {
+          "id": "TX-1a2f1e4745634d2c9a5652fca71c3a56",
+          "seq": 121,
+          "authorization_id": "AUTH-60566e1c16cb4a019cbdedb90f38ab65",
+          "world_id": "fe39838c48a24207af6602be6409bf5e",
+          "order_id": "PCT-5DB61DC85A",
+          "kind": "AUTHORIZE",
+          "amount_krw": 3200,
+          "at": 1790769802.0538676
+        },
+        {
+          "id": "TX-4e3f5956cf0a413f8bb8fc580ce521f7",
+          "seq": 122,
+          "authorization_id": "AUTH-14424c62c8cc41beab9ed0dd47184d14",
+          "world_id": "fe39838c48a24207af6602be6409bf5e",
+          "order_id": "PCT-5DB61DC85A",
+          "kind": "VOID",
+          "amount_krw": 2800,
+          "at": 1790769802.1613872
+        }
+      ],
+      "currency": "KRW"
+    },
+    "merchants": {
+      "wave": {
+        "reservation": {
+          "world": "fe39838c48a24207af6602be6409bf5e",
+          "order_id": "PCT-5DB61DC85A",
+          "generation": 0,
+          "phase": "RELEASED",
+          "transfer_id": "cef3e2fa92e34cf8bfadb60034870066"
+        },
+        "revision": 255,
+        "last_receipt": {
+          "command_id": "cef3e2fa92e34cf8bfadb60034870066:RELEASE_SOURCE",
+          "action": "RELEASE_SOURCE",
+          "generation": 0,
+          "result": {
+            "code": "ACCEPTED",
+            "ok": true,
+            "seat": {
+              "generation": 0,
+              "order_id": "PCT-5DB61DC85A",
+              "phase": "RELEASED",
+              "transfer_id": "cef3e2fa92e34cf8bfadb60034870066",
+              "world": "fe39838c48a24207af6602be6409bf5e"
+            }
+          }
+        }
+      },
+      "corner": {
+        "reservation": null,
+        "revision": 0,
+        "last_receipt": null
+      },
+      "oat": {
+        "reservation": {
+          "world": "fe39838c48a24207af6602be6409bf5e",
+          "order_id": "PCT-5DB61DC85A",
+          "generation": 2,
+          "phase": "PREPARING",
+          "transfer_id": ""
+        },
+        "revision": 181,
+        "last_receipt": {
+          "command_id": "d5550f5f7a2a4e31836716131d313916:START",
+          "action": "START",
+          "generation": 2,
+          "result": {
+            "code": "ACCEPTED",
+            "ok": true,
+            "seat": {
+              "generation": 2,
+              "order_id": "PCT-5DB61DC85A",
+              "phase": "PREPARING",
+              "transfer_id": "",
+              "world": "fe39838c48a24207af6602be6409bf5e"
+            }
+          }
+        }
+      },
+      "garden": {
+        "reservation": null,
+        "revision": 0,
+        "last_receipt": null
+      },
+      "express": {
+        "reservation": null,
+        "revision": 0,
+        "last_receipt": null
+      }
+    },
+    "checks": {
+      "order": {
+        "status": "MATCH",
+        "label": "주문 번호 유지",
+        "detail": "같은 주문 번호 PCT-5DB61DC85A"
+      },
+      "merchant": {
+        "status": "MATCH",
+        "label": "수령 매장 확인",
+        "detail": "현재 매장 상태: PREPARING"
+      },
+      "payment": {
+        "status": "MATCH",
+        "label": "청구·승인 보류 확인",
+        "detail": "확정 청구 0원 · 0건 / 남은 승인 보류 3,200원"
+      },
+      "benefits": {
+        "status": "MATCH",
+        "label": "쿠폰·포인트 확인",
+        "detail": "0P 사용 · 0P 적립 / 보류 1,000P"
+      }
+    },
+    "observation": {
+      "started_at": 1790769810.2767284,
+      "finished_at": 1790769810.3736908,
+      "stable": true,
+      "coordinator_version": 29,
+      "payment_revision": 122,
+      "merchant_revisions": {
+        "wave": 255,
+        "corner": 0,
+        "oat": 181,
+        "garden": 0,
+        "express": 0
+      }
+    },
+    "order": {
+      "id": "PCT-5DB61DC85A",
+      "store_id": "oat",
+      "store_name": "오트 스튜디오",
+      "state": "PREPARING",
+      "amount_krw": 3200
+    },
+    "benefits": {
+      "spent": 0,
+      "earned": 0,
+      "held_points": 1000
+    }
+  },
+  "final_reconciliation": {
+    "mode": "synthetic",
+    "scope": "single_host_independent_process_and_store_databases",
+    "journey_id": "fe39838c48a24207af6602be6409bf5e",
+    "journey_version": 38,
+    "order_id": "PCT-5DB61DC85A",
+    "status": "MATCH",
+    "terminal": true,
+    "payment": {
+      "mode": "synthetic",
+      "provider": "DEMO_PLATFORM",
+      "world_id": "fe39838c48a24207af6602be6409bf5e",
+      "order_id": "PCT-5DB61DC85A",
+      "revision": 123,
+      "held_krw": 0,
+      "captured_krw": 3200,
+      "capture_count": 1,
+      "authorizations": [
+        {
+          "authorization_id": "AUTH-14424c62c8cc41beab9ed0dd47184d14",
+          "world_id": "fe39838c48a24207af6602be6409bf5e",
+          "order_id": "PCT-5DB61DC85A",
+          "amount_krw": 2800,
+          "currency": "KRW",
+          "payment_revision": 1,
+          "quote_fingerprint": "3600612dc43e280e7eb02771d78132ab24b363c7e7bf26e2cd3593774b2c9a3e",
+          "status": "VOIDED",
+          "created_at": 1790769781.7580545,
+          "updated_at": 1790769802.1613328
+        },
+        {
+          "authorization_id": "AUTH-60566e1c16cb4a019cbdedb90f38ab65",
+          "world_id": "fe39838c48a24207af6602be6409bf5e",
+          "order_id": "PCT-5DB61DC85A",
+          "amount_krw": 3200,
+          "currency": "KRW",
+          "payment_revision": 3,
+          "quote_fingerprint": "e7ab061520d45a3b1c89cac3f0577b0a38de45d4798b89bec0f3d51af6759cdb",
+          "status": "CAPTURED",
+          "created_at": 1790769802.053793,
+          "updated_at": 1790769815.318194
+        }
+      ],
+      "transactions": [
+        {
+          "id": "TX-b9898e69b95d42099cb3a11dade2fc4e",
+          "seq": 120,
+          "authorization_id": "AUTH-14424c62c8cc41beab9ed0dd47184d14",
+          "world_id": "fe39838c48a24207af6602be6409bf5e",
+          "order_id": "PCT-5DB61DC85A",
+          "kind": "AUTHORIZE",
+          "amount_krw": 2800,
+          "at": 1790769781.7581344
+        },
+        {
+          "id": "TX-1a2f1e4745634d2c9a5652fca71c3a56",
+          "seq": 121,
+          "authorization_id": "AUTH-60566e1c16cb4a019cbdedb90f38ab65",
+          "world_id": "fe39838c48a24207af6602be6409bf5e",
+          "order_id": "PCT-5DB61DC85A",
+          "kind": "AUTHORIZE",
+          "amount_krw": 3200,
+          "at": 1790769802.0538676
+        },
+        {
+          "id": "TX-4e3f5956cf0a413f8bb8fc580ce521f7",
+          "seq": 122,
+          "authorization_id": "AUTH-14424c62c8cc41beab9ed0dd47184d14",
+          "world_id": "fe39838c48a24207af6602be6409bf5e",
+          "order_id": "PCT-5DB61DC85A",
+          "kind": "VOID",
+          "amount_krw": 2800,
+          "at": 1790769802.1613872
+        },
+        {
+          "id": "TX-e495026a17ad405ab2bd151431ed38af",
+          "seq": 123,
+          "authorization_id": "AUTH-60566e1c16cb4a019cbdedb90f38ab65",
+          "world_id": "fe39838c48a24207af6602be6409bf5e",
+          "order_id": "PCT-5DB61DC85A",
+          "kind": "CAPTURE",
+          "amount_krw": 3200,
+          "at": 1790769815.3182693
+        }
+      ],
+      "currency": "KRW"
+    },
+    "merchants": {
+      "wave": {
+        "reservation": {
+          "world": "fe39838c48a24207af6602be6409bf5e",
+          "order_id": "PCT-5DB61DC85A",
+          "generation": 0,
+          "phase": "RELEASED",
+          "transfer_id": "cef3e2fa92e34cf8bfadb60034870066"
+        },
+        "revision": 255,
+        "last_receipt": {
+          "command_id": "cef3e2fa92e34cf8bfadb60034870066:RELEASE_SOURCE",
+          "action": "RELEASE_SOURCE",
+          "generation": 0,
+          "result": {
+            "code": "ACCEPTED",
+            "ok": true,
+            "seat": {
+              "generation": 0,
+              "order_id": "PCT-5DB61DC85A",
+              "phase": "RELEASED",
+              "transfer_id": "cef3e2fa92e34cf8bfadb60034870066",
+              "world": "fe39838c48a24207af6602be6409bf5e"
+            }
+          }
+        }
+      },
+      "corner": {
+        "reservation": null,
+        "revision": 0,
+        "last_receipt": null
+      },
+      "oat": {
+        "reservation": {
+          "world": "fe39838c48a24207af6602be6409bf5e",
+          "order_id": "PCT-5DB61DC85A",
+          "generation": 2,
+          "phase": "CLAIMED",
+          "transfer_id": ""
+        },
+        "revision": 183,
+        "last_receipt": {
+          "command_id": "72ed6c0b31b2478ead653cf55d15f729:CLAIM",
+          "action": "CLAIM",
+          "generation": 2,
+          "result": {
+            "code": "ACCEPTED",
+            "ok": true,
+            "seat": {
+              "generation": 2,
+              "order_id": "PCT-5DB61DC85A",
+              "phase": "CLAIMED",
+              "transfer_id": "",
+              "world": "fe39838c48a24207af6602be6409bf5e"
+            }
+          }
+        }
+      },
+      "garden": {
+        "reservation": null,
+        "revision": 0,
+        "last_receipt": null
+      },
+      "express": {
+        "reservation": null,
+        "revision": 0,
+        "last_receipt": null
+      }
+    },
+    "checks": {
+      "order": {
+        "status": "MATCH",
+        "label": "주문 번호 유지",
+        "detail": "같은 주문 번호 PCT-5DB61DC85A"
+      },
+      "merchant": {
+        "status": "MATCH",
+        "label": "수령 매장 확인",
+        "detail": "수령 매장 1곳 · 오트 스튜디오"
+      },
+      "payment": {
+        "status": "MATCH",
+        "label": "청구·승인 보류 확인",
+        "detail": "확정 청구 3,200원 · 1건 / 남은 승인 보류 0원"
+      },
+      "benefits": {
+        "status": "MATCH",
+        "label": "쿠폰·포인트 확인",
+        "detail": "1,000P 사용 · 32P 적립 / 보류 0P"
+      }
+    },
+    "observation": {
+      "started_at": 1790769821.2775881,
+      "finished_at": 1790769821.363302,
+      "stable": true,
+      "coordinator_version": 38,
+      "payment_revision": 123,
+      "merchant_revisions": {
+        "wave": 255,
+        "corner": 0,
+        "oat": 183,
+        "garden": 0,
+        "express": 0
+      }
+    },
+    "order": {
+      "id": "PCT-5DB61DC85A",
+      "store_id": "oat",
+      "store_name": "오트 스튜디오",
+      "state": "PICKED_UP",
+      "amount_krw": 3200
+    },
+    "benefits": {
+      "spent": 1000,
+      "earned": 32,
+      "held_points": 0
+    }
+  },
+  "editing": "Original Chromium pixels; normal-speed scene cuts and caption padding only. Virtual clock advances are explicit.",
+  "edited_duration_seconds": 42.4,
+  "media_sha256": {
+    "07-merchant.png": "639a236f7959b8596907c997c61cd8bce056bb619d9f61cc33d49ba4b3f8f50c",
+    "pickup-pact-payment.gif": "9db938e4281e011fc51d724c629e287f82a3165633dd63a63b12683ff621b2cc",
+    "pickup-pact-payment.mp4": "892e94144359ba1896024e8a847627fe93dc334045d3a6b0f134988e75530687",
+    "05-automatic-recovery.png": "54051da67befd1c1a503562fb7abd8a45fed769e5188612852a173474f854ac4",
+    "04-rejected.png": "a10b96f65ff59bde6dd55bb970235e02cab147fc1898d5f9452cffff3d73cdfa",
+    "06-recovered.png": "d1fedc0591ddd3609296e21ad69765c485db1547c79cd5bbf9ad644f2c304bf7",
+    "01-home.png": "0f1cc214c20a48d3e1d89b69fd17be357617383fce7c1295caeafbd87f46f0e4",
+    "03-consent.png": "c10f15d93bd6e4b73e060ec39eec76b777a971758e9393b0e6baea0cd8b6c531",
+    "02-approval-unknown.png": "03464bd4fecdb1f6e172f4051b67655aade76bd75e3c595cb688c10d7d0181b7",
+    "05-pending.png": "f0e367d5e9ac03dd2c83bb9d9f4dc5f4d6ce709bdc0318e4777442f4e7beb74f",
+    "08-receipt.png": "a424d4e85a942f4704f0aa23bc2e44a05d4c8863304283fe56ebd9c38a6c1db1",
+    "02-order.png": "0ee5f48053f6088a529fcc403f7836ccc21a6b8bade242f299d73f0ebb11d6ea"
+  }
+}

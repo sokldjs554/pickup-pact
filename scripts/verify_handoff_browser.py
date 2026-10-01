@@ -100,7 +100,7 @@ def verify(base,output,repeat,expected_commit=None):
                         page.locator('#recoverHandoff').click()
                     expect(page.locator('#handoffMessage')).to_contain_text('같은 주문으로 매장을 바꿨어요')
                     moved=snapshot();assert moved['order']['id']==oid and moved['order']['store_id']=='oat'
-                    assert moved['receipt']['authorization_count']==1;shot('04-recovered')
+                    assert moved['receipt']['authorization_count']==(2 if moved.get('protocol_version')==2 else 1);shot('04-recovered')
                     page.locator('nav [data-view="merchant"]').click()
                     advance=page.locator('#merchantContent [data-action="advance"]')
                     if advance.count():advance.click()

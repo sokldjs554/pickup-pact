@@ -1,0 +1,14 @@
+'use strict';
+const assert=require('node:assert/strict');
+const {acceptsEvidence,headline}=require('../demo/route/payment-ui.js');
+assert(acceptsEvidence({journey_id:'one',journey_version:3},{id:'one',version:3}));
+assert(!acceptsEvidence({journey_id:'one',journey_version:2},{id:'one',version:3}));
+assert(!acceptsEvidence({journey_id:'other',journey_version:3},{id:'one',version:3}));
+assert(!acceptsEvidence(null,{id:'one',version:3}));
+assert(!acceptsEvidence({journey_id:'one',journey_version:3},null));
+assert(headline(null).includes('읽지 못했어요'));
+assert(headline({status:'UNAVAILABLE'}).includes('0건이나 정상으로 판단하지 않아요'));
+assert(headline({status:'MATCH',terminal:false}).includes('수령 전'));
+assert(headline({status:'MATCH',terminal:true}).includes('기록이 일치'));
+assert(headline({status:'PENDING'}).includes('다시 결제하지 마세요'));
+console.log('10 payment presentation checks passed: stale, cross-journey, missing evidence, pending and terminal distinctions');

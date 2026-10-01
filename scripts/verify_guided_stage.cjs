@@ -4,6 +4,9 @@ const {stageFor,PRESET}=require('../demo/route/guide-flow.js');
 const base=()=>({order:{id:'one',state:'RESERVED',store_id:'wave'},handoff:null,handoff_pending:false,risk:{needs_attention:false}});
 const cases=[
  ['no order',null,'reserve'],
+ ['approval uncertain before order exists',{order:null,handoff_pending:true,pending_order_id:'pending'},'waiting'],
+ ['first approval exhausted',{order:null,handoff_pending:true,handoff:{recovery:{state:'REVIEW_REQUIRED'}}},'review'],
+ ['decline is not another automatic order',{order:null,handoff_pending:false,handoff:{status:'REJECTED'},payment:{state:'DECLINED'}},'declined'],
  ['original order',base(),'busy'],
  ['store delayed',{...base(),risk:{needs_attention:true}},'reject'],
  ['actual rejection',{...base(),handoff:{action:'transfer',status:'REJECTED'}},'disconnect'],

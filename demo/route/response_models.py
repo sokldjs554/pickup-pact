@@ -204,3 +204,76 @@ class ComparisonView(Extensible):
     mode: Literal['controlled_command_execution']
     baseline_design: str
     disclosure: str
+
+EvidenceStatus=Literal['MATCH','PENDING','MISMATCH','UNAVAILABLE']
+
+class EvidenceCheck(BaseModel):
+    model_config=ConfigDict(extra='forbid')
+    status: EvidenceStatus
+    label: str
+    detail: str
+
+class PaymentAuthorizationEvidence(Extensible):
+    authorization_id: str
+    world_id: str
+    order_id: str
+    amount_krw: Money
+    currency: Literal['KRW']
+    payment_revision: Annotated[StrictInt,Field(ge=1)]
+    quote_fingerprint: str
+    status: Literal['AUTHORIZED','CAPTURED','VOIDED']
+
+class PaymentTransactionEvidence(Extensible):
+    id: str
+    seq: Annotated[StrictInt,Field(ge=1)]
+    authorization_id: str
+    world_id: str
+    order_id: str
+    kind: Literal['AUTHORIZE','CAPTURE','VOID']
+    amount_krw: Money
+    at: float
+
+class PaymentEvidence(Extensible):
+    mode: Literal['synthetic']
+    provider: Literal['DEMO_PLATFORM']
+    world_id: str
+    order_id: str
+    revision: Money
+    held_krw: Money
+    captured_krw: Money
+    capture_count: Money
+    authorizations: list[PaymentAuthorizationEvidence]
+    transactions: list[PaymentTransactionEvidence]
+
+class MerchantReservation(Extensible):
+    world: str
+    order_id: str
+    generation: Money
+    phase: Literal['RESERVED','HELD','FROZEN','PREPARING','READY','CLAIMED','CANCELLED','RELEASED','ABORTED']
+    transfer_id: str
+
+class MerchantEvidence(Extensible):
+    reservation: MerchantReservation|None
+    revision: Money
+    last_receipt: dict|None
+
+class EvidenceObservation(Extensible):
+    started_at: float
+    finished_at: float|None
+    stable: StrictBool
+    coordinator_version: Annotated[StrictInt,Field(ge=1)]
+    payment_revision: Money|None=None
+    merchant_revisions: dict[str,Money]|None=None
+
+class ReconciliationView(Extensible):
+    mode: Literal['synthetic']
+    scope: str
+    journey_id: str
+    journey_version: Annotated[StrictInt,Field(ge=1)]
+    order_id: str|None
+    status: EvidenceStatus
+    terminal: StrictBool
+    payment: PaymentEvidence|None
+    merchants: dict[str,MerchantEvidence]|None
+    checks: dict[Literal['order','merchant','payment','benefits'],EvidenceCheck]
+    observation: EvidenceObservation

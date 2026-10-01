@@ -23,8 +23,10 @@ def require(condition,code,message):
     if not condition: raise Conflict(code,message)
 
 class JourneyStore:
-    def __init__(self,path, fleet=None):
+    def __init__(self,path, fleet=None, payment_gateway=None):
         self.automatic_recovery_enabled = False
+        self.payment_gateway = payment_gateway
+        self.payment_enabled = payment_gateway is not None
         self.path=str(path); Path(path).parent.mkdir(parents=True,exist_ok=True)
         with self.connection() as db:
             db.executescript('''PRAGMA journal_mode=WAL;
@@ -39,6 +41,10 @@ class JourneyStore:
         from .durable_operations import DurableOperations
         self.fleet = fleet or MerchantFleet(self.path + '.merchants')
         self.operations = DurableOperations(self)
+        from .payments.notifications import PaymentInbox
+        from .payment_operations import PaymentOperations
+        self.payment_inbox = PaymentInbox(self.path, secrets.token_hex(32))
+        self.payment_operations = PaymentOperations(self)
 
     @contextmanager
     def connection(self):
@@ -59,10 +65,17 @@ class JourneyStore:
     def event(s,kind,title,**data):
         s['events'].append(dict(seq=len(s['events'])+1,type=kind,title=title,at=s['clock'],data=data))
 
-    def create(self,intent,world_id=None):
+    def create(self,intent,world_id=None,card_token="demo-approved",payment_fault="none"):
         s=dict(id=uuid4().hex,version=1,clock=0,arrival_delay=0,intent=intent,
                stores=deepcopy(STORES),order=None,events=[],mode='synthetic',wallet=benefits.initial_wallet(),transfer_agreement_version=1)
         s['world_id'] = world_id or s['id']
+        if self.payment_enabled:
+            from .payment_steps import FAULTS
+            require(card_token in {'demo-approved','demo-declined'} and payment_fault in FAULTS,
+                    'INVALID_PAYMENT_SETUP','가상 카드와 정해진 문제 상황만 선택할 수 있어요.')
+            s.update(protocol_version=2,payment_mode='simulator_http_v1',payment_card=card_token,
+                     next_payment_fault=payment_fault,payment_revision_counter=0,
+                     payment=dict(state='NOT_STARTED',authorization=None,provider='DEMO_PLATFORM',mode='synthetic'))
         self.event(s,'INTENT_CREATED','일정과 커피 조건을 저장했어요',intent=intent)
         with self.connection() as db: self._save(db,s)
         return self.view(s)
@@ -122,9 +135,25 @@ class JourneyStore:
             if out['handoff_pending']:
                 out['recommendations'] = []
                 out['risk']['can_transfer'] = False
+        if s.get('protocol_version')==2 and out.get('handoff_pending'):
+            op=out.get('handoff') or {}
+            phase=op.get('phase')
+            state={'PAY_AUTHORIZE':'CONFIRMING_APPROVAL','PAY_AUTHORIZE_REPLACEMENT':'CONFIRMING_APPROVAL',
+                   'PAY_CAPTURE':'CONFIRMING_CAPTURE','PAY_VOID':'CONFIRMING_RELEASE',
+                   'VOID_NEW_AUTH':'CONFIRMING_RELEASE','VOID_OLD_AUTH':'CONFIRMING_RELEASE'}.get(phase,'MERCHANT_CONFIRMING')
+            if op.get('recovery',{}).get('state')=='REVIEW_REQUIRED':state='REVIEW_REQUIRED'
+            out['payment']['state']=state
+            out['payment']['pending_phase']=phase
         return out
 
+    def payment_control(self,sid,c):
+        return self.payment_operations.control(sid,c)
+
     def command(self,sid,c):
+        with self.connection() as db:
+            protocol=self._load(db,sid).get('protocol_version',1)
+        if protocol==2:
+            return self.payment_operations.command(sid,c)
         result = self.operations.command(sid,c)
         return result if result is not None else self._command_local(sid,c)
 
@@ -191,7 +220,8 @@ class JourneyStore:
                 s['order']['commercial_terms']=deepcopy(p['transfer_terms'])
             benefits.hold(s,p['pricing'])
             self.event(s,'BENEFITS_HELD','쿠폰·포인트 사용을 보류했어요',pricing=p['pricing'])
-            self.event(s,'PAYMENT_AUTHORIZED','모의 결제 승인 1건',amount=p['price'])
+            if s.get('protocol_version') != 2:
+                self.event(s,'PAYMENT_AUTHORIZED','모의 결제 승인 1건',amount=p['price'])
             self.event(s,'ORDER_RESERVED',p['name']+'에 주문했어요',store_id=p['store_id'],amount=p['price'])
             return
         if action=='disrupt':
@@ -235,7 +265,8 @@ class JourneyStore:
                        old_price=old_price,new_price=p['price'],difference=p['price']-old_price,order_id=order['id'],
                        old_pricing=old_pricing,new_pricing=p['pricing'],
                        old_arrival=old_arrival,new_arrival=p['arrival_at'])
-            self.event(s,'AUTHORIZATION_ADJUSTED','모의 승인 금액만 조정했어요',amount=p['price'],difference=p['price']-old_price)
+            if s.get('protocol_version') != 2:
+                self.event(s,'AUTHORIZATION_ADJUSTED','모의 승인 금액만 조정했어요',amount=p['price'],difference=p['price']-old_price)
         elif action=='start':
             require(order['state']=='RESERVED','INVALID_STATE','제조 전 주문만 시작할 수 있어요.')
             p=next(p for p in plans(s) if p['store_id']==order['store_id'])
@@ -259,7 +290,8 @@ class JourneyStore:
             order['state']='PICKED_UP'
             order['picked_up_at']=s['clock']
             self.event(s,'PICKUP_COMPLETED','같은 주문으로 커피를 받았어요')
-            self.event(s,'PAYMENT_CAPTURED','모의 결제를 한 번 확정했어요',amount=order['price'])
+            if s.get('protocol_version') != 2:
+                self.event(s,'PAYMENT_CAPTURED','모의 결제를 한 번 확정했어요',amount=order['price'])
             if order.get('commercial_terms'):
                 from .agreement import funding
                 self.event(s,'MERCHANT_SETTLEMENT_SIMULATED','수령 매장의 모의 수취액을 기록했어요',

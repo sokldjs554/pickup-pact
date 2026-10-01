@@ -53,7 +53,7 @@ def verify(base,output,repeat,expected_commit=None):
                 expect(page.locator('.success-banner')).to_be_visible()
                 moved=snapshot(page,base)
                 assert moved['order']['id']==oid and moved['order']['store_id']!=source
-                assert moved['receipt']['authorization_count']==1
+                assert moved['receipt']['authorization_count']==(2 if moved.get('protocol_version')==2 else 1)
                 assert moved['receipt']['capture_count']==0
                 if run==1: page.screenshot(path=str(output/f'{mode}-04-transferred.png'),full_page=True)
                 page.reload(wait_until='networkidle')
@@ -85,7 +85,7 @@ def verify(base,output,repeat,expected_commit=None):
                 assert errors==[],errors
                 assert all(url.startswith(base+'/') or url.startswith('data:') for url in requests),requests
                 results.append(dict(run=run,viewport=mode,result='passed',order_id=oid,
-                    same_order=True,authorization_count=1,capture_count=1,page_errors=errors,
+                    same_order=True,authorization_count=final['receipt']['authorization_count'],capture_count=1,page_errors=errors,
                     browser=browser.version,base_url=base,release_commit=health.get('release_commit'),
                     checks=['http','deadline_matching','rescue','consent','same_order_transfer','reload',
                             'merchant','pickup_code','one_capture','receipt','no_overflow','no_external_requests']))

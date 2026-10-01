@@ -2,9 +2,9 @@
   "components": {
     "schemas": {
       "Command": {
-        "additionalProperties": false,
         "properties": {
           "action": {
+            "type": "string",
             "enum": [
               "reserve",
               "transfer",
@@ -18,38 +18,23 @@
               "recover",
               "reorder"
             ],
-            "title": "Action",
-            "type": "string"
+            "title": "Action"
           },
           "expected_version": {
+            "type": "integer",
             "minimum": 1.0,
-            "title": "Expected Version",
-            "type": "integer"
+            "title": "Expected Version"
           },
-          "minutes": {
-            "default": 0,
-            "maximum": 30.0,
-            "minimum": 0.0,
-            "title": "Minutes",
-            "type": "integer"
-          },
-          "pickup_code": {
-            "anyOf": [
-              {
-                "maxLength": 12,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Pickup Code"
+          "request_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,80}$",
+            "title": "Request Id"
           },
           "quote_id": {
             "anyOf": [
               {
-                "maxLength": 64,
-                "type": "string"
+                "type": "string",
+                "maxLength": 64
               },
               {
                 "type": "null"
@@ -57,62 +42,78 @@
             ],
             "title": "Quote Id"
           },
-          "request_id": {
-            "pattern": "^[a-zA-Z0-9_-]{1,80}$",
-            "title": "Request Id",
-            "type": "string"
-          },
           "store_id": {
             "anyOf": [
               {
+                "type": "string",
                 "enum": [
                   "corner",
                   "wave",
                   "oat",
                   "garden",
                   "express"
-                ],
-                "type": "string"
+                ]
               },
               {
                 "type": "null"
               }
             ],
             "title": "Store Id"
+          },
+          "minutes": {
+            "type": "integer",
+            "maximum": 30.0,
+            "minimum": 0.0,
+            "title": "Minutes",
+            "default": 0
+          },
+          "pickup_code": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 12
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pickup Code"
           }
         },
+        "additionalProperties": false,
+        "type": "object",
         "required": [
           "action",
           "expected_version",
           "request_id"
         ],
-        "title": "Command",
-        "type": "object"
+        "title": "Command"
       },
       "ComparisonCase": {
-        "additionalProperties": true,
         "properties": {
-          "cancel_reorder": {
-            "$ref": "#/components/schemas/PolicyResult"
-          },
-          "guarded_transfer": {
-            "$ref": "#/components/schemas/PolicyResult"
+          "scenario": {
+            "type": "string",
+            "title": "Scenario"
           },
           "label": {
-            "title": "Label",
-            "type": "string"
+            "type": "string",
+            "title": "Label"
+          },
+          "stay": {
+            "$ref": "#/components/schemas/PolicyResult"
+          },
+          "cancel_reorder": {
+            "$ref": "#/components/schemas/PolicyResult"
           },
           "reserve_first_reorder": {
             "$ref": "#/components/schemas/PolicyResult"
           },
-          "scenario": {
-            "title": "Scenario",
-            "type": "string"
-          },
-          "stay": {
+          "guarded_transfer": {
             "$ref": "#/components/schemas/PolicyResult"
           }
         },
+        "additionalProperties": true,
+        "type": "object",
         "required": [
           "scenario",
           "label",
@@ -121,63 +122,63 @@
           "reserve_first_reorder",
           "guarded_transfer"
         ],
-        "title": "ComparisonCase",
-        "type": "object"
+        "title": "ComparisonCase"
       },
       "ComparisonView": {
-        "additionalProperties": true,
         "properties": {
-          "baseline_design": {
-            "title": "Baseline Design",
-            "type": "string"
+          "intent": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Intent"
+          },
+          "policies": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "stay",
+                "cancel_reorder",
+                "reserve_first_reorder",
+                "guarded_transfer"
+              ]
+            },
+            "type": "array",
+            "title": "Policies"
           },
           "cases": {
             "items": {
               "$ref": "#/components/schemas/ComparisonCase"
             },
-            "title": "Cases",
-            "type": "array"
-          },
-          "disclosure": {
-            "title": "Disclosure",
-            "type": "string"
+            "type": "array",
+            "title": "Cases"
           },
           "executions": {
             "items": {
               "additionalProperties": true,
               "type": "object"
             },
-            "title": "Executions",
-            "type": "array"
-          },
-          "intent": {
-            "additionalProperties": true,
-            "title": "Intent",
-            "type": "object"
-          },
-          "mode": {
-            "const": "controlled_command_execution",
-            "title": "Mode",
-            "type": "string"
-          },
-          "policies": {
-            "items": {
-              "enum": [
-                "stay",
-                "cancel_reorder",
-                "reserve_first_reorder",
-                "guarded_transfer"
-              ],
-              "type": "string"
-            },
-            "title": "Policies",
-            "type": "array"
+            "type": "array",
+            "title": "Executions"
           },
           "semantic_sha256": {
-            "title": "Semantic Sha256",
-            "type": "string"
+            "type": "string",
+            "title": "Semantic Sha256"
+          },
+          "mode": {
+            "type": "string",
+            "const": "controlled_command_execution",
+            "title": "Mode"
+          },
+          "baseline_design": {
+            "type": "string",
+            "title": "Baseline Design"
+          },
+          "disclosure": {
+            "type": "string",
+            "title": "Disclosure"
           }
         },
+        "additionalProperties": true,
+        "type": "object",
         "required": [
           "intent",
           "policies",
@@ -188,35 +189,35 @@
           "baseline_design",
           "disclosure"
         ],
-        "title": "ComparisonView",
-        "type": "object"
+        "title": "ComparisonView"
       },
       "Event": {
-        "additionalProperties": true,
         "properties": {
+          "seq": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Seq"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
           "at": {
-            "title": "At",
-            "type": "integer"
+            "type": "integer",
+            "title": "At"
           },
           "data": {
             "additionalProperties": true,
-            "title": "Data",
-            "type": "object"
-          },
-          "seq": {
-            "minimum": 1.0,
-            "title": "Seq",
-            "type": "integer"
-          },
-          "title": {
-            "title": "Title",
-            "type": "string"
-          },
-          "type": {
-            "title": "Type",
-            "type": "string"
+            "type": "object",
+            "title": "Data"
           }
         },
+        "additionalProperties": true,
+        "type": "object",
         "required": [
           "seq",
           "type",
@@ -224,87 +225,181 @@
           "at",
           "data"
         ],
-        "title": "Event",
-        "type": "object"
+        "title": "Event"
+      },
+      "EvidenceCheck": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "MATCH",
+              "PENDING",
+              "MISMATCH",
+              "UNAVAILABLE"
+            ],
+            "title": "Status"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "status",
+          "label",
+          "detail"
+        ],
+        "title": "EvidenceCheck"
+      },
+      "EvidenceObservation": {
+        "properties": {
+          "started_at": {
+            "type": "number",
+            "title": "Started At"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "stable": {
+            "type": "boolean",
+            "title": "Stable"
+          },
+          "coordinator_version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Coordinator Version"
+          },
+          "payment_revision": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payment Revision"
+          },
+          "merchant_revisions": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "integer",
+                  "minimum": 0.0
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Merchant Revisions"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "started_at",
+          "finished_at",
+          "stable",
+          "coordinator_version"
+        ],
+        "title": "EvidenceObservation"
       },
       "ExperimentRequest": {
-        "additionalProperties": false,
         "properties": {
-          "cases": {
-            "default": 120,
-            "maximum": 200.0,
-            "minimum": 6.0,
-            "title": "Cases",
-            "type": "integer"
-          },
           "seed": {
-            "default": 7,
+            "type": "integer",
             "maximum": 1000000.0,
             "minimum": 0.0,
             "title": "Seed",
-            "type": "integer"
+            "default": 7
+          },
+          "cases": {
+            "type": "integer",
+            "maximum": 200.0,
+            "minimum": 6.0,
+            "title": "Cases",
+            "default": 120
           }
         },
-        "title": "ExperimentRequest",
-        "type": "object"
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ExperimentRequest"
       },
       "FundingBreakdown": {
-        "additionalProperties": true,
         "properties": {
-          "customer_cash": {
-            "minimum": 0.0,
-            "title": "Customer Cash",
-            "type": "integer"
-          },
-          "gross": {
-            "minimum": 0.0,
-            "title": "Gross",
-            "type": "integer"
-          },
-          "liability_policy": {
-            "title": "Liability Policy",
-            "type": "string"
-          },
-          "merchant_coupon": {
-            "minimum": 0.0,
-            "title": "Merchant Coupon",
-            "type": "integer"
-          },
-          "merchant_receivable": {
-            "minimum": 0.0,
-            "title": "Merchant Receivable",
-            "type": "integer"
-          },
-          "merchant_store_id": {
-            "title": "Merchant Store Id",
-            "type": "string"
-          },
           "mode": {
+            "type": "string",
             "const": "synthetic",
-            "title": "Mode",
-            "type": "string"
-          },
-          "platform_coupon": {
-            "minimum": 0.0,
-            "title": "Platform Coupon",
-            "type": "integer"
-          },
-          "platform_points": {
-            "minimum": 0.0,
-            "title": "Platform Points",
-            "type": "integer"
-          },
-          "platform_support": {
-            "minimum": 0.0,
-            "title": "Platform Support",
-            "type": "integer"
+            "title": "Mode"
           },
           "unit": {
+            "type": "string",
             "const": "KRW",
-            "title": "Unit",
-            "type": "string"
+            "title": "Unit"
+          },
+          "merchant_store_id": {
+            "type": "string",
+            "title": "Merchant Store Id"
+          },
+          "gross": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Gross"
+          },
+          "customer_cash": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Customer Cash"
+          },
+          "merchant_coupon": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Merchant Coupon"
+          },
+          "platform_coupon": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Platform Coupon"
+          },
+          "platform_points": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Platform Points"
+          },
+          "merchant_receivable": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Merchant Receivable"
+          },
+          "platform_support": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Platform Support"
+          },
+          "liability_policy": {
+            "type": "string",
+            "title": "Liability Policy"
           }
         },
+        "additionalProperties": true,
+        "type": "object",
         "required": [
           "mode",
           "unit",
@@ -318,8 +413,7 @@
           "platform_support",
           "liability_policy"
         ],
-        "title": "FundingBreakdown",
-        "type": "object"
+        "title": "FundingBreakdown"
       },
       "HTTPValidationError": {
         "properties": {
@@ -327,33 +421,48 @@
             "items": {
               "$ref": "#/components/schemas/ValidationError"
             },
-            "title": "Detail",
-            "type": "array"
+            "type": "array",
+            "title": "Detail"
           }
         },
-        "title": "HTTPValidationError",
-        "type": "object"
+        "type": "object",
+        "title": "HTTPValidationError"
       },
       "Handoff": {
-        "additionalProperties": true,
         "properties": {
-          "action": {
-            "title": "Action",
-            "type": "string"
+          "id": {
+            "type": "string",
+            "title": "Id"
           },
-          "attempts": {
-            "minimum": 0.0,
-            "title": "Attempts",
-            "type": "integer"
+          "action": {
+            "type": "string",
+            "title": "Action"
+          },
+          "phase": {
+            "type": "string",
+            "title": "Phase"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "REJECTED",
+              "COMPLETED"
+            ],
+            "title": "Status"
           },
           "decision": {
+            "type": "string",
             "enum": [
               "UNDECIDED",
               "COMMIT",
               "ABORT"
             ],
-            "title": "Decision",
-            "type": "string"
+            "title": "Decision"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
           },
           "failure": {
             "anyOf": [
@@ -366,36 +475,6 @@
             ],
             "title": "Failure"
           },
-          "history": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "title": "History",
-            "type": "array"
-          },
-          "id": {
-            "title": "Id",
-            "type": "string"
-          },
-          "message": {
-            "title": "Message",
-            "type": "string"
-          },
-          "phase": {
-            "title": "Phase",
-            "type": "string"
-          },
-          "recovery": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/Recovery"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
           "source": {
             "anyOf": [
               {
@@ -407,20 +486,36 @@
             ],
             "title": "Source"
           },
-          "status": {
-            "enum": [
-              "PENDING",
-              "REJECTED",
-              "COMPLETED"
-            ],
-            "title": "Status",
-            "type": "string"
-          },
           "target": {
-            "title": "Target",
-            "type": "string"
+            "type": "string",
+            "title": "Target"
+          },
+          "history": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "History"
+          },
+          "attempts": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Attempts"
+          },
+          "recovery": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Recovery"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
+        "additionalProperties": true,
+        "type": "object",
         "required": [
           "id",
           "action",
@@ -434,28 +529,82 @@
           "history",
           "attempts"
         ],
-        "title": "Handoff",
-        "type": "object"
+        "title": "Handoff"
       },
       "Intent": {
-        "additionalProperties": false,
         "properties": {
+          "destination": {
+            "type": "string",
+            "enum": [
+              "office",
+              "park"
+            ],
+            "title": "Destination",
+            "default": "office"
+          },
+          "deadline_minutes": {
+            "type": "integer",
+            "maximum": 90.0,
+            "minimum": 3.0,
+            "title": "Deadline Minutes",
+            "default": 16
+          },
+          "drink": {
+            "type": "string",
+            "enum": [
+              "americano",
+              "latte"
+            ],
+            "title": "Drink",
+            "default": "latte"
+          },
+          "milk": {
+            "type": "string",
+            "enum": [
+              "regular",
+              "oat"
+            ],
+            "title": "Milk",
+            "default": "regular"
+          },
+          "decaf": {
+            "type": "boolean",
+            "title": "Decaf",
+            "default": false
+          },
           "budget": {
-            "default": 5500,
+            "type": "integer",
             "maximum": 30000.0,
             "minimum": 1000.0,
             "title": "Budget",
-            "type": "integer"
+            "default": 5500
+          },
+          "max_detour": {
+            "type": "integer",
+            "maximum": 20.0,
+            "minimum": 0.0,
+            "title": "Max Detour",
+            "default": 5
+          },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "arrival",
+              "price",
+              "walk"
+            ],
+            "title": "Priority",
+            "default": "arrival"
           },
           "coupon_id": {
             "anyOf": [
               {
+                "type": "string",
                 "enum": [
                   "welcome500",
                   "wave1000",
                   "morning10"
-                ],
-                "type": "string"
+                ]
               },
               {
                 "type": "null"
@@ -463,91 +612,195 @@
             ],
             "title": "Coupon Id"
           },
-          "deadline_minutes": {
-            "default": 16,
-            "maximum": 90.0,
-            "minimum": 3.0,
-            "title": "Deadline Minutes",
-            "type": "integer"
-          },
-          "decaf": {
-            "default": false,
-            "title": "Decaf",
-            "type": "boolean"
-          },
+          "points": {
+            "type": "integer",
+            "maximum": 2000.0,
+            "minimum": 0.0,
+            "title": "Points",
+            "default": 0
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "Intent"
+      },
+      "JourneyInput": {
+        "properties": {
           "destination": {
-            "default": "office",
+            "type": "string",
             "enum": [
               "office",
               "park"
             ],
             "title": "Destination",
-            "type": "string"
+            "default": "office"
+          },
+          "deadline_minutes": {
+            "type": "integer",
+            "maximum": 90.0,
+            "minimum": 3.0,
+            "title": "Deadline Minutes",
+            "default": 16
           },
           "drink": {
-            "default": "latte",
+            "type": "string",
             "enum": [
               "americano",
               "latte"
             ],
             "title": "Drink",
-            "type": "string"
-          },
-          "max_detour": {
-            "default": 5,
-            "maximum": 20.0,
-            "minimum": 0.0,
-            "title": "Max Detour",
-            "type": "integer"
+            "default": "latte"
           },
           "milk": {
-            "default": "regular",
+            "type": "string",
             "enum": [
               "regular",
               "oat"
             ],
             "title": "Milk",
-            "type": "string"
+            "default": "regular"
           },
-          "points": {
-            "default": 0,
-            "maximum": 2000.0,
+          "decaf": {
+            "type": "boolean",
+            "title": "Decaf",
+            "default": false
+          },
+          "budget": {
+            "type": "integer",
+            "maximum": 30000.0,
+            "minimum": 1000.0,
+            "title": "Budget",
+            "default": 5500
+          },
+          "max_detour": {
+            "type": "integer",
+            "maximum": 20.0,
             "minimum": 0.0,
-            "title": "Points",
-            "type": "integer"
+            "title": "Max Detour",
+            "default": 5
           },
           "priority": {
-            "default": "arrival",
+            "type": "string",
             "enum": [
               "arrival",
               "price",
               "walk"
             ],
             "title": "Priority",
-            "type": "string"
+            "default": "arrival"
+          },
+          "coupon_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "welcome500",
+                  "wave1000",
+                  "morning10"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Coupon Id"
+          },
+          "points": {
+            "type": "integer",
+            "maximum": 2000.0,
+            "minimum": 0.0,
+            "title": "Points",
+            "default": 0
+          },
+          "payment_card": {
+            "type": "string",
+            "enum": [
+              "demo-approved",
+              "demo-declined"
+            ],
+            "title": "Payment Card",
+            "default": "demo-approved"
+          },
+          "payment_scenario": {
+            "type": "string",
+            "enum": [
+              "none",
+              "authorize_reply_lost",
+              "capture_reply_lost",
+              "void_reply_lost",
+              "notification_duplicate",
+              "notification_late"
+            ],
+            "title": "Payment Scenario",
+            "default": "none"
           }
         },
-        "title": "Intent",
-        "type": "object"
+        "additionalProperties": false,
+        "type": "object",
+        "title": "JourneyInput"
       },
       "JourneyView": {
-        "additionalProperties": true,
         "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Version"
+          },
+          "mode": {
+            "type": "string",
+            "const": "synthetic",
+            "title": "Mode"
+          },
+          "clock": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Clock"
+          },
+          "intent": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Intent"
+          },
+          "order": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Order"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "wallet": {
+            "$ref": "#/components/schemas/Wallet"
+          },
+          "receipt": {
+            "$ref": "#/components/schemas/Receipt"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/Event"
+            },
+            "type": "array",
+            "title": "Events"
+          },
           "all_plans": {
             "items": {
               "$ref": "#/components/schemas/Plan"
             },
-            "title": "All Plans",
-            "type": "array"
+            "type": "array",
+            "title": "All Plans"
           },
-          "automatic_recovery_enabled": {
-            "title": "Automatic Recovery Enabled",
-            "type": "boolean"
-          },
-          "clock": {
-            "minimum": 0.0,
-            "title": "Clock",
-            "type": "integer"
+          "recommendations": {
+            "items": {
+              "$ref": "#/components/schemas/Plan"
+            },
+            "type": "array",
+            "title": "Recommendations"
           },
           "current_plan": {
             "anyOf": [
@@ -558,17 +811,6 @@
                 "type": "null"
               }
             ]
-          },
-          "duplicate": {
-            "title": "Duplicate",
-            "type": "boolean"
-          },
-          "events": {
-            "items": {
-              "$ref": "#/components/schemas/Event"
-            },
-            "title": "Events",
-            "type": "array"
           },
           "handoff": {
             "anyOf": [
@@ -581,53 +823,21 @@
             ]
           },
           "handoff_pending": {
-            "default": false,
+            "type": "boolean",
             "title": "Handoff Pending",
-            "type": "boolean"
+            "default": false
           },
-          "id": {
-            "title": "Id",
-            "type": "string"
+          "automatic_recovery_enabled": {
+            "type": "boolean",
+            "title": "Automatic Recovery Enabled"
           },
-          "intent": {
-            "additionalProperties": true,
-            "title": "Intent",
-            "type": "object"
-          },
-          "mode": {
-            "const": "synthetic",
-            "title": "Mode",
-            "type": "string"
-          },
-          "order": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/Order"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "receipt": {
-            "$ref": "#/components/schemas/Receipt"
-          },
-          "recommendations": {
-            "items": {
-              "$ref": "#/components/schemas/Plan"
-            },
-            "title": "Recommendations",
-            "type": "array"
-          },
-          "version": {
-            "minimum": 1.0,
-            "title": "Version",
-            "type": "integer"
-          },
-          "wallet": {
-            "$ref": "#/components/schemas/Wallet"
+          "duplicate": {
+            "type": "boolean",
+            "title": "Duplicate"
           }
         },
+        "additionalProperties": true,
+        "type": "object",
         "required": [
           "id",
           "version",
@@ -644,25 +854,122 @@
           "automatic_recovery_enabled",
           "duplicate"
         ],
-        "title": "JourneyView",
-        "type": "object"
+        "title": "JourneyView"
       },
-      "Order": {
-        "additionalProperties": true,
+      "MerchantEvidence": {
         "properties": {
-          "commercial_terms": {
+          "reservation": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/TransferTerms"
+                "$ref": "#/components/schemas/MerchantReservation"
               },
               {
                 "type": "null"
               }
             ]
           },
+          "revision": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Revision"
+          },
+          "last_receipt": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Receipt"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "reservation",
+          "revision",
+          "last_receipt"
+        ],
+        "title": "MerchantEvidence"
+      },
+      "MerchantReservation": {
+        "properties": {
+          "world": {
+            "type": "string",
+            "title": "World"
+          },
+          "order_id": {
+            "type": "string",
+            "title": "Order Id"
+          },
+          "generation": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Generation"
+          },
+          "phase": {
+            "type": "string",
+            "enum": [
+              "RESERVED",
+              "HELD",
+              "FROZEN",
+              "PREPARING",
+              "READY",
+              "CLAIMED",
+              "CANCELLED",
+              "RELEASED",
+              "ABORTED"
+            ],
+            "title": "Phase"
+          },
+          "transfer_id": {
+            "type": "string",
+            "title": "Transfer Id"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "world",
+          "order_id",
+          "generation",
+          "phase",
+          "transfer_id"
+        ],
+        "title": "MerchantReservation"
+      },
+      "Order": {
+        "properties": {
           "id": {
-            "title": "Id",
-            "type": "string"
+            "type": "string",
+            "title": "Id"
+          },
+          "store_id": {
+            "type": "string",
+            "title": "Store Id"
+          },
+          "store_name": {
+            "type": "string",
+            "title": "Store Name"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "RESERVED",
+              "PREPARING",
+              "READY",
+              "PICKED_UP",
+              "CANCELLED"
+            ],
+            "title": "State"
+          },
+          "price": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Price"
           },
           "pickup_code": {
             "anyOf": [
@@ -675,11 +982,6 @@
             ],
             "title": "Pickup Code"
           },
-          "price": {
-            "minimum": 0.0,
-            "title": "Price",
-            "type": "integer"
-          },
           "pricing": {
             "anyOf": [
               {
@@ -690,26 +992,19 @@
               }
             ]
           },
-          "state": {
-            "enum": [
-              "RESERVED",
-              "PREPARING",
-              "READY",
-              "PICKED_UP",
-              "CANCELLED"
-            ],
-            "title": "State",
-            "type": "string"
-          },
-          "store_id": {
-            "title": "Store Id",
-            "type": "string"
-          },
-          "store_name": {
-            "title": "Store Name",
-            "type": "string"
+          "commercial_terms": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TransferTerms"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
+        "additionalProperties": true,
+        "type": "object",
         "required": [
           "id",
           "store_id",
@@ -718,57 +1013,303 @@
           "price",
           "pickup_code"
         ],
-        "title": "Order",
-        "type": "object"
+        "title": "Order"
+      },
+      "PaymentAuthorizationEvidence": {
+        "properties": {
+          "authorization_id": {
+            "type": "string",
+            "title": "Authorization Id"
+          },
+          "world_id": {
+            "type": "string",
+            "title": "World Id"
+          },
+          "order_id": {
+            "type": "string",
+            "title": "Order Id"
+          },
+          "amount_krw": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Amount Krw"
+          },
+          "currency": {
+            "type": "string",
+            "const": "KRW",
+            "title": "Currency"
+          },
+          "payment_revision": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Payment Revision"
+          },
+          "quote_fingerprint": {
+            "type": "string",
+            "title": "Quote Fingerprint"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "AUTHORIZED",
+              "CAPTURED",
+              "VOIDED"
+            ],
+            "title": "Status"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "authorization_id",
+          "world_id",
+          "order_id",
+          "amount_krw",
+          "currency",
+          "payment_revision",
+          "quote_fingerprint",
+          "status"
+        ],
+        "title": "PaymentAuthorizationEvidence"
+      },
+      "PaymentControl": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "fault",
+              "card"
+            ],
+            "title": "Action"
+          },
+          "expected_version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Expected Version"
+          },
+          "request_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,80}$",
+            "title": "Request Id"
+          },
+          "fault": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "none",
+                  "authorize_reply_lost",
+                  "capture_reply_lost",
+                  "void_reply_lost",
+                  "notification_duplicate",
+                  "notification_late"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fault"
+          },
+          "card_token": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "demo-approved",
+                  "demo-declined"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Card Token"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "action",
+          "expected_version",
+          "request_id"
+        ],
+        "title": "PaymentControl"
+      },
+      "PaymentEvidence": {
+        "properties": {
+          "mode": {
+            "type": "string",
+            "const": "synthetic",
+            "title": "Mode"
+          },
+          "provider": {
+            "type": "string",
+            "const": "DEMO_PLATFORM",
+            "title": "Provider"
+          },
+          "world_id": {
+            "type": "string",
+            "title": "World Id"
+          },
+          "order_id": {
+            "type": "string",
+            "title": "Order Id"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Revision"
+          },
+          "held_krw": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Held Krw"
+          },
+          "captured_krw": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Captured Krw"
+          },
+          "capture_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Capture Count"
+          },
+          "authorizations": {
+            "items": {
+              "$ref": "#/components/schemas/PaymentAuthorizationEvidence"
+            },
+            "type": "array",
+            "title": "Authorizations"
+          },
+          "transactions": {
+            "items": {
+              "$ref": "#/components/schemas/PaymentTransactionEvidence"
+            },
+            "type": "array",
+            "title": "Transactions"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "mode",
+          "provider",
+          "world_id",
+          "order_id",
+          "revision",
+          "held_krw",
+          "captured_krw",
+          "capture_count",
+          "authorizations",
+          "transactions"
+        ],
+        "title": "PaymentEvidence"
+      },
+      "PaymentTransactionEvidence": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "seq": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Seq"
+          },
+          "authorization_id": {
+            "type": "string",
+            "title": "Authorization Id"
+          },
+          "world_id": {
+            "type": "string",
+            "title": "World Id"
+          },
+          "order_id": {
+            "type": "string",
+            "title": "Order Id"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "AUTHORIZE",
+              "CAPTURE",
+              "VOID"
+            ],
+            "title": "Kind"
+          },
+          "amount_krw": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Amount Krw"
+          },
+          "at": {
+            "type": "number",
+            "title": "At"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "id",
+          "seq",
+          "authorization_id",
+          "world_id",
+          "order_id",
+          "kind",
+          "amount_krw",
+          "at"
+        ],
+        "title": "PaymentTransactionEvidence"
       },
       "Plan": {
-        "additionalProperties": true,
         "properties": {
-          "arrival_at": {
-            "title": "Arrival At",
-            "type": "integer"
-          },
-          "feasible": {
-            "title": "Feasible",
-            "type": "boolean"
+          "store_id": {
+            "type": "string",
+            "title": "Store Id"
           },
           "name": {
-            "title": "Name",
-            "type": "string"
+            "type": "string",
+            "title": "Name"
           },
           "price": {
+            "type": "integer",
             "minimum": 0.0,
-            "title": "Price",
-            "type": "integer"
+            "title": "Price"
           },
           "pricing": {
             "$ref": "#/components/schemas/Pricing"
           },
           "quote_id": {
-            "title": "Quote Id",
-            "type": "string"
+            "type": "string",
+            "title": "Quote Id"
           },
-          "ready_at": {
-            "title": "Ready At",
-            "type": "integer"
-          },
-          "reason_labels": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Reason Labels",
-            "type": "array"
+          "feasible": {
+            "type": "boolean",
+            "title": "Feasible"
           },
           "reasons": {
             "items": {
               "type": "string"
             },
-            "title": "Reasons",
-            "type": "array"
+            "type": "array",
+            "title": "Reasons"
           },
-          "store_id": {
-            "title": "Store Id",
-            "type": "string"
+          "reason_labels": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Reason Labels"
+          },
+          "arrival_at": {
+            "type": "integer",
+            "title": "Arrival At"
+          },
+          "ready_at": {
+            "type": "integer",
+            "title": "Ready At"
           },
           "transfer_terms": {
             "anyOf": [
@@ -781,6 +1322,8 @@
             ]
           }
         },
+        "additionalProperties": true,
+        "type": "object",
         "required": [
           "store_id",
           "name",
@@ -793,53 +1336,26 @@
           "arrival_at",
           "ready_at"
         ],
-        "title": "Plan",
-        "type": "object"
+        "title": "Plan"
       },
       "PolicyResult": {
-        "additionalProperties": true,
         "properties": {
-          "authorization_count": {
-            "minimum": 0.0,
-            "title": "Authorization Count",
-            "type": "integer"
-          },
-          "capture_count": {
-            "minimum": 0.0,
-            "title": "Capture Count",
-            "type": "integer"
-          },
-          "cash_due": {
-            "minimum": 0.0,
-            "title": "Cash Due",
-            "type": "integer"
-          },
-          "customer_commands": {
-            "minimum": 0.0,
-            "title": "Customer Commands",
-            "type": "integer"
-          },
           "has_order": {
-            "title": "Has Order",
-            "type": "boolean"
+            "type": "boolean",
+            "title": "Has Order"
           },
-          "held_points": {
-            "minimum": 0.0,
-            "title": "Held Points",
-            "type": "integer"
-          },
-          "meets_modeled_deadline": {
-            "title": "Meets Modeled Deadline",
-            "type": "boolean"
+          "same_order": {
+            "type": "boolean",
+            "title": "Same Order"
           },
           "original_preserved": {
-            "title": "Original Preserved",
-            "type": "boolean"
+            "type": "boolean",
+            "title": "Original Preserved"
           },
-          "points_spent": {
+          "cash_due": {
+            "type": "integer",
             "minimum": 0.0,
-            "title": "Points Spent",
-            "type": "integer"
+            "title": "Cash Due"
           },
           "predicted_arrival": {
             "anyOf": [
@@ -852,20 +1368,47 @@
             ],
             "title": "Predicted Arrival"
           },
-          "reason": {
-            "title": "Reason",
-            "type": "string"
+          "meets_modeled_deadline": {
+            "type": "boolean",
+            "title": "Meets Modeled Deadline"
           },
-          "same_order": {
-            "title": "Same Order",
-            "type": "boolean"
+          "customer_commands": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Customer Commands"
           },
           "same_request_retries": {
+            "type": "integer",
             "minimum": 0.0,
-            "title": "Same Request Retries",
-            "type": "integer"
+            "title": "Same Request Retries"
+          },
+          "authorization_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Authorization Count"
+          },
+          "capture_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Capture Count"
+          },
+          "held_points": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Held Points"
+          },
+          "points_spent": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Points Spent"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
           }
         },
+        "additionalProperties": true,
+        "type": "object",
         "required": [
           "has_order",
           "same_order",
@@ -881,21 +1424,14 @@
           "points_spent",
           "reason"
         ],
-        "title": "PolicyResult",
-        "type": "object"
+        "title": "PolicyResult"
       },
       "Pricing": {
-        "additionalProperties": true,
         "properties": {
-          "cash_due": {
+          "gross": {
+            "type": "integer",
             "minimum": 0.0,
-            "title": "Cash Due",
-            "type": "integer"
-          },
-          "coupon_discount": {
-            "minimum": 0.0,
-            "title": "Coupon Discount",
-            "type": "integer"
+            "title": "Gross"
           },
           "coupon_id": {
             "anyOf": [
@@ -908,27 +1444,34 @@
             ],
             "title": "Coupon Id"
           },
-          "gross": {
+          "coupon_discount": {
+            "type": "integer",
             "minimum": 0.0,
-            "title": "Gross",
-            "type": "integer"
-          },
-          "points_to_earn": {
-            "minimum": 0.0,
-            "title": "Points To Earn",
-            "type": "integer"
+            "title": "Coupon Discount"
           },
           "points_used": {
+            "type": "integer",
             "minimum": 0.0,
-            "title": "Points Used",
-            "type": "integer"
+            "title": "Points Used"
+          },
+          "cash_due": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Cash Due"
+          },
+          "points_to_earn": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Points To Earn"
           },
           "unit": {
+            "type": "string",
             "const": "KRW",
-            "title": "Unit",
-            "type": "string"
+            "title": "Unit"
           }
         },
+        "additionalProperties": true,
+        "type": "object",
         "required": [
           "gross",
           "coupon_id",
@@ -938,42 +1481,29 @@
           "points_to_earn",
           "unit"
         ],
-        "title": "Pricing",
-        "type": "object"
+        "title": "Pricing"
       },
       "ProductSpec": {
-        "additionalProperties": true,
         "properties": {
-          "decaf": {
-            "title": "Decaf",
-            "type": "boolean"
-          },
           "drink": {
+            "type": "string",
             "enum": [
               "americano",
               "latte"
             ],
-            "title": "Drink",
-            "type": "string"
+            "title": "Drink"
           },
           "milk": {
+            "type": "string",
             "enum": [
               "regular",
               "oat"
             ],
-            "title": "Milk",
-            "type": "string"
+            "title": "Milk"
           },
-          "temperature": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Temperature"
+          "decaf": {
+            "type": "boolean",
+            "title": "Decaf"
           },
           "volume_ml": {
             "anyOf": [
@@ -985,8 +1515,21 @@
               }
             ],
             "title": "Volume Ml"
+          },
+          "temperature": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temperature"
           }
         },
+        "additionalProperties": true,
+        "type": "object",
         "required": [
           "drink",
           "milk",
@@ -994,27 +1537,10 @@
           "volume_ml",
           "temperature"
         ],
-        "title": "ProductSpec",
-        "type": "object"
+        "title": "ProductSpec"
       },
       "Receipt": {
-        "additionalProperties": true,
         "properties": {
-          "authorization_count": {
-            "minimum": 0.0,
-            "title": "Authorization Count",
-            "type": "integer"
-          },
-          "capture_count": {
-            "minimum": 0.0,
-            "title": "Capture Count",
-            "type": "integer"
-          },
-          "net_paid": {
-            "minimum": 0.0,
-            "title": "Net Paid",
-            "type": "integer"
-          },
           "order_id": {
             "anyOf": [
               {
@@ -1026,20 +1552,42 @@
             ],
             "title": "Order Id"
           },
-          "payable": {
+          "capture_count": {
+            "type": "integer",
             "minimum": 0.0,
-            "title": "Payable",
-            "type": "integer"
+            "title": "Capture Count"
           },
-          "points_earned": {
+          "authorization_count": {
+            "type": "integer",
             "minimum": 0.0,
-            "title": "Points Earned",
-            "type": "integer"
+            "title": "Authorization Count"
+          },
+          "net_paid": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Net Paid"
+          },
+          "payable": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Payable"
           },
           "points_spent": {
+            "type": "integer",
             "minimum": 0.0,
-            "title": "Points Spent",
-            "type": "integer"
+            "title": "Points Spent"
+          },
+          "points_earned": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Points Earned"
+          },
+          "transfers": {
+            "items": {
+              "$ref": "#/components/schemas/Event"
+            },
+            "type": "array",
+            "title": "Transfers"
           },
           "settlement": {
             "anyOf": [
@@ -1050,15 +1598,10 @@
                 "type": "null"
               }
             ]
-          },
-          "transfers": {
-            "items": {
-              "$ref": "#/components/schemas/Event"
-            },
-            "title": "Transfers",
-            "type": "array"
           }
         },
+        "additionalProperties": true,
+        "type": "object",
         "required": [
           "order_id",
           "capture_count",
@@ -1069,23 +1612,14 @@
           "points_earned",
           "transfers"
         ],
-        "title": "Receipt",
-        "type": "object"
+        "title": "Receipt"
       },
       "ReceiptView": {
-        "additionalProperties": true,
         "properties": {
-          "events": {
-            "items": {
-              "$ref": "#/components/schemas/Event"
-            },
-            "title": "Events",
-            "type": "array"
-          },
           "mode": {
+            "type": "string",
             "const": "synthetic",
-            "title": "Mode",
-            "type": "string"
+            "title": "Mode"
           },
           "order": {
             "anyOf": [
@@ -1099,38 +1633,135 @@
           },
           "receipt": {
             "$ref": "#/components/schemas/Receipt"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/Event"
+            },
+            "type": "array",
+            "title": "Events"
           }
         },
+        "additionalProperties": true,
+        "type": "object",
         "required": [
           "mode",
           "order",
           "receipt",
           "events"
         ],
-        "title": "ReceiptView",
-        "type": "object"
+        "title": "ReceiptView"
       },
-      "Recovery": {
-        "additionalProperties": true,
+      "ReconciliationView": {
         "properties": {
-          "created_at": {
-            "title": "Created At",
-            "type": "number"
+          "mode": {
+            "type": "string",
+            "const": "synthetic",
+            "title": "Mode"
           },
-          "deadline_at": {
-            "title": "Deadline At",
-            "type": "number"
+          "scope": {
+            "type": "string",
+            "title": "Scope"
           },
-          "last_attempt_at": {
+          "journey_id": {
+            "type": "string",
+            "title": "Journey Id"
+          },
+          "journey_version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Journey Version"
+          },
+          "order_id": {
             "anyOf": [
               {
-                "type": "number"
+                "type": "string"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Last Attempt At"
+            "title": "Order Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "MATCH",
+              "PENDING",
+              "MISMATCH",
+              "UNAVAILABLE"
+            ],
+            "title": "Status"
+          },
+          "terminal": {
+            "type": "boolean",
+            "title": "Terminal"
+          },
+          "payment": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PaymentEvidence"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "merchants": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/MerchantEvidence"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Merchants"
+          },
+          "checks": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/EvidenceCheck"
+            },
+            "propertyNames": {
+              "enum": [
+                "order",
+                "merchant",
+                "payment",
+                "benefits"
+              ]
+            },
+            "type": "object",
+            "title": "Checks"
+          },
+          "observation": {
+            "$ref": "#/components/schemas/EvidenceObservation"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "mode",
+          "scope",
+          "journey_id",
+          "journey_version",
+          "order_id",
+          "status",
+          "terminal",
+          "payment",
+          "merchants",
+          "checks",
+          "observation"
+        ],
+        "title": "ReconciliationView"
+      },
+      "Recovery": {
+        "properties": {
+          "created_at": {
+            "type": "number",
+            "title": "Created At"
           },
           "next_retry_at": {
             "anyOf": [
@@ -1143,21 +1774,38 @@
             ],
             "title": "Next Retry At"
           },
+          "deadline_at": {
+            "type": "number",
+            "title": "Deadline At"
+          },
           "retry_count": {
+            "type": "integer",
             "minimum": 0.0,
-            "title": "Retry Count",
-            "type": "integer"
+            "title": "Retry Count"
           },
           "state": {
+            "type": "string",
             "enum": [
               "SCHEDULED",
               "FINISHED",
               "REVIEW_REQUIRED"
             ],
-            "title": "State",
-            "type": "string"
+            "title": "State"
+          },
+          "last_attempt_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Attempt At"
           }
         },
+        "additionalProperties": true,
+        "type": "object",
         "required": [
           "created_at",
           "next_retry_at",
@@ -1166,43 +1814,43 @@
           "state",
           "last_attempt_at"
         ],
-        "title": "Recovery",
-        "type": "object"
+        "title": "Recovery"
       },
       "RuntimeView": {
-        "additionalProperties": true,
         "properties": {
-          "automatic_recovery": {
-            "title": "Automatic Recovery",
-            "type": "boolean"
+          "mode": {
+            "type": "string",
+            "const": "synthetic",
+            "title": "Mode"
           },
           "merchant_transport": {
+            "type": "string",
             "enum": [
               "http",
               "local"
             ],
-            "title": "Merchant Transport",
-            "type": "string"
+            "title": "Merchant Transport"
           },
-          "mode": {
-            "const": "synthetic",
-            "title": "Mode",
-            "type": "string"
+          "automatic_recovery": {
+            "type": "boolean",
+            "title": "Automatic Recovery"
           },
           "predecision_timeout_seconds": {
-            "title": "Predecision Timeout Seconds",
-            "type": "number"
+            "type": "number",
+            "title": "Predecision Timeout Seconds"
           },
           "retry_limit": {
+            "type": "integer",
             "minimum": 0.0,
-            "title": "Retry Limit",
-            "type": "integer"
+            "title": "Retry Limit"
           },
           "scope": {
-            "title": "Scope",
-            "type": "string"
+            "type": "string",
+            "title": "Scope"
           }
         },
+        "additionalProperties": true,
+        "type": "object",
         "required": [
           "mode",
           "merchant_transport",
@@ -1211,47 +1859,50 @@
           "retry_limit",
           "scope"
         ],
-        "title": "RuntimeView",
-        "type": "object"
+        "title": "RuntimeView"
       },
       "TransferComparisonRequest": {
-        "additionalProperties": false,
         "properties": {
           "intent": {
             "$ref": "#/components/schemas/Intent"
           }
         },
-        "title": "TransferComparisonRequest",
-        "type": "object"
+        "additionalProperties": false,
+        "type": "object",
+        "title": "TransferComparisonRequest"
       },
       "TransferControl": {
-        "additionalProperties": false,
         "properties": {
           "action": {
+            "type": "string",
             "enum": [
               "fault",
               "occupy",
               "clear"
             ],
-            "title": "Action",
-            "type": "string"
+            "title": "Action"
           },
           "expected_version": {
+            "type": "integer",
             "minimum": 1.0,
-            "title": "Expected Version",
-            "type": "integer"
+            "title": "Expected Version"
+          },
+          "request_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,80}$",
+            "title": "Request Id"
           },
           "fault": {
             "anyOf": [
               {
+                "type": "string",
                 "enum": [
                   "none",
                   "target_reject",
                   "after_target_hold",
                   "after_source_release",
                   "after_target_activation"
-                ],
-                "type": "string"
+                ]
               },
               {
                 "type": "null"
@@ -1259,22 +1910,17 @@
             ],
             "title": "Fault"
           },
-          "request_id": {
-            "pattern": "^[a-zA-Z0-9_-]{1,80}$",
-            "title": "Request Id",
-            "type": "string"
-          },
           "store_id": {
             "anyOf": [
               {
+                "type": "string",
                 "enum": [
                   "corner",
                   "wave",
                   "oat",
                   "garden",
                   "express"
-                ],
-                "type": "string"
+                ]
               },
               {
                 "type": "null"
@@ -1283,52 +1929,25 @@
             "title": "Store Id"
           }
         },
+        "additionalProperties": false,
+        "type": "object",
         "required": [
           "action",
           "expected_version",
           "request_id"
         ],
-        "title": "TransferControl",
-        "type": "object"
+        "title": "TransferControl"
       },
       "TransferTerms": {
-        "additionalProperties": true,
         "properties": {
-          "confirmation": {
-            "title": "Confirmation",
-            "type": "string"
+          "version": {
+            "type": "string",
+            "const": "partner-transfer-v1",
+            "title": "Version"
           },
-          "eligible": {
-            "title": "Eligible",
-            "type": "boolean"
-          },
-          "funding": {
-            "$ref": "#/components/schemas/FundingBreakdown"
-          },
-          "merchant_rule": {
-            "title": "Merchant Rule",
-            "type": "string"
-          },
-          "notice": {
-            "title": "Notice",
-            "type": "string"
-          },
-          "reason_codes": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Reason Codes",
-            "type": "array"
-          },
-          "source_product": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ProductSpec"
-              },
-              {
-                "type": "null"
-              }
-            ]
+          "terms_id": {
+            "type": "string",
+            "title": "Terms Id"
           },
           "source_store_id": {
             "anyOf": [
@@ -1341,23 +1960,52 @@
             ],
             "title": "Source Store Id"
           },
+          "target_store_id": {
+            "type": "string",
+            "title": "Target Store Id"
+          },
+          "eligible": {
+            "type": "boolean",
+            "title": "Eligible"
+          },
+          "reason_codes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Reason Codes"
+          },
+          "source_product": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProductSpec"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "target_product": {
             "$ref": "#/components/schemas/ProductSpec"
           },
-          "target_store_id": {
-            "title": "Target Store Id",
-            "type": "string"
+          "funding": {
+            "$ref": "#/components/schemas/FundingBreakdown"
           },
-          "terms_id": {
-            "title": "Terms Id",
-            "type": "string"
+          "notice": {
+            "type": "string",
+            "title": "Notice"
           },
-          "version": {
-            "const": "partner-transfer-v1",
-            "title": "Version",
-            "type": "string"
+          "merchant_rule": {
+            "type": "string",
+            "title": "Merchant Rule"
+          },
+          "confirmation": {
+            "type": "string",
+            "title": "Confirmation"
           }
         },
+        "additionalProperties": true,
+        "type": "object",
         "required": [
           "version",
           "terms_id",
@@ -1372,18 +2020,10 @@
           "merchant_rule",
           "confirmation"
         ],
-        "title": "TransferTerms",
-        "type": "object"
+        "title": "TransferTerms"
       },
       "ValidationError": {
         "properties": {
-          "ctx": {
-            "title": "Context",
-            "type": "object"
-          },
-          "input": {
-            "title": "Input"
-          },
           "loc": {
             "items": {
               "anyOf": [
@@ -1395,43 +2035,49 @@
                 }
               ]
             },
-            "title": "Location",
-            "type": "array"
+            "type": "array",
+            "title": "Location"
           },
           "msg": {
-            "title": "Message",
-            "type": "string"
+            "type": "string",
+            "title": "Message"
           },
           "type": {
-            "title": "Error Type",
-            "type": "string"
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
           }
         },
+        "type": "object",
         "required": [
           "loc",
           "msg",
           "type"
         ],
-        "title": "ValidationError",
-        "type": "object"
+        "title": "ValidationError"
       },
       "Wallet": {
-        "additionalProperties": true,
         "properties": {
-          "available_points": {
-            "minimum": 0.0,
-            "title": "Available Points",
-            "type": "integer"
+          "scope": {
+            "type": "string",
+            "const": "journey_demo",
+            "title": "Scope"
           },
           "balance": {
+            "type": "integer",
             "minimum": 0.0,
-            "title": "Balance",
-            "type": "integer"
+            "title": "Balance"
           },
-          "earned": {
+          "held_points": {
+            "type": "integer",
             "minimum": 0.0,
-            "title": "Earned",
-            "type": "integer"
+            "title": "Held Points"
           },
           "held_coupon": {
             "anyOf": [
@@ -1444,29 +2090,31 @@
             ],
             "title": "Held Coupon"
           },
-          "held_points": {
-            "minimum": 0.0,
-            "title": "Held Points",
-            "type": "integer"
-          },
-          "scope": {
-            "const": "journey_demo",
-            "title": "Scope",
-            "type": "string"
-          },
           "spent": {
+            "type": "integer",
             "minimum": 0.0,
-            "title": "Spent",
-            "type": "integer"
+            "title": "Spent"
+          },
+          "earned": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Earned"
+          },
+          "available_points": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Available Points"
           },
           "used_coupons": {
             "items": {
               "type": "string"
             },
-            "title": "Used Coupons",
-            "type": "array"
+            "type": "array",
+            "title": "Used Coupons"
           }
         },
+        "additionalProperties": true,
+        "type": "object",
         "required": [
           "scope",
           "balance",
@@ -1477,8 +2125,7 @@
           "available_points",
           "used_coupons"
         ],
-        "title": "Wallet",
-        "type": "object"
+        "title": "Wallet"
       }
     }
   },
@@ -1488,80 +2135,59 @@
   },
   "openapi": "3.1.0",
   "paths": {
-    "/api/route/catalog": {
+    "/api/route/runtime": {
       "get": {
-        "operationId": "catalog_api_api_route_catalog_get",
+        "summary": "Runtime Status",
+        "operationId": "runtime_status_api_route_runtime_get",
         "responses": {
           "200": {
+            "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Catalog Api Api Route Catalog Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/RuntimeView"
                 }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "400": {
-            "description": "Invalid Unicode in JSON rejected before mutation"
-          }
-        },
-        "summary": "Catalog Api"
-      }
-    },
-    "/api/route/experiments": {
-      "post": {
-        "operationId": "experiment_api_route_experiments_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ExperimentRequest"
               }
             }
           },
-          "required": true
-        },
+          "400": {
+            "description": "Invalid Unicode in JSON rejected before mutation"
+          }
+        }
+      }
+    },
+    "/api/route/catalog": {
+      "get": {
+        "summary": "Catalog Api",
+        "operationId": "catalog_api_api_route_catalog_get",
         "responses": {
           "200": {
+            "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
                   "additionalProperties": true,
-                  "title": "Response Experiment Api Route Experiments Post",
-                  "type": "object"
+                  "type": "object",
+                  "title": "Response Catalog Api Api Route Catalog Get"
                 }
               }
-            },
-            "description": "Successful Response"
+            }
           },
           "400": {
             "description": "Invalid Unicode in JSON rejected before mutation"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
           }
-        },
-        "summary": "Experiment"
+        }
       }
     },
     "/api/route/journeys": {
       "post": {
+        "summary": "Create Journey",
         "operationId": "create_journey_api_route_journeys_post",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Intent"
+                "$ref": "#/components/schemas/JourneyInput"
               }
             }
           },
@@ -1569,110 +2195,110 @@
         },
         "responses": {
           "201": {
+            "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/JourneyView"
                 }
               }
-            },
-            "description": "Successful Response"
+            }
           },
           "400": {
             "description": "Invalid Unicode in JSON rejected before mutation"
           },
           "422": {
+            "description": "Validation Error",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
-            },
-            "description": "Validation Error"
+            }
           }
-        },
-        "summary": "Create Journey"
+        }
       }
     },
     "/api/route/journeys/{journey_id}": {
       "get": {
+        "summary": "Journey",
         "operationId": "journey_api_route_journeys__journey_id__get",
         "parameters": [
           {
-            "in": "path",
             "name": "journey_id",
+            "in": "path",
             "required": true,
             "schema": {
+              "type": "string",
               "format": "uuid",
-              "title": "Journey Id",
-              "type": "string"
+              "title": "Journey Id"
             }
           }
         ],
         "responses": {
           "200": {
+            "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/JourneyView"
                 }
               }
-            },
-            "description": "Successful Response"
+            }
           },
           "400": {
             "description": "Invalid Unicode in JSON rejected before mutation"
           },
           "422": {
+            "description": "Validation Error",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
-            },
-            "description": "Validation Error"
+            }
           }
-        },
-        "summary": "Journey"
+        }
       }
     },
     "/api/route/journeys/{journey_id}/commands": {
       "post": {
+        "summary": "Commands",
         "operationId": "commands_api_route_journeys__journey_id__commands_post",
         "parameters": [
           {
-            "in": "path",
             "name": "journey_id",
+            "in": "path",
             "required": true,
             "schema": {
+              "type": "string",
               "format": "uuid",
-              "title": "Journey Id",
-              "type": "string"
+              "title": "Journey Id"
             }
           }
         ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/Command"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
+            "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/JourneyView"
                 }
               }
-            },
-            "description": "Successful Response"
+            }
           },
           "400": {
             "description": "Invalid Unicode in JSON rejected before mutation"
@@ -1681,142 +2307,54 @@
             "description": "Stale state, unsafe transfer or invalid lifecycle"
           },
           "422": {
+            "description": "Validation Error",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Commands"
-      }
-    },
-    "/api/route/journeys/{journey_id}/comparison": {
-      "get": {
-        "operationId": "comparison_api_route_journeys__journey_id__comparison_get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "journey_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Journey Id",
-              "type": "string"
             }
           }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Comparison Api Route Journeys  Journey Id  Comparison Get",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "400": {
-            "description": "Invalid Unicode in JSON rejected before mutation"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Comparison"
-      }
-    },
-    "/api/route/journeys/{journey_id}/receipt": {
-      "get": {
-        "operationId": "receipt_api_route_journeys__journey_id__receipt_get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "journey_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Journey Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ReceiptView"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "400": {
-            "description": "Invalid Unicode in JSON rejected before mutation"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Receipt"
+        }
       }
     },
     "/api/route/journeys/{journey_id}/transfer-controls": {
       "post": {
+        "summary": "Transfer Controls",
         "operationId": "transfer_controls_api_route_journeys__journey_id__transfer_controls_post",
         "parameters": [
           {
-            "in": "path",
             "name": "journey_id",
+            "in": "path",
             "required": true,
             "schema": {
+              "type": "string",
               "format": "uuid",
-              "title": "Journey Id",
-              "type": "string"
+              "title": "Journey Id"
             }
           }
         ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/TransferControl"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
+            "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/JourneyView"
                 }
               }
-            },
-            "description": "Successful Response"
+            }
           },
           "400": {
             "description": "Invalid Unicode in JSON rejected before mutation"
@@ -1825,42 +2363,77 @@
             "description": "Pending operation or changed state"
           },
           "422": {
+            "description": "Validation Error",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
-            },
-            "description": "Validation Error"
+            }
           }
-        },
-        "summary": "Transfer Controls"
+        }
       }
     },
-    "/api/route/runtime": {
-      "get": {
-        "operationId": "runtime_status_api_route_runtime_get",
+    "/api/route/journeys/{journey_id}/payment-controls": {
+      "post": {
+        "summary": "Payment Controls",
+        "operationId": "payment_controls_api_route_journeys__journey_id__payment_controls_post",
+        "parameters": [
+          {
+            "name": "journey_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Journey Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PaymentControl"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
+            "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RuntimeView"
+                  "$ref": "#/components/schemas/JourneyView"
                 }
               }
-            },
-            "description": "Successful Response"
+            }
           },
           "400": {
             "description": "Invalid Unicode in JSON rejected before mutation"
+          },
+          "409": {
+            "description": "Fixed legacy mode, pending work or stale state"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
           }
-        },
-        "summary": "Runtime Status"
+        }
       }
     },
     "/api/route/transfer-comparison": {
       "post": {
+        "summary": "Transfer Comparison",
         "operationId": "transfer_comparison_api_route_transfer_comparison_post",
         "requestBody": {
           "content": {
@@ -1874,33 +2447,206 @@
         },
         "responses": {
           "200": {
+            "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ComparisonView"
                 }
               }
-            },
-            "description": "Successful Response"
+            }
           },
           "400": {
             "description": "Invalid Unicode in JSON rejected before mutation"
           },
+          "429": {
+            "description": "Two comparisons are already running in this process"
+          },
           "422": {
+            "description": "Validation Error",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
-            },
-            "description": "Validation Error"
-          },
-          "429": {
-            "description": "Two comparisons are already running in this process"
+            }
           }
+        }
+      }
+    },
+    "/api/route/journeys/{journey_id}/comparison": {
+      "get": {
+        "summary": "Comparison",
+        "operationId": "comparison_api_route_journeys__journey_id__comparison_get",
+        "parameters": [
+          {
+            "name": "journey_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Journey Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Comparison Api Route Journeys  Journey Id  Comparison Get"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid Unicode in JSON rejected before mutation"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/route/experiments": {
+      "post": {
+        "summary": "Experiment",
+        "operationId": "experiment_api_route_experiments_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExperimentRequest"
+              }
+            }
+          },
+          "required": true
         },
-        "summary": "Transfer Comparison"
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Experiment Api Route Experiments Post"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid Unicode in JSON rejected before mutation"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/route/journeys/{journey_id}/reconciliation": {
+      "get": {
+        "summary": "Reconciliation",
+        "operationId": "reconciliation_api_route_journeys__journey_id__reconciliation_get",
+        "parameters": [
+          {
+            "name": "journey_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Journey Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReconciliationView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid Unicode in JSON rejected before mutation"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/route/journeys/{journey_id}/receipt": {
+      "get": {
+        "summary": "Receipt",
+        "operationId": "receipt_api_route_journeys__journey_id__receipt_get",
+        "parameters": [
+          {
+            "name": "journey_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Journey Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceiptView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid Unicode in JSON rejected before mutation"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     }
   }
