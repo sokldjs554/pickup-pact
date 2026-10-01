@@ -16,6 +16,7 @@ import threading
 import time
 from uuid import uuid4
 from .merchant_http import HttpMerchantFleet
+from .payments.runtime import _wait_ready_json
 from .recovery_worker import RecoveryWorker
 
 log=logging.getLogger(__name__)
@@ -41,11 +42,8 @@ class MerchantProcess:
                                       stdout=self._log,stderr=self._log)
         deadline=time.monotonic()+8
         try:
-            while time.monotonic()<deadline and not ready.exists():
-                if self.process.poll() is not None:raise RuntimeError('merchant process exited during startup')
-                if self._stop.wait(.03):raise RuntimeError('merchant startup cancelled')
-            if not ready.exists():raise RuntimeError('merchant process readiness timed out')
-            self.url=json.loads(ready.read_text())['url']
+            data=_wait_ready_json(ready,self.process,self._stop,deadline)
+            self.url=data['url']
             self.port=int(self.url.rsplit(':',1)[1])
         except Exception:
             if self.process.poll() is None:self.process.terminate();self.process.wait(5)
