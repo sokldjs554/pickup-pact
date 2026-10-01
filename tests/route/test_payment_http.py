@@ -73,3 +73,23 @@ def test_http_auth_bad_shape_and_wrong_binding_do_not_mutate(tmp_path):
 def test_client_cannot_be_pointed_at_external_or_arbitrary_path(url):
     from demo.route.payments.http_client import PaymentClient
     with pytest.raises(ValueError):PaymentClient(url,'x'*64)
+
+
+def test_ready_file_reader_waits_for_complete_json(tmp_path):
+    from demo.route.payments import runtime as rt
+    from threading import Event, Thread
+    import json
+    ready=tmp_path/'ready.json'
+    ready.write_text('')
+    stop=Event()
+    class Process:
+        @staticmethod
+        def poll(): return None
+    def finish():
+        time.sleep(.05)
+        ready.write_text(json.dumps({'url':'http://127.0.0.1:43210'}))
+    writer=Thread(target=finish);writer.start()
+    try:
+        assert rt._wait_ready_json(ready,Process(),stop,time.monotonic()+1)['url']=='http://127.0.0.1:43210'
+    finally:
+        writer.join()
