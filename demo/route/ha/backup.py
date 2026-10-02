@@ -120,7 +120,7 @@ def verify_bundle(root:Path,*,expected_sha256:str,expected_cluster_id:str)->dict
 def assert_test_resource(name:str,labels:dict,run_id:str,role:str)->None:
     """Called before stopping/removing ONLY resources created by the rehearsal."""
     if (not isinstance(run_id,str) or not re.fullmatch('[0-9a-f]{16}',run_id)
-        or role not in {'source','recovery','data','archive','restored'}
+        or role not in {'source','recovery','data','archive','restored','downloaded'}
         or name!='pickup-dr-'+run_id+'-'+role
         or labels.get('pickup.rehearsal')!=run_id or labels.get('pickup.role')!=role):
         raise ValueError('not an owned isolated rehearsal resource')

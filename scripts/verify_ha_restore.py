@@ -22,6 +22,8 @@ IMAGE='postgres:17.11-bookworm@sha256:639ab7ceb90e13123085b741fb31ef493fba254630
 
 def rehearse(output:Path)->dict:
     if os.environ.get('PICKUP_HA_TEST')!='1':raise ValueError('explicit isolated rehearsal opt-in required')
+    transport=os.environ.get('PICKUP_BACKUP_TRANSPORT','local')
+    if transport not in {'local','restic_https_development'}:raise ValueError('unsupported backup transport')
     import psycopg
     from psycopg.conninfo import make_conninfo
     from demo.route.ha.payment_repository import PostgresPaymentRepository
@@ -31,6 +33,7 @@ def rehearse(output:Path)->dict:
     run=uuid4().hex[:16];prefix='pickup-dr-'+run+'-';password=secrets.token_hex(24)
     env={**os.environ,'PGPASSWORD':password,'POSTGRES_PASSWORD':password}
     containers=[];volumes=[];repositories=[]
+    network_lab=None;remote_receipt=None;archive_role='archive'
     steps=[];report={'scope':'development_single_host','run_id':run,'passed':False}
     started=time.monotonic()
     def cli(*args,timeout=120,check=True):
@@ -73,6 +76,9 @@ def rehearse(output:Path)->dict:
         row=store.read('pending-capture')
         return {k:row[k] for k in ('id','order_id','request_key','fingerprint','payload','status','phase_version','lease_version')}
     try:
+        if transport=='restic_https_development':
+            from ha_restic_lab import ResticLab
+            network_lab=ResticLab().__enter__()
         cli('pull',IMAGE)
         for role in ('data','archive','restored'):
             cli('volume','create',*labels(role),prefix+role);volumes.append(role)
@@ -148,21 +154,42 @@ def rehearse(output:Path)->dict:
             (output/'backup-manifest.json').write_text(json.dumps(verified,indent=2)+'\n')
             if any('\n' in name or '\r' in name for name in verified['files']):raise AssertionError('unexpected backup filename')
             (output/'backup-sha256.txt').write_text(''.join(item['sha256']+'  '+name+'\n' for name,item in verified['files'].items()))
+            if network_lab:
+                remote_receipt=network_lab.archive.upload(bundle,expected_sha256=seal,expected_cluster_id=cluster)
+                report['remote_negative_controls']=network_lab.negative_controls(remote_receipt,bundle,seal,cluster)
+                (output/'remote-receipt.json').write_text(json.dumps(remote_receipt,indent=2)+'\n')
+                steps.append('encrypted HTTPS snapshot downloaded and verified before receipt publication')
         for r in repositories:r.close()
         repositories.clear()
         recovery_started=time.monotonic()
         remove_container('source');remove_volume('data')
         assert cli('volume','inspect',prefix+'data',check=False).returncode!=0
         steps.append('original test container and data volume removed; no replica exists')
+        if network_lab:
+            remove_volume('archive')
+            assert cli('volume','inspect',prefix+'archive',check=False).returncode!=0
+            assert not bundle.exists(), 'original local copied bundle must also be gone'
+            archive_role='downloaded'
+            cli('volume','create',*labels(archive_role),prefix+archive_role);volumes.append(archive_role)
+            with tempfile.TemporaryDirectory(prefix='pickup-https-restore-') as downloaded:
+                fetched=Path(downloaded)/'bundle'
+                network_lab.archive.restore(remote_receipt,fetched,expected_sha256=seal,expected_cluster_id=cluster)
+                cli('run','--rm','--network','none','-v',str(fetched)+':/received:ro',
+                    '-v',prefix+archive_role+':/backup',IMAGE,'bash','-c',
+                    'cp -a /received/. /backup/ && chown -R postgres:postgres /backup')
+            report.update(local_archive_removed=True,local_staging_removed=True,
+                recovery_input='pinned_restic_snapshot_over_verified_https',
+                remote_repository_id=remote_receipt['repository_id'],remote_snapshot_id=remote_receipt['snapshot_id'])
+            steps.append('original archive and staging removed; downloaded encrypted network snapshot into a new volume')
         # Revalidate the exact archive volume now that its sole writer is gone.
-        cli('run','--rm','--network','none','-v',prefix+'archive:/backup:ro','-v',str(output)+':/evidence:ro','-w','/backup',IMAGE,
+        cli('run','--rm','--network','none','-v',prefix+archive_role+':/backup:ro','-v',str(output)+':/evidence:ro','-w','/backup',IMAGE,
             'sha256sum','--check','/evidence/backup-sha256.txt')
         steps.append('surviving archive volume matches the separately retained seal')
         # Read-only backup mount, fresh target volume. Copy only the sealed base.
-        cli('run','--rm','--network','none','-v',prefix+'archive:/backup:ro','-v',prefix+'restored:/restore',IMAGE,
+        cli('run','--rm','--network','none','-v',prefix+archive_role+':/backup:ro','-v',prefix+'restored:/restore',IMAGE,
             'bash','-c','cp -a /backup/base/. /restore/ && touch /restore/recovery.signal && chown -R postgres:postgres /restore && chmod 700 /restore')
         cli('run','-d','--name',prefix+'recovery',*labels('recovery'),'-e','PGPASSWORD','-p','127.0.0.1::5432',
-            '-v',prefix+'restored:/var/lib/postgresql/data','-v',prefix+'archive:/backup:ro',IMAGE,
+            '-v',prefix+'restored:/var/lib/postgresql/data','-v',prefix+archive_role+':/backup:ro',IMAGE,
             'postgres','-c','archive_mode=off','-c','restore_command=cp /backup/wal/%f %p',
             '-c','recovery_target_name='+target,'-c','recovery_target_action=promote')
         containers.append('recovery');restored_dsn=ready('recovery')
@@ -210,7 +237,10 @@ def rehearse(output:Path)->dict:
         for role in list(reversed(volumes)):
             try:remove_volume(role)
             except Exception as exc:cleanup.append(type(exc).__name__+': '+str(exc).replace(password,'[redacted]'))
-        report.update(steps=steps,cleanup_errors=cleanup,elapsed_seconds=round(time.monotonic()-started,3))
+        if network_lab:
+            try:network_lab.__exit__(None,None,None)
+            except Exception as exc:cleanup.append('network repository cleanup: '+type(exc).__name__)
+        report.update(backup_transport=transport,steps=steps,cleanup_errors=cleanup,elapsed_seconds=round(time.monotonic()-started,3))
         if cleanup:report['passed']=False
         (output/'result.json').write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n')
     if not report['passed']:raise AssertionError('rehearsal cleanup failed')
