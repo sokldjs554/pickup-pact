@@ -1,6 +1,7 @@
 """Explicit private development topology; real remote TLS/HA is a separate gate."""
 from dataclasses import dataclass, field
 import re
+import json
 from ..payments.http_client import origin
 from ..payments.domain import key
 
@@ -16,6 +17,8 @@ class RoleSettings:
     notification_secret: str = field(repr=False)
     schema: str = 'pact_orders'
     initialize: bool = False
+    merchant_failovers: tuple[str,...] = field(default=(),repr=False)
+    payment_failovers: tuple[str,...] = field(default=(),repr=False)
 
     @classmethod
     def from_env(cls, env):
@@ -32,15 +35,22 @@ class RoleSettings:
             raise ValueError('explicit repository schema required')
         if env.get('PICKUP_ORDER_INIT_SCHEMA','0') not in {'0','1'}:
             raise ValueError('explicit initialization flag required')
+        from .replica_clients import replica_origins
+        def failovers(name, primary):
+            extra=json.loads(env.get(name,'[]'))
+            if not isinstance(extra,list):raise ValueError('failover origins must be a JSON array')
+            return replica_origins([primary,*extra])[1:]
+        merchant_failovers=failovers('ROUTE_MERCHANT_FAILOVER_URLS',env['ROUTE_MERCHANT_URL'])
+        payment_failovers=failovers('ROUTE_PAYMENT_FAILOVER_URLS',env['ROUTE_PAYMENT_URL'])
         return cls(env['PICKUP_ORDER_DSN'],env['PICKUP_NODE_ID'],origin(env['ROUTE_MERCHANT_URL']),
                    env['ROUTE_MERCHANT_TOKEN'],origin(env['ROUTE_PAYMENT_URL']),env['ROUTE_PAYMENT_TOKEN'],
-                   env['ROUTE_PAYMENT_NOTIFY_SECRET'],schema,env.get('PICKUP_ORDER_INIT_SCHEMA')=='1')
+                   env['ROUTE_PAYMENT_NOTIFY_SECRET'],schema,env.get('PICKUP_ORDER_INIT_SCHEMA')=='1',
+                   merchant_failovers=merchant_failovers,payment_failovers=payment_failovers)
 
     def store(self):
-        from ..merchant_http import HttpMerchantFleet
-        from ..payments.http_client import PaymentClient
+        from .replica_clients import ReplicaMerchantFleet, ReplicaPaymentClient
         from .journey_store import PostgresJourneyStore
         return PostgresJourneyStore(self.order_dsn, schema=self.schema, initialize=self.initialize,
             worker_id=self.node_id, notification_secret=self.notification_secret,
-            fleet=HttpMerchantFleet(self.merchant_url,self.merchant_token,timeout=2),
-            payment_gateway=PaymentClient(self.payment_url,self.payment_token,timeout=2))
+            fleet=ReplicaMerchantFleet((self.merchant_url,*self.merchant_failovers),self.merchant_token,timeout=2),
+            payment_gateway=ReplicaPaymentClient((self.payment_url,*self.payment_failovers),self.payment_token,timeout=2))

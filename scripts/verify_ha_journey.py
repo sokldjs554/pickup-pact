@@ -61,6 +61,15 @@ def scenario(topology,fault):
     return dict(fault=fault,order_id=oid,proof=proof,passed=True)
 
 
+def peer_scenario(topology,role):
+    topology.stop(role)
+    try:
+        row=scenario(topology,'none')
+        row.update(fault='peer_unavailable',unavailable_role=role)
+        return row
+    finally:topology.restart_role(role)
+
+
 def verify(output,repeat,browsers):
     output.mkdir(parents=True,exist_ok=False)
     report={'scope':'single_host_native_postgresql_development','results':[],'passed':False}
@@ -70,6 +79,8 @@ def verify(output,repeat,browsers):
             for number in range(repeat):
                 for fault in ['none','authorize_reply_lost','capture_reply_lost','void_reply_lost','notification_duplicate','notification_late']:
                     row=scenario(topology,fault);row['repeat']=number+1;report['results'].append(row)
+                for role in ['merchant-0','payment-0']:
+                    row=peer_scenario(topology,role);row['repeat']=number+1;report['results'].append(row)
             if browsers:
                 report['browser_results']=[]
                 failures=[]

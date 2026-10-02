@@ -23,7 +23,7 @@ def request(base,path,body=None):
 class DevelopmentStack:
     def __init__(self,root):
         self.root=Path(root).resolve();self.root.mkdir(parents=True,exist_ok=False)
-        self.processes={};self.logs={};self.created=[]
+        self.processes={};self.logs={};self.created=[];self.launches={}
         self.run_id=uuid4().hex
         self.secrets=[secrets.token_hex(32) for _ in range(3)]
         self.base_env={**os.environ,'PYTHONPATH':str(ROOT)+':'+str(ROOT/'services/reconciler'),
@@ -35,6 +35,7 @@ class DevelopmentStack:
     def start(self,name,args,extra=None,ready=True):
         if name in self.processes and self.processes[name].poll() is None:
             raise ValueError('role is already running')
+        self.launches[name]=(list(args),dict(extra or {}),ready)
         log=self.root/(name+'.log');handle=log.open('a');self.logs[name]=handle
         marker=self.root/(name+'-'+uuid4().hex+'.json')
         command=[sys.executable,*args]
@@ -53,6 +54,16 @@ class DevelopmentStack:
                 except (json.JSONDecodeError,KeyError):pass
             time.sleep(.05)
         raise AssertionError(name+' readiness deadline exceeded')
+
+    def start_role(self,name,args):
+        with socket.socket() as sock:
+            sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]
+        return self.start(name,[*args,'--port',str(port)])
+
+    def restart_role(self,name):
+        if name not in self.launches:raise ValueError('role was not created by this stack')
+        args,extra,ready=self.launches[name]
+        return self.start(name,args,extra,ready=ready)
 
     def stop(self,name):
         process=self.processes[name]
@@ -107,10 +118,11 @@ class DevelopmentStack:
                 db.execute(sql.SQL('COMMENT ON DATABASE {} IS {}').format(sql.Identifier(name),sql.Literal(self.run_id)))
                 self.base_env['PICKUP_'+role.upper()+'_DSN']=make_conninfo(dsn,dbname=name)
                 self.base_env['PICKUP_'+role.upper()+'_INIT_SCHEMA']='1'
-        merchant=self.start('merchant',['-m','demo.route.ha.merchant_service'])
-        callback=self.start('notification',['-m','demo.route.ha.notification_service'])
-        payment=self.start('payment',['-m','demo.route.ha.payment_service','--callback-url',callback])
-        self.base_env.update(ROUTE_MERCHANT_URL=merchant,ROUTE_PAYMENT_URL=payment)
+        merchants=[self.start_role('merchant-'+str(i),['-m','demo.route.ha.merchant_service']) for i in range(2)]
+        callbacks=[self.start_role('notification-'+str(i),['-m','demo.route.ha.notification_service']) for i in range(2)]
+        payments=[self.start_role('payment-'+str(i),['-m','demo.route.ha.payment_service','--callback-url',callbacks[i]]) for i in range(2)]
+        self.base_env.update(ROUTE_MERCHANT_URL=merchants[0],ROUTE_PAYMENT_URL=payments[0],
+            ROUTE_MERCHANT_FAILOVER_URLS=json.dumps(merchants[1:]),ROUTE_PAYMENT_FAILOVER_URLS=json.dumps(payments[1:]))
         self.start_app(0);self.start_app(1)
         self.start_worker(0);self.start_worker(1)
         deadline=time.monotonic()+20
