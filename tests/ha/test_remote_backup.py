@@ -121,3 +121,25 @@ def test_restore_rejects_symlinked_parent_before_network(tmp_path):
         api().ResticArchive(config, executable='/missing').restore(receipt(), alias/'fresh',
             expected_sha256='3'*64, expected_cluster_id='123456789')
     assert list(real.iterdir()) == []
+
+
+def test_failed_command_exposes_stage_but_not_secrets_or_endpoint(tmp_path):
+    import sys
+    config = settings(tmp_path)
+    program = tmp_path/'failed-restic'
+    program.write_text('#!' + sys.executable + '''
+import os, sys, base64
+credential = os.environ['RESTIC_REST_PASSWORD']
+password = open(os.environ['RESTIC_PASSWORD_FILE']).read().strip()
+auth = base64.b64encode((os.environ['RESTIC_REST_USERNAME']+':'+credential).encode()).decode()
+print('RESTORE_FAILURE: unsupported metadata\\n'+os.environ['RESTIC_REPOSITORY']+' '+credential+' '+password+' '+auth, file=sys.stderr)
+sys.exit(7)
+''')
+    program.chmod(0o700)
+    with pytest.raises(OSError) as captured:
+        api().ResticArchive(config, executable=str(program))._run(['restore','snapshot:/bundle','--target','/fresh'])
+    message = str(captured.value)
+    assert 'restore' in message and 'exit 7' in message
+    assert 'RESTORE_FAILURE: unsupported metadata' in message
+    assert 'secret-' not in message and 'backup.example' not in message
+    assert 'rest:https' not in message and len(message) < 2400

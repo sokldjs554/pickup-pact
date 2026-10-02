@@ -5,6 +5,7 @@ provision hosts or claim that a transfer is a completed database recovery.
 """
 from __future__ import annotations
 from dataclasses import dataclass, field
+import base64
 import json
 import os
 from pathlib import Path, PurePosixPath
@@ -121,14 +122,29 @@ class ResticArchive:
         self.settings, self.executable = settings, executable
 
     def _run(self, args: list[str], *, cwd: Path | None = None) -> str:
+        environment = self.settings.environment()
+        encryption_password = _private_file(self.settings.password_file)
         try:
             result = subprocess.run([self.executable, '--no-cache', '--cacert', str(self.settings.ca_file), *args],
-                cwd=cwd, env=self.settings.environment(), capture_output=True, text=True, timeout=self.command_timeout)
+                cwd=cwd, env=environment, capture_output=True, text=True, timeout=self.command_timeout)
         except (OSError, subprocess.TimeoutExpired):
             raise OSError('encrypted backup command did not complete') from None
         if result.returncode != 0:
-            # Raw diagnostics may contain private addresses or authentication.
-            raise OSError('encrypted backup command failed; no verified receipt was issued')
+            # Preserve the actual failure, but never publish raw authentication,
+            # repository addresses, key locations or terminal control sequences.
+            basic = base64.b64encode((environment['RESTIC_REST_USERNAME'] + ':' +
+                                    environment['RESTIC_REST_PASSWORD']).encode()).decode()
+            hidden = [encryption_password, environment['RESTIC_REST_PASSWORD'], basic,
+                      self.settings.repository, self.settings.repository[5:], self.settings.allowed_authority,
+                      *[str(getattr(self.settings, name)) for name in
+                        ['password_file','credential_file','username_file','ca_file']]]
+            detail = result.stderr
+            for value in sorted(hidden, key=len, reverse=True):
+                detail = detail.replace(value, '[redacted]')
+            detail = re.sub(r'(?:https?|rest):[^\s]+', '[endpoint]', detail)
+            detail = re.sub(r'[\x00-\x1f\x7f]', ' ', detail)[-1600:]
+            operation = args[0] if args and re.fullmatch(r'[a-z-]+', args[0]) else 'operation'
+            raise OSError(f'encrypted backup {operation} failed (exit {result.returncode}): {detail}')
         if len(result.stdout) > 16*1024*1024:
             raise ValueError('backup command output exceeds metadata bound')
         return result.stdout
