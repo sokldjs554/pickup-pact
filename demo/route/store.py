@@ -65,7 +65,7 @@ class JourneyStore:
     def event(s,kind,title,**data):
         s['events'].append(dict(seq=len(s['events'])+1,type=kind,title=title,at=s['clock'],data=data))
 
-    def create(self,intent,world_id=None,card_token="demo-approved",payment_fault="none"):
+    def new_state(self,intent,world_id=None,card_token="demo-approved",payment_fault="none"):
         s=dict(id=uuid4().hex,version=1,clock=0,arrival_delay=0,intent=intent,
                stores=deepcopy(STORES),order=None,events=[],mode='synthetic',wallet=benefits.initial_wallet(),transfer_agreement_version=1)
         s['world_id'] = world_id or s['id']
@@ -77,11 +77,18 @@ class JourneyStore:
                      next_payment_fault=payment_fault,payment_revision_counter=0,
                      payment=dict(state='NOT_STARTED',authorization=None,provider='DEMO_PLATFORM',mode='synthetic'))
         self.event(s,'INTENT_CREATED','일정과 커피 조건을 저장했어요',intent=intent)
+        return s
+
+    def create(self,intent,world_id=None,card_token="demo-approved",payment_fault="none"):
+        s=self.new_state(intent,world_id,card_token,payment_fault)
         with self.connection() as db: self._save(db,s)
         return self.view(s)
 
+    def read_state(self,sid):
+        with self.connection() as db: return self._load(db,sid)
+
     def get(self,sid):
-        with self.connection() as db: return self.view(self._load(db,sid))
+        return self.view(self.read_state(sid))
 
     def view(self,s,duplicate=False):
         out=deepcopy(s); rows=plans(s); order=out['order']; current=None

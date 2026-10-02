@@ -28,7 +28,7 @@ def integrated():
     Merchant = native('merchant_repository').PostgresMerchantFleet
     Store = native('journey_store').PostgresJourneyStore
     from demo.route.ha.payment_repository import PostgresPaymentRepository
-    from demo.route.ha.local_gateway import RepositoryPaymentClient
+    from native_helpers import RepositoryPaymentClient
     schemas = ['pact_int_' + uuid4().hex for _ in range(3)]
     merchants = [Merchant(dsn, schema=schemas[0]) for _ in range(2)]
     pg = PostgresPaymentRepository(dsn, schema=schemas[1])

@@ -18,6 +18,30 @@ def sign(secret: str, stamp: str, body: bytes) -> str:
     return hmac.new(secret.encode(), stamp.encode()+b'.'+body, hashlib.sha256).hexdigest()
 
 
+def parse_event(secret: str, body: bytes, stamp: str, signature: str) -> dict:
+    if not isinstance(body, bytes) or len(body)>MAX_BODY:
+        raise PaymentError('INVALID_EVENT_SIZE',413)
+    try:
+        timestamp=int(stamp)
+        if str(timestamp)!=stamp or abs(time.time()-timestamp)>300:
+            raise ValueError()
+        if len(signature)!=64 or not hmac.compare_digest(sign(secret,stamp,body).encode(),signature.encode('ascii')):
+            raise ValueError()
+    except (ValueError,TypeError,UnicodeError):
+        raise PaymentError('INVALID_EVENT_SIGNATURE',403) from None
+    try:
+        event=json.loads(body)
+        if not isinstance(event,dict) or set(event)!=EVENT_FIELDS:raise ValueError()
+        for field in ('event_id','world_id','order_id','authorization_id','transaction_id'):key(event[field])
+        for field in ('revision','payment_revision','amount_krw'):
+            if type(event[field]) is not int or event[field]<1:raise ValueError()
+        if event['kind'] not in {'AUTHORIZE','CAPTURE','VOID'} or event['currency']!='KRW' or event['mode']!='synthetic':
+            raise ValueError()
+    except (ValueError,TypeError,KeyError,UnicodeError):
+        raise PaymentError('INVALID_EVENT',422) from None
+    return event
+
+
 class PaymentInbox:
     def __init__(self, path: str | Path, secret: str):
         if len(secret) < 24:
@@ -57,26 +81,7 @@ class PaymentInbox:
         db.execute('INSERT OR IGNORE INTO payment_authorization_refs VALUES(?,?,?)', (authorization_id,world,order_id))
 
     def accept(self,body: bytes,stamp: str,signature: str) -> dict:
-        if not isinstance(body, bytes) or len(body)>MAX_BODY:
-            raise PaymentError('INVALID_EVENT_SIZE',413)
-        try:
-            timestamp=int(stamp)
-            if str(timestamp)!=stamp or abs(time.time()-timestamp)>300:
-                raise ValueError()
-            if len(signature)!=64 or not hmac.compare_digest(sign(self.secret,stamp,body).encode(),signature.encode('ascii')):
-                raise ValueError()
-        except (ValueError,TypeError,UnicodeError):
-            raise PaymentError('INVALID_EVENT_SIGNATURE',403) from None
-        try:
-            event=json.loads(body)
-            if not isinstance(event,dict) or set(event)!=EVENT_FIELDS:raise ValueError()
-            for field in ('event_id','world_id','order_id','authorization_id','transaction_id'):key(event[field])
-            for field in ('revision','payment_revision','amount_krw'):
-                if type(event[field]) is not int or event[field]<1:raise ValueError()
-            if event['kind'] not in {'AUTHORIZE','CAPTURE','VOID'} or event['currency']!='KRW' or event['mode']!='synthetic':
-                raise ValueError()
-        except (ValueError,TypeError,KeyError,UnicodeError):
-            raise PaymentError('INVALID_EVENT',422) from None
+        event=parse_event(self.secret,body,stamp,signature)
         sha=hashlib.sha256(body).hexdigest()
         with self.connection() as db:
             db.execute('BEGIN IMMEDIATE')
