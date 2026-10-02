@@ -1,0 +1,70 @@
+name: ha-foundation-review
+on:
+  push:
+    branches: [feat/ha-dr-foundation-20261002]
+  pull_request:
+    paths: ['demo/route/ha/**', 'demo/route/payments/**', 'tests/ha/**', 'scripts/verify_ha*', 'requirements-ha.txt', '.github/workflows/ha-foundation-review.yml']
+permissions:
+  contents: read
+concurrency:
+  group: ha-foundation-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  isolated-postgresql:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:17.11-bookworm
+        env:
+          POSTGRES_DB: pickup_ha_test
+          POSTGRES_USER: pickup_test
+          POSTGRES_PASSWORD: isolated_ci_only
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd 'pg_isready -U pickup_test -d pickup_ha_test'
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      PYTHONPATH: .:services/reconciler
+      PICKUP_HA_TEST: '1'
+      PICKUP_PG_TEST_DSN: postgresql://pickup_test:isolated_ci_only@127.0.0.1:5432/pickup_ha_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install actual database driver and complete existing test dependencies
+        run: python -m pip install -r requirements-ha.txt -r services/ops-console/requirements.txt
+      - name: Record exact source and database image identity
+        run: |
+          mkdir -p verification/ha-foundation
+          git rev-parse HEAD > verification/ha-foundation/tested-commit.txt
+          docker image inspect postgres:17.11-bookworm --format '{{json .RepoDigests}}' > verification/ha-foundation/postgres-image.json
+          python -m pip freeze > verification/ha-foundation/dependencies.txt
+      - name: Native PostgreSQL storage contracts
+        run: |
+          set -euo pipefail
+          python -m pytest -q tests/ha | tee verification/ha-foundation/native-tests.log
+      - name: Repeat complete Python application regression including PostgreSQL three times
+        run: |
+          set -euo pipefail
+          for pass in 1 2 3; do
+            python -m pytest -q | tee verification/ha-foundation/all-tests-$pass.log
+          done
+      - name: Existing browser-state and repository contracts
+        run: |
+          set -euo pipefail
+          for test in scripts/verify_*.cjs; do node "$test"; done
+          python scripts/verify_repo.py
+      - name: Preserve exact source including failed runs
+        if: always()
+        run: |
+          mkdir -p verification/ha-foundation
+          git archive --format=zip --output=verification/ha-foundation/tested-source.zip HEAD
+          sha256sum verification/ha-foundation/tested-source.zip > verification/ha-foundation/tested-source.sha256
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ha-foundation-evidence
+          path: verification/ha-foundation
+          retention-days: 30
