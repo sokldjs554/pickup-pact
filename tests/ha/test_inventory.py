@@ -298,3 +298,28 @@ def test_cli_reports_every_problem_and_exit_status(tmp_path, capsys):
     broken.write_text(yaml.safe_dump(data))
     assert cli.main(['render', str(broken), '--out', str(tmp_path/'out')]) == 1
     assert not (tmp_path/'out').exists()
+
+
+def test_restore_bootstrap_renders_only_on_the_designated_leader_and_needs_a_new_generation(tmp_path):
+    data = approved()
+    data['restore'] = {'leader': 'pact-b', 'base_dir': '/var/lib/pickup-pact/restore/base',
+                       'wal_dir': '/var/lib/pickup-pact/restore/wal', 'target_name': 'pact_target_0a1b2c'}
+    assert any(p.startswith('restore: a restored cluster must run a later operating generation') for p in problems(data))
+    data['operating'] = {'generation': 2}
+    assert problems(data) == []
+    for change in [dict(leader='pact-z'), dict(base_dir='/tmp/base'), dict(wal_dir='/var/lib/pickup-pact/restore/../x'),
+                   dict(target_name='latest'), dict(extra=1)]:
+        bad = copy.deepcopy(data)
+        bad['restore'].update(change)
+        assert any(p.startswith('restore:') for p in problems(bad)), change
+    manifest = inventory.render(data, tmp_path/'out')
+    leader = yaml.safe_load((tmp_path/'out/hosts/pact-b/patroni.yml').read_text())['bootstrap']
+    other = yaml.safe_load((tmp_path/'out/hosts/pact-a/patroni.yml').read_text())['bootstrap']
+    assert leader['method'] == 'pickup_restore' and 'method' not in other
+    recovery = leader['pickup_restore']['recovery_conf']
+    assert recovery == {'restore_command': 'cp /var/lib/pickup-pact/restore/wal/%f %p',
+                        'recovery_target_name': 'pact_target_0a1b2c', 'recovery_target_action': 'promote',
+                        'recovery_target_timeline': 'current'}
+    assert leader['dcs']['synchronous_mode_strict'] is True
+    assert parse_env(tmp_path/'out/hosts/pact-a/pickup-order.env')['PICKUP_OPERATING_GENERATION'] == '2'
+    assert manifest['stages']['review'] is True

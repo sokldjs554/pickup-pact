@@ -229,6 +229,16 @@ def validate(data: dict, stage: str = 'review', *, today: dt.date | None = None)
     operating = data.get('operating') or {}
     if type(operating.get('generation', 1)) is not int or not 1 <= operating.get('generation', 1) <= 1_000_000:
         problems.append('operating.generation: positive integer required')
+    restore = data.get('restore')
+    if restore is not None:
+        if (not isinstance(restore, dict) or set(restore) != {'leader', 'base_dir', 'wal_dir', 'target_name'}
+                or restore.get('leader') not in {h.name for h in database}
+                or any(not str(restore.get(k, '')).startswith('/var/lib/pickup-pact/restore/') or '..' in str(restore.get(k))
+                       for k in ('base_dir', 'wal_dir'))
+                or not re.fullmatch(r'[a-z][a-z0-9_]{7,62}', str(restore.get('target_name', '')))):
+            problems.append('restore: leader, base_dir, wal_dir under /var/lib/pickup-pact/restore/ and target_name required')
+        elif operating.get('generation', 1) < 2:
+            problems.append('restore: a restored cluster must run a later operating generation')
 
     if stage in {'deploy', 'destructive'}:
         problems += _approval_problems(data, kind, method, today or dt.date.today())
@@ -471,6 +481,16 @@ def patroni_config(data, host: Host) -> dict:
             'host all all 0.0.0.0/0 reject', 'host all all ::/0 reject']
     rehearsal = data.get('kind') == 'single_host_rehearsal'
     tls = {'certfile': f'{TLS_DIR}/patroni.crt', 'keyfile': f'{TLS_DIR}/patroni.key', 'cafile': f'{TLS_DIR}/ca.crt'}
+    restore = data.get('restore')
+    bootstrap_method = {}
+    if restore and restore['leader'] == host.name:
+        # Only the designated member rebuilds from the external backup; the others then
+        # clone the restored leader. Recovery stops at the named restore point and promotes.
+        bootstrap_method = {'method': 'pickup_restore', 'pickup_restore': {
+            'command': '/usr/local/bin/pickup-restore-bootstrap', 'keep_existing_recovery_conf': False,
+            'recovery_conf': {'restore_command': f'cp {restore["wal_dir"]}/%f %p',
+                              'recovery_target_name': restore['target_name'],
+                              'recovery_target_action': 'promote', 'recovery_target_timeline': 'current'}}}
     return {
         'scope': data['name'], 'namespace': '/pickup-pact/', 'name': host.name,
         'restapi': {'listen': f'{host.address}:{ports["patroni"]}',
@@ -479,6 +499,7 @@ def patroni_config(data, host: Host) -> dict:
         'etcd3': {'hosts': [f'{m.dns}:{ports["etcd_client"]}' for m in etcd], 'protocol': 'https',
                   'cacert': tls['cafile'], 'cert': f'{TLS_DIR}/etcd-client.crt', 'key': f'{TLS_DIR}/etcd-client.key'},
         'bootstrap': {
+            **bootstrap_method,
             'dcs': {'ttl': 30, 'loop_wait': 10, 'retry_timeout': 10, 'maximum_lag_on_failover': 1048576,
                     'synchronous_mode': True, 'synchronous_mode_strict': True,
                     'synchronous_node_count': postgres['synchronous_node_count'], 'failsafe_mode': False,

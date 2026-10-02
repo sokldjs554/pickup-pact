@@ -206,7 +206,7 @@ class ClusterRehearsal:
                 shutil.copy(cert, out/f'{target}.crt')
                 shutil.copy(key, out/f'{target}.key')
 
-    def _volumes(self, letter):
+    def _volumes(self, letter, restore_source: Path | None = None):
         owners = {'postgres': POSTGRES_UID, 'patroni': POSTGRES_UID, 'etcd-client': POSTGRES_UID, 'etcd': 0,
                   'order': SERVICE_UID, 'merchant': SERVICE_UID, 'payment': SERVICE_UID}
         for kind in ('tls', 'secrets', 'data', 'spool', 'etcd'):
@@ -214,6 +214,7 @@ class ClusterRehearsal:
         host = self.host(letter)
         hosts, ports = inv.order_dsn_hosts(self.data)
         pgpass = self.private/f'secrets-{letter}'
+        shutil.rmtree(pgpass, ignore_errors=True)
         pgpass.mkdir(mode=0o700)
         for role in ROLES:
             (pgpass/f'{role}.pgpass').write_text(f'*:*:*:{inv.runtime_user(role)}:{self.passwords[role+"_runtime"]}\n')
@@ -225,6 +226,13 @@ class ClusterRehearsal:
                     '-v', f'{pgpass}:/src-secrets:ro', '-v', f'{self.name(letter, "tls")}:/tls',
                     '-v', f'{self.name(letter, "secrets")}:/secrets', '-v', f'{self.name(letter, "data")}:/data',
                     '-v', f'{self.name(letter, "spool")}:/spool', APP_IMAGE, 'sh', '-c', ' && '.join(script))
+        if restore_source is not None:
+            # The downloaded, verified bundle becomes a read-only input of the new leader.
+            self.create('volume', self.name(letter, 'restore'))
+            self.docker('run', '--rm', '--network', 'none', '-v', f'{restore_source}:/received:ro',
+                        '-v', f'{self.name(letter, "restore")}:/restore', APP_IMAGE, 'sh', '-c',
+                        'set -e && cp -a /received/base /received/wal /restore/ && '
+                        f'chown -R {POSTGRES_UID}:{POSTGRES_UID} /restore && chmod -R go-rwx /restore')
         del host, hosts, ports
 
     # ----------------------------------------------------------------- startup
@@ -316,6 +324,9 @@ class ClusterRehearsal:
                            '-v', f'{self.name(letter, "data")}:/var/lib/postgresql/17',
                            '-v', f'{self.name(letter, "spool")}:/var/lib/pickup-pact/wal-spool',
                            '-v', f'{ROOT}/infra/ha/pickup-wal-archive:/usr/local/bin/pickup-wal-archive:ro',
+                           '-v', f'{ROOT}/infra/ha/pickup-restore-bootstrap:/usr/local/bin/pickup-restore-bootstrap:ro',
+                           *(['-v', f'{self.name(letter, "restore")}:/var/lib/pickup-pact/restore:ro']
+                             if self.name(letter, 'restore') in self.created['volume'] else []),
                            image=PATRONI_IMAGE, command=('/etc/pickup-pact/patroni.yml',))
 
     def members(self, via=None) -> list[dict]:
@@ -378,6 +389,10 @@ class ClusterRehearsal:
             self.timeline.append({'event': 'migrated', 'role': role, 'result': json.loads(result.stdout)})
 
     def owner_dsn(self, role):
+        passfile = self.private/f'{role}-owner.pgpass'
+        if not passfile.exists():
+            passfile.write_text(f'*:*:*:{inv.owner_user(role)}:{self.passwords[role+"_owner"]}\n')
+            os.chmod(passfile, 0o600)
         hosts, ports = inv.order_dsn_hosts(self.data)
         return (f'host={hosts} port={ports} dbname={inv.DATABASES[role]} user={inv.owner_user(role)} '
                 f'sslmode=verify-full sslrootcert={self.ca.cert} passfile={self.private}/{role}-owner.pgpass '
@@ -527,18 +542,19 @@ class ClusterRehearsal:
         self.docker('network', 'connect', '--ip', host.address, self.name('cluster'), self.name(letter, 'host'))
 
     # ----------------------------------------------------------------- close
-    def collect_logs(self):
-        logs = self.evidence/'logs'
+    def collect_logs(self, phase='logs'):
+        logs = self.evidence/phase
         logs.mkdir(exist_ok=True)
         for name in self.created['container']:
             if self.owned('container', name):
                 result = self.docker('logs', '--tail', '400', name, check=False, timeout=60)
                 (logs/(name[len(self.prefix):]+'.log')).write_text(self.redact(result.stdout+result.stderr))
 
-    def close(self):
+    def destroy(self, phase='logs'):
+        """Remove every owned container, volume (data, WAL spool, etcd) and network; keep the vault."""
         errors = []
         try:
-            self.collect_logs()
+            self.collect_logs(phase)
         except Exception as exc:  # noqa: BLE001 - cleanup must continue
             errors.append('logs:'+type(exc).__name__)
         for kind in ('container', 'volume', 'network'):
@@ -549,9 +565,149 @@ class ClusterRehearsal:
                 args = {'container': ('rm', '-f', '-v'), 'volume': ('volume', 'rm'), 'network': ('network', 'rm')}[kind]
                 if self.docker(*args, name, check=False, timeout=120).returncode:
                     errors.append(f'{kind} cleanup failed')
+            self.created[kind] = []
+        return errors
+
+    def close(self):
+        errors = self.destroy()
         shutil.rmtree(self.private, ignore_errors=True)
         if errors:
             raise RuntimeError('; '.join(errors))
+
+    # ------------------------------------------------- backup and restore
+    def leader_sql(self, statement: str) -> str:
+        return self.psql_leader(statement, options=('-At',)).stdout.strip()
+
+    def base_backup(self) -> dict:
+        """pg_basebackup from the leader by a separate backup-host container (replication user, TLS)."""
+        leader = self.leader()
+        backup = self.data['backup']['host']
+        self.create('volume', self.name('backup', 'staging'))
+        env = self.private/'backup-agent.env'
+        docker_env_file({'PGPASSWORD': self.passwords['replication'], 'PGSSLMODE': 'verify-full',
+                         'PGSSLROOTCERT': '/tls/ca.crt'}, env)
+        pins = [arg for member in inv.hosts_of(self.data) for arg in ('--add-host', f'{member.dns}:{member.address}')]
+        self.docker('run', '--rm', '--network', 'none', '-v', f'{self.name("backup", "staging")}:/staging', APP_IMAGE,
+                    'chown', f'{POSTGRES_UID}:{POSTGRES_UID}', '/staging')
+        name = self.name('backup', 'agent')
+        self.run_container(name, '--network', self.name('cluster'), '--ip', backup['address'], *pins,
+                           '--user', 'postgres', '--env-file', env, '--entrypoint', 'sleep',
+                           '-v', f'{self.private}/pki/pickup-test-ca.crt:/tls/ca.crt:ro',
+                           '-v', f'{self.name("backup", "staging")}:/staging', image=PATRONI_IMAGE, command=('infinity',))
+        started = time.monotonic()
+        self.docker('exec', name, 'pg_basebackup', '-h', f'pact-{leader}.ha.test', '-U', 'replicator', '-D',
+                    '/staging/base', '-Fp', '-Xstream', '--checkpoint=fast', '--manifest-checksums=SHA256', timeout=600)
+        self.docker('exec', name, 'pg_verifybackup', '/staging/base', timeout=600)
+        manifest = json.loads(self.docker('exec', name, 'cat', '/staging/base/backup_manifest').stdout)
+        return dict(leader=leader, start_lsn=manifest['WAL-Ranges'][0]['Start-LSN'],
+                    timeline=manifest['WAL-Ranges'][0]['Timeline'], seconds=round(time.monotonic()-started, 2))
+
+    def restore_point(self, target: str) -> dict:
+        self.leader_sql(f"SELECT pg_create_restore_point('{target}');")
+        lsn = self.leader_sql('SELECT pg_current_wal_flush_lsn();')
+        return dict(target=target, lsn=lsn, leader=self.leader())
+
+    def collect_bundle(self, destination: Path, *, base: dict, target: dict) -> tuple[str, dict]:
+        """Base backup + required archived WAL into a sealed bundle (scope: development single host)."""
+        from demo.route.ha.backup import required_wal, seal_bundle
+        self.leader_sql('SELECT pg_switch_wal();')
+        cluster_id = self.leader_sql('SELECT system_identifier FROM pg_control_system();')
+        segment = int(self.leader_sql("SELECT pg_size_bytes(current_setting('wal_segment_size'));"))
+        needed = required_wal(base['start_lsn'], target['lsn'], timeline=base['timeline'], segment_bytes=segment)
+        leader = target['leader']
+        deadline = time.monotonic()+60
+        spool = '/var/lib/pickup-pact/wal-spool/'
+        while time.monotonic() < deadline:
+            listed = set(self.docker('exec', self.name(leader, 'patroni'), 'ls', spool).stdout.split())
+            if set(needed) <= listed:
+                break
+            time.sleep(.5)
+        else:
+            raise AssertionError('required WAL was not archived to the spool')
+        destination.mkdir(parents=True)
+        (destination/'wal').mkdir()
+        self.docker('cp', f'{self.name("backup", "agent")}:/staging/base', str(destination/'base'))
+        for segment_name in needed:
+            self.docker('cp', f'{self.name(leader, "patroni")}:{spool}{segment_name}', str(destination/'wal'/segment_name))
+        commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
+        metadata = dict(cluster_id=cluster_id, source_commit=commit, timeline=base['timeline'],
+                        wal_segment_size=segment, start_lsn=base['start_lsn'], target_lsn=target['lsn'],
+                        scope='development_single_host')
+        return seal_bundle(destination, metadata), dict(metadata, required_wal=needed)
+
+    def setup_restored(self, bundle: Path, *, target: str, leader='a', generation=2):
+        """A NEW cluster (networks, volumes, etcd) whose first member rebuilds from the downloaded bundle.
+
+        Owner and runtime database passwords and the internal tokens are rotated; Patroni's
+        own replication credentials come from the vault, as an operator would supply them.
+        """
+        for role in ROLES:
+            for kind in ('owner', 'runtime'):
+                self.passwords[f'{role}_{kind}'] = secrets.token_hex(24)
+        self.secrets += list(self.passwords.values())
+        for stale in self.private.glob('*.pgpass'):
+            stale.unlink()
+        self.create('network', '--subnet', str(self.cluster_net), self.name('cluster'))
+        self.create('network', '--subnet', str(self.client_net), self.name('client'))
+        self.data = {**self.data, 'operating': {'generation': generation},
+                     'restore': {'leader': f'pact-{leader}', 'base_dir': '/var/lib/pickup-pact/restore/base',
+                                 'wal_dir': '/var/lib/pickup-pact/restore/wal', 'target_name': target}}
+        problems = inv.validate(self.data, 'review')
+        if problems:
+            raise AssertionError('restore inventory rejected: '+'; '.join(problems))
+        self.config = self.root/'config-restored'
+        self.manifest = inv.render(self.data, self.config)
+        self.rotate_tokens()
+        for letter in HOSTS:
+            self._volumes(letter, restore_source=bundle if letter == leader else None)
+            self.start_namespace(letter)
+        for letter in HOSTS:
+            self.start_etcd(letter)
+        self.wait_etcd()
+        self.start_patroni(leader)
+        deadline = time.monotonic()+300
+        while time.monotonic() < deadline and self.leader(via=leader) != leader:
+            time.sleep(1)
+        if self.leader(via=leader) != leader:
+            raise AssertionError('restored member did not become leader')
+        for letter in HOSTS:
+            if letter != leader:
+                self.start_patroni(letter)
+        self.wait_cluster(members=3, timeout=300)
+        statements = [f"ALTER ROLE {user} PASSWORD '{verifier(self.passwords[f'{role}_{kind}'])}';"
+                      for role in ROLES for kind, user in (('owner', inv.owner_user(role)), ('runtime', inv.runtime_user(role)))]
+        self.psql_leader('\n'.join(statements)+'\n')
+        bumped = self.migrate('bump-generation', '--expected', str(generation-1), '--reason', 'restore-'+self.run)
+        for letter in HOSTS:
+            for service in START_ORDER:
+                self.start_service(letter, service)
+        self.wait_apps(HOSTS, timeout=240)
+        return bumped
+
+    def host_app(self, port: int, letter='a'):
+        """A plain-HTTP loopback app on this machine for browser checks, joined to the cluster over mTLS."""
+        env = self.service_env(letter, 'order')
+        tls = self.private/f'tls-{letter}'
+        names = {h.dns: h.address for h in inv.hosts_of(self.data)}
+        values = {}
+        for key, value in env.items():
+            for dns, address in names.items():
+                value = value.replace(dns, address)
+            values[key] = value.replace(inv.TLS_DIR, str(tls)).replace(inv.SECRET_DIR, str(self.private/f'secrets-{letter}'))
+        passfile = self.private/f'secrets-{letter}'/'order.pgpass'
+        os.chmod(passfile, 0o600)
+        values.update({'PICKUP_NODE_ID': 'browser-app', 'PICKUP_INTERNAL_HOSTS': json.dumps(sorted(names.values())),
+                       'PICKUP_INTERNAL_TLS_CERT': str(tls/'order.crt'), 'PICKUP_INTERNAL_TLS_KEY': str(tls/'order.key'),
+                       'PICKUP_INTERNAL_TLS_CA': str(tls/'ca.crt')})
+        values.update({k: self.tokens[k] for k in ('ROUTE_MERCHANT_TOKEN', 'ROUTE_PAYMENT_TOKEN', 'ROUTE_PAYMENT_NOTIFY_SECRET')})
+        base = {k: os.environ[k] for k in ('PATH', 'HOME', 'LANG', 'RENDER_GIT_COMMIT') if k in os.environ}
+        log = (self.evidence/'host-app.log').open('a')
+        process = subprocess.Popen([sys.executable, '-m', 'uvicorn', 'demo.main:app', '--host', '127.0.0.1', '--port',
+                                    str(port)], cwd=ROOT, env=base | values | {
+                                        'PYTHONPATH': f'{ROOT}:{ROOT}/services/reconciler',
+                                        'REPAIR_REVIEW_DB': str(self.private/'host-app-legacy.sqlite')},
+                                   stdout=log, stderr=log)
+        return process, log
 
 
 def tempfile_dir() -> str:

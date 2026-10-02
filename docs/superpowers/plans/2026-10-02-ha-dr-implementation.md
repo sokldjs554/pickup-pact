@@ -69,10 +69,18 @@
 
 ## Task 5 — Multi-host rollout and external recovery gate
 
+Status and evidence: `docs/ha-multi-host-rollout.md`, `docs/ha-task5-progress.md`.
+
 - [ ] Validate three distinct approved hosts, quorum, sync standby, fencing, redundant entry points and external backup identity.
-- [ ] Configure Patroni/PostgreSQL with strict sync policy and separate role DB access.
+  - Validator and approval gates implemented (`demo/route/ha/inventory.py`, review/deploy/destructive). No approved inventory exists yet, so this item stays open.
+- [x] Configure Patroni/PostgreSQL with strict sync policy and separate role DB access.
+  - Rendered Patroni/etcd/pg_hba/systemd configuration, least-privilege runtime users, owner migration, mTLS between roles, operating generation.
+  - Exercised on a single-host Docker rehearsal only.
 - [ ] Run HA-01..HA-10 and DR-01..DR-08 three times; retain failed iterations.
-- [ ] Do not provision or damage any host without approved inventory/cost/destruction scope.
+  - Single-host rehearsal, 3 fresh clusters each: HA-01..HA-06, WAL archive, generation fence, whole-cluster loss and restore from the external store with API and browser checks.
+  - Independent hosts: not run. HA-10: not rehearsed. Development timings are not RTO/RPO.
+- [x] Do not provision or damage any host without approved inventory/cost/destruction scope.
+  - No resource was created. The deploy and destructive stages refuse inventories without approval.
 
 ## Task 6 — Review and release
 

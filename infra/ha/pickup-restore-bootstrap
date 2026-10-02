@@ -1,0 +1,25 @@
+#!/bin/sh
+# Patroni custom bootstrap (method pickup_restore): build the new leader's data
+# directory from a base backup that was downloaded from the external store and
+# verified against its separately kept seal. Recovery itself (restore_command,
+# recovery_target_name, promote) is configured by Patroni from recovery_conf.
+# It never overwrites a non-empty data directory.
+set -eu
+datadir=''
+for argument in "$@"; do
+  case "$argument" in --datadir=*) datadir="${argument#--datadir=}" ;; esac
+done
+base="${PICKUP_RESTORE_BASE:-/var/lib/pickup-pact/restore/base}"
+if [ -z "$datadir" ] || [ ! -f "$base/PG_VERSION" ] || [ ! -f "$base/backup_manifest" ]; then
+  echo "pickup-restore-bootstrap: restored base backup or data directory argument missing" >&2
+  exit 2
+fi
+if [ -e "$datadir" ] && [ -n "$(ls -A "$datadir")" ]; then
+  echo "pickup-restore-bootstrap: refusing to overwrite a non-empty data directory" >&2
+  exit 3
+fi
+pg_verifybackup --quiet "$base"
+mkdir -p "$datadir"
+cp -a "$base/." "$datadir/"
+rm -f "$datadir/postmaster.pid" "$datadir/standby.signal"
+chmod 0700 "$datadir"
