@@ -13,17 +13,19 @@ from urllib.parse import unquote, urlsplit
 import httpx
 from .domain import PaymentError, canonical
 from .repository import PaymentRepository
+from .storage import PaymentStore
 from .notifications import deliver_due
 from .http_client import origin
 
 
 def serve(directory: str,token: str,port: int=0,ready_file: str|None=None,
-          callback_url: str|None=None,notify_secret: str|None=None,crash_action: str|None=None):
+          callback_url: str|None=None,notify_secret: str|None=None,crash_action: str|None=None,
+          repository: PaymentStore|None=None):
     if len(token)<24:raise ValueError('strong internal payment token required')
     if callback_url:
         origin(callback_url,callback=True)
         if not notify_secret or len(notify_secret)<24:raise ValueError('notification secret missing')
-    repo=PaymentRepository(Path(directory)/'payments.sqlite')
+    repo=repository if repository is not None else PaymentRepository(Path(directory)/'payments.sqlite')
     slots=threading.BoundedSemaphore(16)
     stop=threading.Event()
 
@@ -50,7 +52,7 @@ def serve(directory: str,token: str,port: int=0,ready_file: str|None=None,
                 path=parts.path
                 if not post:
                     if path=='/health':
-                        with repo.connection() as db:db.execute('SELECT 1 FROM payment_settings').fetchone()
+                        if not repo.storage_ready():raise OSError('payment storage is unavailable')
                         self.send(200,dict(service='pickup-payment',mode='synthetic',storage_ready=True));return
                     if path.startswith('/v1/operations/'):
                         result=repo.operation(unquote(path[len('/v1/operations/'):]))

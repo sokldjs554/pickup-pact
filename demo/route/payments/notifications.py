@@ -151,11 +151,10 @@ class NotificationServer:
 
 
 def deliver_due(repo,secret: str,send,*,duplicate: bool=False,limit: int=16) -> int:
-    """At-least-once delivery. A successful HTTP ACK is not a financial mutation."""
+    """At-least-once delivery outside the DB transaction, with fenced ACKs."""
+    from uuid import uuid4
     if not 1<=limit<=64:raise ValueError('delivery batch limit')
-    now=time.time()
-    with repo.connection() as db:
-        rows=[dict(r) for r in db.execute('SELECT * FROM payment_outbox WHERE delivered=0 AND next_at<=? AND attempts<8 ORDER BY revision LIMIT ?', (now,limit))]
+    rows=repo.claim_notifications('sender-'+uuid4().hex,limit=limit,lease_seconds=30)
     delivered=0
     for row in rows:
         ok=True
@@ -163,11 +162,6 @@ def deliver_due(repo,secret: str,send,*,duplicate: bool=False,limit: int=16) -> 
             body=row['body'].encode();stamp=str(int(time.time()))
             try:ok=bool(send(body,stamp,sign(secret,stamp,body))) and ok
             except (OSError,ValueError):ok=False
-        with repo.connection() as db:
-            if ok:
-                db.execute('UPDATE payment_outbox SET delivered=1,attempts=attempts+1 WHERE event_id=?',(row['event_id'],))
-                delivered+=1
-            else:
-                delay=min(3*2**min(row['attempts'],4),30)
-                db.execute('UPDATE payment_outbox SET attempts=attempts+1,next_at=? WHERE event_id=?',(time.time()+delay,row['event_id']))
+        if repo.finish_notification(row,ok) and ok:
+            delivered+=1
     return delivered

@@ -47,6 +47,11 @@ class PaymentRepository:
                     world_id TEXT NOT NULL,operation_key TEXT NOT NULL,mode TEXT NOT NULL,
                     PRIMARY KEY(world_id,operation_key,mode));
             ''')
+            # Existing SQLite files remain valid; the new fields only fence
+            # notification ownership, never rewrite original financial records.
+            columns={r[1] for r in db.execute('PRAGMA table_info(payment_outbox)')}
+            for name,ddl in [('lease_owner','TEXT'),('lease_version','INTEGER NOT NULL DEFAULT 0'),('lease_until','REAL')]:
+                if name not in columns: db.execute(f'ALTER TABLE payment_outbox ADD COLUMN {name} {ddl}')
             db.execute('INSERT OR IGNORE INTO payment_settings VALUES(?,?)', ('limit_krw', limit_krw))
             self.limit_krw = db.execute("SELECT value FROM payment_settings WHERE name='limit_krw'").fetchone()[0]
 
@@ -182,3 +187,38 @@ class PaymentRepository:
         with self.connection() as db:
             cur = db.execute('INSERT OR IGNORE INTO payment_faults VALUES(?,?,?)', (key(world),key(operation_key),mode))
             return cur.rowcount == 1
+
+
+    def storage_ready(self) -> bool:
+        with self.connection() as db:
+            return db.execute("SELECT value FROM payment_settings WHERE name='limit_krw'").fetchone() is not None
+
+    def claim_notifications(self,worker: str,*,limit: int=16,lease_seconds: int=30) -> list[dict]:
+        key(worker)
+        if type(limit) is not int or not 1<=limit<=64 or type(lease_seconds) is not int or not 1<=lease_seconds<=120:
+            raise ValueError('bounded outbox lease required')
+        now=time.time()
+        with self.connection() as db:
+            db.execute('BEGIN IMMEDIATE')
+            rows=[dict(r) for r in db.execute("SELECT * FROM payment_outbox WHERE delivered=0 AND attempts<8 AND next_at<=? AND (lease_until IS NULL OR lease_until<=?) ORDER BY revision LIMIT ?",(now,now,limit))]
+            for row in rows:
+                row.update(lease_owner=worker,lease_version=row['lease_version']+1,lease_until=now+lease_seconds)
+                db.execute('UPDATE payment_outbox SET lease_owner=?,lease_version=?,lease_until=? WHERE event_id=?',
+                           (worker,row['lease_version'],row['lease_until'],row['event_id']))
+            db.execute('COMMIT')
+        return rows
+
+    def finish_notification(self,claim: dict,ok: bool) -> bool:
+        if type(ok) is not bool: raise ValueError('explicit delivery outcome required')
+        now=time.time()
+        with self.connection() as db:
+            db.execute('BEGIN IMMEDIATE')
+            row=db.execute('SELECT * FROM payment_outbox WHERE event_id=? AND lease_owner=? AND lease_version=? AND delivered=0 AND lease_until>?',
+                (claim['event_id'],claim['lease_owner'],claim['lease_version'],now)).fetchone()
+            if not row:
+                db.execute('COMMIT');return False
+            delay=min(3*2**min(row['attempts'],4),30)
+            db.execute('UPDATE payment_outbox SET delivered=?,attempts=attempts+1,next_at=?,lease_owner=NULL,lease_until=NULL WHERE event_id=?',
+                (int(ok),now+delay,claim['event_id']))
+            db.execute('COMMIT')
+            return True
