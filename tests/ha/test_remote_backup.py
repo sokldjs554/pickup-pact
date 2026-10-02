@@ -143,3 +143,22 @@ sys.exit(7)
     assert 'RESTORE_FAILURE: unsupported metadata' in message
     assert 'secret-' not in message and 'backup.example' not in message
     assert 'rest:https' not in message and len(message) < 2400
+
+
+def test_upload_passes_absolute_source_matching_snapshot_metadata(tmp_path, monkeypatch):
+    # The real HTTPS/PITR job exercises Restic. This process-boundary contract
+    # prevents a relative source tree with incompatible absolute snapshot metadata.
+    config = settings(tmp_path)
+    root, meta = bundle(tmp_path)
+    trusted = seal_bundle(root, meta)
+    client = api().ResticArchive(config)
+    class Captured(Exception): pass
+    monkeypatch.setattr(client, 'repository_id', lambda: 'a'*64)
+    def capture(args, *, cwd=None):
+        assert args[0] == 'backup'
+        assert args[-1] == str(root.absolute()), 'Restic tree and pinned metadata need the same absolute source'
+        assert args[-2] == '--'
+        raise Captured()
+    monkeypatch.setattr(client, '_run', capture)
+    with pytest.raises(Captured):
+        client.upload(root, expected_sha256=trusted, expected_cluster_id=meta['cluster_id'])

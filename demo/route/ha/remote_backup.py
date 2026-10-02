@@ -165,7 +165,8 @@ class ResticArchive:
             raise ValueError('canonical backup directory required')
         repository_id = self.repository_id()
         tag = 'pickup-' + uuid4().hex
-        self._run(['backup', '--json', '--host', 'pickup-backup', '--tag', tag, '--', root.name], cwd=root.parent)
+        # Absolute source ensures the snapshot tree matches its absolute metadata.
+        self._run(['backup', '--json', '--host', 'pickup-backup', '--tag', tag, '--', str(root)])
         snapshots = json.loads(self._run(['snapshots', '--json', '--tag', tag]))
         if not isinstance(snapshots, list) or len(snapshots) != 1 or snapshots[0].get('paths') != [str(root)]:
             raise ValueError('new backup snapshot was not uniquely confirmed')
