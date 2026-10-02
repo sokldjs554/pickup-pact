@@ -20,6 +20,8 @@ jobs:
           POSTGRES_DB: pickup_ha_test
           POSTGRES_USER: pickup_test
           POSTGRES_PASSWORD: isolated_ci_only
+          PGUSER: pickup_test
+          PGDATABASE: pickup_ha_test
         ports: ['5432:5432']
         options: >-
           --health-cmd=pg_isready
@@ -101,4 +103,48 @@ jobs:
         with:
           name: ha-restore-development-evidence
           path: verification/ha-restore
+          retention-days: 30
+
+  native-user-flow:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:17.11-bookworm@sha256:639ab7ceb90e13123085b741fb31ef493fba25463002f6da665352e7b534b652
+        env:
+          POSTGRES_DB: pickup_ha_test
+          POSTGRES_USER: pickup_test
+          POSTGRES_PASSWORD: isolated_ci_only
+          PGUSER: pickup_test
+          PGDATABASE: pickup_ha_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd=pg_isready
+          --health-interval=5s --health-timeout=5s --health-retries=12
+    env:
+      PYTHONPATH: .:services/reconciler
+      PICKUP_HA_TEST: '1'
+      PICKUP_PG_TEST_DSN: postgresql://pickup_test:isolated_ci_only@127.0.0.1:5432/pickup_ha_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install native application and actual browser
+        run: |
+          python -m pip install -r requirements-ha.txt -r services/ops-console/requirements.txt 'playwright>=1.55,<2'
+          python -m playwright install --with-deps chromium
+      - name: Record exact candidate identity
+        run: |
+          mkdir -p verification/ha-user-flow
+          git rev-parse HEAD > verification/ha-user-flow/tested-commit.txt
+          echo "RENDER_GIT_COMMIT=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+          python -m pip freeze > verification/ha-user-flow/dependencies.txt
+      - name: Two apps, two workers, three databases and unchanged browser assertions
+        run: python scripts/verify_ha_journey.py --repeat 3 --browsers --output verification/ha-user-flow/topology
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ha-native-user-flow-evidence
+          path: verification/ha-user-flow
           retention-days: 30

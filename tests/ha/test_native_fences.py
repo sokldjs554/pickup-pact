@@ -33,7 +33,7 @@ def test_late_owner_cannot_overwrite_takeover_and_does_not_hold_order_lock(integ
             pending=b.get(s['id'])
             assert pending['handoff_pending'] and pending['order'] is None
             other=fresh(b)
-            assert cmd(b,other,'reserve',quote_id=quote(other,'corner'))['order']
+            assert cmd(b,other,'reserve',quote_id=quote(other,'wave'))['order']
             time.sleep(1.1)
             restored=b.operations.resume(s['id'],pending['handoff']['id'])
             assert restored['order'] and not restored['handoff_pending']

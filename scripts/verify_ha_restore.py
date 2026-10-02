@@ -26,6 +26,7 @@ def rehearse(output:Path)->dict:
     from psycopg.conninfo import make_conninfo
     from demo.route.ha.payment_repository import PostgresPaymentRepository
     from demo.route.ha.operation_store import PostgresOperationStore
+    from ha_restore_journeys import JourneyRecoveryProbe
     output=Path(output).resolve();output.mkdir(parents=True,exist_ok=False)
     run=uuid4().hex[:16];prefix='pickup-dr-'+run+'-';password=secrets.token_hex(24)
     env={**os.environ,'PGPASSWORD':password,'POSTGRES_PASSWORD':password}
@@ -91,6 +92,10 @@ def rehearse(output:Path)->dict:
         # Independent database, same physical cluster and common recovery point.
         sql(dsn,'CREATE DATABASE pickup_order_test')
         orders=PostgresOperationStore(connect('source','pickup_order_test'),schema='pact_restore_orders');repositories.append(orders)
+        sql(dsn,'CREATE DATABASE pickup_merchant_test')
+        journey_probe=JourneyRecoveryProbe(connect('source','pickup_order_test'),connect('source','pickup_merchant_test'),repo,initialize=True)
+        repositories.append(journey_probe)
+        journey_probe.seed_before_backup()
         c=dict(action='AUTHORIZE',world_id=run,order_id='PCT-COMPLETED',operation_key='approve-original',authorization_id='AUTH-ORIGINAL',amount_krw=2800,currency='KRW',payment_revision=1,quote_fingerprint='a'*64,card_token='demo-approved')
         repo.execute(c)
         sql(dsn,'CREATE TABLE rehearsal_markers(id text PRIMARY KEY)')
@@ -105,6 +110,7 @@ def rehearse(output:Path)->dict:
         pending_capture={k:v for k,v in p.items() if k!='card_token'}|dict(action='CAPTURE',operation_key='capture-pending')
         orders.enqueue('pending-capture','PCT-PENDING',{'phase':'PAY_CAPTURE','external_command':pending_capture},request_key='request-pending')
         expected_final=repo.snapshot(run,'PCT-COMPLETED');expected_pending=repo.snapshot(run,'PCT-PENDING');expected_work=snapshot_work(orders)
+        expected_journeys=journey_probe.prepare_target()
         target='pact_target_'+run
         sql(dsn,'SELECT pg_create_restore_point(%s)',(target,))
         target_lsn=str(sql(dsn,'SELECT pg_current_wal_flush_lsn()')[0][0])
@@ -174,13 +180,19 @@ def rehearse(output:Path)->dict:
         assert r.snapshot(run,'PCT-PENDING')['capture_count']==1
         assert r.snapshot(run,'PCT-PENDING')['held_krw']==0
         assert r.execute(pending_capture)==response
-        steps.append('two databases restored to target; original receipts and pending operation preserved')
+        steps.append('payment and work ownership restored to target; original receipts preserved')
+        restored_probe=JourneyRecoveryProbe(connect('recovery','pickup_order_test'),connect('recovery','pickup_merchant_test'),r,initialize=False)
+        repositories.append(restored_probe)
+        journey_result=restored_probe.verify_restored(expected_journeys)
+        (output/'journey-reconciliation.json').write_text(json.dumps(journey_result,ensure_ascii=False,indent=2)+'\n')
+        steps.append('three application databases restored; original claim key, order, merchant and benefits reconciled')
         report.update(passed=True,source_commit=code,image=IMAGE,cluster_id=cluster,backup_digest=seal,
             source_volume_removed=True,replica_used=False,target_name=target,target_lsn=target_lsn,
             base_start_lsn=start_lsn,archived_wal=needed,completed_capture_krw=expected_final['captured_krw'],
             pending_resumed_capture_krw=3200,unexpected_after_target_rows=0,
             restore_rehearsal_seconds=round(time.monotonic()-recovery_started,3),
-            completion_scope='native payment and work-ownership stores only; full customer/merchant recovery not yet integrated')
+            application_databases=3,journey_reconciliation=journey_result,
+            completion_scope='whole synthetic journey, merchant, payment and benefits via native repositories; single-host physical restore, not off-host HA')
     except Exception as exc:
         report['error']=str(exc).replace(password,'[redacted]')
         raise

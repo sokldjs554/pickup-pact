@@ -71,14 +71,23 @@ def verify(output,repeat,browsers):
                 for fault in ['none','authorize_reply_lost','capture_reply_lost','void_reply_lost','notification_duplicate','notification_late']:
                     row=scenario(topology,fault);row['repeat']=number+1;report['results'].append(row)
             if browsers:
+                report['browser_results']=[]
+                failures=[]
                 for name,script in [('guided','verify_guided_browser.py'),('handoff','verify_handoff_browser.py'),
                         ('route','verify_route_browser.py'),('benefits','verify_benefits_browser.py'),
                         ('decision','verify_decision_browser.py'),('copy','verify_demo_copy_browser.py'),
                         ('payment','verify_payment_browser.py'),('tabs','verify_payment_tabs.py')]:
                     with (output/(name+'.log')).open('w') as log:
-                        subprocess.run([sys.executable,'scripts/'+script,'--base-url',topology.urls[0],
+                        try:
+                            completed=subprocess.run([sys.executable,'scripts/'+script,'--base-url',topology.urls[0],
                             '--repeat',str(repeat),'--expected-commit',os.environ['RENDER_GIT_COMMIT'],
-                            '--output',str(output/'browser'/name)],stdout=log,stderr=subprocess.STDOUT,check=True,timeout=900)
+                            '--output',str(output/'browser'/name)],stdout=log,stderr=subprocess.STDOUT,check=False,timeout=900)
+                            code=completed.returncode
+                        except subprocess.TimeoutExpired:
+                            code=124
+                        report['browser_results'].append({'suite':name,'exit_code':code,'passed':code==0})
+                        if code:failures.append(name)
+                if failures:raise AssertionError('browser suites failed: '+', '.join(failures))
             report['passed']=True
     except Exception as exc:
         report['error']=type(exc).__name__+': '+str(exc)
