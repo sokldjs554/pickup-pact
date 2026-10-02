@@ -116,18 +116,21 @@ class PaymentInbox:
 
 
 class NotificationServer:
-    """A dedicated loopback listener; the public customer's Origin rules stay intact."""
-    def __init__(self, inbox: PaymentInbox, *, port: int = 0):
+    """A dedicated listener (loopback in development, mTLS for ha_postgres_v1); customer Origin rules stay intact."""
+    def __init__(self, inbox: PaymentInbox, *, port: int = 0, tls=None):
         if type(port) is not int or not 0 <= port <= 65535:
             raise ValueError('invalid callback port')
         from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
         class Handler(BaseHTTPRequestHandler):
             def log_message(self,*_):pass
-            def setup(self):super().setup();self.connection.settimeout(2)
+            def setup(self):
+                if tls is not None:tls.accept(self.request)  # only the payment role may notify
+                super().setup();self.connection.settimeout(2)
             def do_POST(self):
                 status=200
                 try:
                     if self.path!='/internal/payments/events':raise PaymentError('NOT_FOUND',404)
+                    if tls is not None and not tls.current(self.headers):raise PaymentError('STALE_GENERATION',503)
                     if self.headers.get('Origin') or self.headers.get('Transfer-Encoding'):raise PaymentError('INVALID_NOTIFICATION',403)
                     length=int(self.headers.get('Content-Length','-1'))
                     if length<1:raise PaymentError('INVALID_LENGTH',400)
@@ -143,8 +146,13 @@ class NotificationServer:
                 self.end_headers()
                 try:self.wfile.write(raw)
                 except (BrokenPipeError,ConnectionResetError):pass
-        self.server=ThreadingHTTPServer(('127.0.0.1',port),Handler);self.server.daemon_threads=True
-        self.url=f'http://127.0.0.1:{self.server.server_port}/internal/payments/events'
+        self.server=ThreadingHTTPServer((tls.bind_address if tls is not None else '127.0.0.1',port),Handler)
+        self.server.daemon_threads=True
+        if tls is not None:
+            tls.wrap(self.server)
+            self.url=tls.url(self.server.server_port,'/internal/payments/events')
+        else:
+            self.url=f'http://127.0.0.1:{self.server.server_port}/internal/payments/events'
         self.thread=None
 
     def __enter__(self):

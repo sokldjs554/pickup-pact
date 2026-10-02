@@ -11,14 +11,18 @@ class PostgresJourneyStore(JourneyStore):
     evidence_scope = 'native_postgresql_development_not_host_ha'
 
     def __init__(self, dsn, *, fleet, payment_gateway, notification_secret, worker_id,
-                 schema='pact_orders', initialize=True, lease_seconds=30):
+                 schema='pact_orders', initialize=True, lease_seconds=30, runtime_guard=None,
+                 evidence_scope=None):
         key(worker_id)
         if len(worker_id) > 80 or fleet is None or payment_gateway is None:
             raise ValueError('explicit bounded role identity and remote clients required')
         if not isinstance(notification_secret, str) or len(notification_secret) < 24:
             raise ValueError('shared notification secret required')
         self.fleet, self.payment_gateway, self.payment_enabled = fleet, payment_gateway, True
-        self.repository = PostgresJourneyRepository(dsn, schema=schema, initialize=initialize)
+        self.repository = PostgresJourneyRepository(dsn, schema=schema, initialize=initialize,
+                                                    runtime_guard=runtime_guard)
+        if evidence_scope is not None:
+            self.evidence_scope = evidence_scope
         self.payment_inbox = PostgresPaymentInbox(self.repository, notification_secret)
         self.operations = self.payment_operations = PostgresCoordinator(self, worker_id, lease_seconds)
         self.node_id = worker_id

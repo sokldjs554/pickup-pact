@@ -101,9 +101,9 @@ class ExperimentRequest(BaseModel):
 
 # Demo sessions use random capability IDs, never personal or live payment data.
 _backend=os.environ.get('PICKUP_ROUTE_BACKEND','sqlite')
-if _backend not in {'sqlite','postgresql_development'}:
+if _backend not in {'sqlite','postgresql_development','ha_postgres_v1'}:
     raise ValueError('unsupported route storage backend')
-store=(None if _backend=='postgresql_development' else
+store=(None if _backend in {'postgresql_development','ha_postgres_v1'} else
        JourneyStore(os.environ.get('ROUTE_DB',str(Path(tempfile.gettempdir())/'pickup-pact-route.sqlite'))))
 
 def create_router(*, store_provider=None, lifespan=route_lifespan):

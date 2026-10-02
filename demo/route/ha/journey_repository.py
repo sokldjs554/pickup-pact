@@ -7,8 +7,10 @@ from .operation_store import PostgresOperationStore
 
 
 class PostgresJourneyRepository:
-    def __init__(self, dsn, *, schema='pact_orders', initialize=True):
-        self.database = PostgresDatabase(dsn, schema=schema)
+    def __init__(self, dsn, *, schema='pact_orders', initialize=True, runtime_guard=None):
+        if initialize and runtime_guard is not None:
+            raise ValueError('ha_postgres_v1 runtime users never run DDL; use the owner migration')
+        self.database = PostgresDatabase(dsn, schema=schema, runtime_guard=runtime_guard)
         try:
             if initialize:
                 directory = Path(__file__).parent / 'sql'

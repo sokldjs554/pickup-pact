@@ -18,7 +18,7 @@ def transaction_lock(db, namespace: str, identity: str) -> None:
 
 
 class PostgresDatabase:
-    def __init__(self, dsn: str, *, schema: str, maximum_connections: int=8):
+    def __init__(self, dsn: str, *, schema: str, maximum_connections: int=8, runtime_guard=None):
         if (not isinstance(schema,str) or not re.fullmatch(r'[a-z][a-z0-9_]{0,47}',schema)
                 or schema=='public' or schema.startswith('pg_')):
             raise ValueError('explicit non-public repository schema required')
@@ -32,6 +32,9 @@ class PostgresDatabase:
         from psycopg_pool import ConnectionPool, PoolTimeout
         self._driver,self._pool_timeout=psycopg,PoolTimeout
         self.schema=schema
+        # ha_postgres_v1: least-privilege and operating-generation checks.
+        self.runtime_guard=runtime_guard
+        self._generation_verified=False
         self._pool=ConnectionPool(dsn,min_size=1,max_size=maximum_connections,
             open=False,timeout=5,max_waiting=64,max_lifetime=120,
             kwargs={'autocommit':True,'row_factory':dict_row,'connect_timeout':3,
@@ -42,16 +45,26 @@ class PostgresDatabase:
             with self._pool.connection() as db:
                 if db.info.server_version//10000 != 17:
                     raise ValueError('this storage contract is validated for PostgreSQL 17')
-        except Exception:
+                if runtime_guard is not None:
+                    runtime_guard.verify_privileges(db,schema)
+                    runtime_guard.check_generation(db,schema)
+                    self._generation_verified=True
+        except Exception as exc:
             self._pool.close()
+            from .privileges import GenerationMismatch, PrivilegeViolation
+            if isinstance(exc,(GenerationMismatch,PrivilegeViolation)):
+                raise  # a configuration error, never a transient outage
             raise StorageUnavailable('PostgreSQL storage is not ready') from None
 
-    @staticmethod
-    def _check(db):
+    def _check(self,db):
         from psycopg import OperationalError
         status=db.execute("SELECT pg_is_in_recovery() AS recovering, current_setting('transaction_read_only') AS readonly").fetchone()
         if status['recovering'] or status['readonly']!='off':
             raise OperationalError('writable leader connection required')
+        if self.runtime_guard is not None and self._generation_verified:
+            # Every checkout, so a restored database of a later generation is
+            # never written by a process configured for the earlier one.
+            self.runtime_guard.check_generation(db,self.schema)
 
     @contextmanager
     def transaction(self, *, readonly: bool=False):

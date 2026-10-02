@@ -81,7 +81,7 @@ class MerchantProcess:
 
 @asynccontextmanager
 async def route_lifespan(app):
-    if os.environ.get('PICKUP_ROUTE_BACKEND') == 'postgresql_development':
+    if os.environ.get('PICKUP_ROUTE_BACKEND') in {'postgresql_development','ha_postgres_v1'}:
         from .ha.runtime import native_lifespan
         async with native_lifespan(app):
             yield

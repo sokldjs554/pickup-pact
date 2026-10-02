@@ -22,16 +22,24 @@ def origin(url: str, *, callback: bool=False) -> str:
 class PaymentClient:
     transport='http'
 
-    def __init__(self,url: str,token: str,timeout: float=.8):
-        self.url=origin(url)
+    def __init__(self,url: str,token: str,timeout: float=.8,*,transport=None):
+        # transport=None keeps the loopback development contract unchanged.
+        self.transport_policy=transport
+        self.url=origin(url) if transport is None else transport.origin(url)
         if len(token)<24 or not 0<timeout<=5:raise ValueError('invalid payment transport config')
         self.token,self.timeout=token,timeout
 
+    def _client(self):
+        if self.transport_policy is None:
+            return httpx.Client(timeout=self.timeout,trust_env=False,follow_redirects=False)
+        return self.transport_policy.http_client(self.timeout,server_role='payment')
+
     def _request(self,path: str,body: dict|None=None,*,optional=False):
         try:
-            with httpx.Client(timeout=self.timeout,trust_env=False,follow_redirects=False) as client:
+            with self._client() as client:
                 with client.stream('GET' if body is None else 'POST',self.url+path,json=body,
-                                   headers={'Authorization':'Bearer '+self.token}) as response:
+                                   headers={'Authorization':'Bearer '+self.token,
+                                            **(self.transport_policy.headers() if self.transport_policy else {})}) as response:
                     raw=bytearray()
                     for chunk in response.iter_bytes():
                         raw.extend(chunk)

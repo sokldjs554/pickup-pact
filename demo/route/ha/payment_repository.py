@@ -13,10 +13,12 @@ class PostgresPaymentRepository:
     transport='local_test'
     _response=staticmethod(PaymentRepository._response)
 
-    def __init__(self,dsn: str,*,schema='pact_payment',limit_krw=100000,initialize=True):
+    def __init__(self,dsn: str,*,schema='pact_payment',limit_krw=100000,initialize=True,runtime_guard=None):
         if type(limit_krw) is not int or limit_krw<1:
             raise ValueError('positive synthetic credit limit required')
-        self.database=PostgresDatabase(dsn,schema=schema)
+        if initialize and runtime_guard is not None:
+            raise ValueError('ha_postgres_v1 runtime users never run DDL; use the owner migration')
+        self.database=PostgresDatabase(dsn,schema=schema,runtime_guard=runtime_guard)
         try:
             if initialize:
                 self.database.initialize((Path(__file__).parent/'sql/payments.sql').read_text())

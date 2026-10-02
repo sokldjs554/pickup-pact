@@ -1,19 +1,20 @@
 """Configured same-storage replicas; reads find a peer, uncertain writes stay pending.
 
-All origins remain loopback-only in this development mode. This is not a remote
-TLS deployment or proof that two processes occupy independent hosts.
+Without a transport policy every origin stays loopback-only (development mode).
+With the mTLS policy of ``ha_postgres_v1`` origins must be allowlisted HTTPS
+peers. Neither mode is proof that two processes occupy independent hosts.
 """
 from threading import local
 from ..payments.http_client import PaymentClient, origin
 from ..merchant_http import HttpMerchantFleet
 
 
-def replica_origins(urls):
+def replica_origins(urls,transport=None):
     if not isinstance(urls,(tuple,list)) or not 1<=len(urls)<=3:
         raise ValueError('one to three explicit replica origins required')
     if any(not isinstance(url,str) for url in urls):
         raise ValueError('replica origins must be strings')
-    values=tuple(origin(url) for url in urls)
+    values=tuple(origin(url) if transport is None else transport.origin(url) for url in urls)
     if len(set(values))!=len(values):
         raise ValueError('duplicate replica origin')
     return values
@@ -52,8 +53,9 @@ class _ReplicaReads:
 class ReplicaPaymentClient(_ReplicaReads):
     transport='http'
 
-    def __init__(self,urls,token,timeout=2):
-        super().__init__([PaymentClient(url,token,timeout=timeout) for url in replica_origins(urls)])
+    def __init__(self,urls,token,timeout=2,*,transport=None):
+        super().__init__([PaymentClient(url,token,timeout=timeout,transport=transport)
+                          for url in replica_origins(urls,transport)])
 
     def health(self):
         return self._read('health')
@@ -71,8 +73,9 @@ class ReplicaPaymentClient(_ReplicaReads):
 class ReplicaMerchantFleet(_ReplicaReads):
     handles_response_loss=True
 
-    def __init__(self,urls,token,timeout=2):
-        super().__init__([HttpMerchantFleet(url,token,timeout=timeout) for url in replica_origins(urls)])
+    def __init__(self,urls,token,timeout=2,*,transport=None):
+        super().__init__([HttpMerchantFleet(url,token,timeout=timeout,transport=transport)
+                          for url in replica_origins(urls,transport)])
 
     def health(self):
         return self._read('_request','/health')
