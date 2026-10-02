@@ -18,8 +18,19 @@ class PaymentRepository:
         self.path = str(path)
         Path(self.path).parent.mkdir(parents=True, exist_ok=True)
         with self.connection() as db:
+            # Journal initialization can race when two processes reopen an old
+            # file. Only this side-effect-free startup step has a bounded retry.
+            deadline=time.monotonic()+5
+            while True:
+                try:
+                    if db.execute('PRAGMA journal_mode').fetchone()[0]!='wal':
+                        db.execute('PRAGMA journal_mode=WAL')
+                    break
+                except sqlite3.OperationalError as exc:
+                    if 'locked' not in str(exc).lower() or time.monotonic()>=deadline:raise
+                    time.sleep(.02)
             db.executescript('''
-                PRAGMA journal_mode=WAL;
+                BEGIN IMMEDIATE;
                 CREATE TABLE IF NOT EXISTS payment_settings(name TEXT PRIMARY KEY,value INTEGER NOT NULL);
                 CREATE TABLE IF NOT EXISTS payment_authorizations(
                     authorization_id TEXT PRIMARY KEY,world_id TEXT NOT NULL,order_id TEXT NOT NULL,
@@ -54,6 +65,7 @@ class PaymentRepository:
                 if name not in columns: db.execute(f'ALTER TABLE payment_outbox ADD COLUMN {name} {ddl}')
             db.execute('INSERT OR IGNORE INTO payment_settings VALUES(?,?)', ('limit_krw', limit_krw))
             self.limit_krw = db.execute("SELECT value FROM payment_settings WHERE name='limit_krw'").fetchone()[0]
+            db.execute('COMMIT')
 
     @contextmanager
     def connection(self):

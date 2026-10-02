@@ -72,3 +72,33 @@ jobs:
           name: ha-foundation-evidence
           path: verification/ha-foundation
           retention-days: 30
+
+  physical-restore-development:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHONPATH: .:services/reconciler
+      PICKUP_HA_TEST: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install the actual PostgreSQL driver
+        run: python -m pip install -r requirements-ha.txt
+      - name: Verify rehearsal safety boundaries
+        run: python -m pytest -q tests/ha/test_backup_guards.py tests/ha/test_restore_runner_contract.py
+      - name: Restore new disposable cluster from base backup and archived WAL three times
+        run: python scripts/verify_ha_restore.py --repeat 3 --output verification/ha-restore/runs
+      - name: Record exact source identity without publishing database files or passwords
+        if: always()
+        run: |
+          mkdir -p verification/ha-restore
+          git rev-parse HEAD > verification/ha-restore/tested-commit.txt
+          python -m pip freeze > verification/ha-restore/dependencies.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ha-restore-development-evidence
+          path: verification/ha-restore
+          retention-days: 30
