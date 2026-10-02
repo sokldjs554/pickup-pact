@@ -47,6 +47,7 @@ class PostgresJourneyRepository:
         with self.database.transaction(readonly=True) as db:
             return db.execute("""SELECT id,order_id AS sid FROM ha_operations
                 WHERE status='PENDING' AND next_at<=clock_timestamp()
+                  AND payload->'recovery'->>'state'<>'REVIEW_REQUIRED'
                   AND (lease_until IS NULL OR lease_until<=clock_timestamp())
                 ORDER BY next_at,id LIMIT %s""", (limit,)).fetchall()
 
@@ -92,7 +93,7 @@ class JourneyUnit:
     def schedule(self, op):
         due = op['recovery']['next_retry_at']
         if op['status'] != 'PENDING' or op['recovery']['state'] == 'REVIEW_REQUIRED':
-            self.db.execute("UPDATE ha_operations SET next_at='infinity' WHERE id=%s", (op['id'],))
+            self.db.execute("UPDATE ha_operations SET next_at=clock_timestamp() WHERE id=%s", (op['id'],))
         else:
             self.db.execute('UPDATE ha_operations SET next_at=to_timestamp(%s) WHERE id=%s', (due, op['id']))
 
