@@ -80,11 +80,19 @@ def seal_bundle(root:Path,metadata:dict)->str:
     if target.is_symlink():raise ValueError('manifest cannot be a symlink')
     # Never leave a half-written manifest that could be mistaken for a seal.
     temp=root/(MANIFEST+'.pending')
+    owned=None
     try:
-        with temp.open('xb') as f:f.write(raw);f.flush();os.fsync(f.fileno())
+        with temp.open('xb') as f:
+            stat=os.fstat(f.fileno());owned=(stat.st_dev,stat.st_ino)
+            f.write(raw);f.flush();os.fsync(f.fileno())
         os.replace(temp,target)
+        directory=os.open(root,os.O_RDONLY)
+        try:os.fsync(directory)
+        finally:os.close(directory)
     finally:
-        if temp.exists() and not temp.is_symlink():temp.unlink()
+        if owned and temp.exists() and not temp.is_symlink():
+            stat=temp.stat()
+            if (stat.st_dev,stat.st_ino)==owned:temp.unlink()
     return hashlib.sha256(raw).hexdigest()
 
 
