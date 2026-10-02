@@ -102,7 +102,7 @@ def serve(directory: str,token: str,port: int=0,ready_file: str|None=None,
     server=ThreadingHTTPServer(('127.0.0.1',port),Handler);server.daemon_threads=True
     if callback_url:threading.Thread(target=delivery,daemon=True,name='payment-outbox').start()
     if ready_file:
-        target=Path(ready_file);target.write_text(json.dumps({'url':f'http://127.0.0.1:{server.server_port}'}))
+        target=Path(ready_file);target.write_text(json.dumps({'url':f'http://127.0.0.1:{server.server_port}','pid':os.getpid()}))
     try:server.serve_forever(poll_interval=.2)
     finally:stop.set();server.server_close()
 
