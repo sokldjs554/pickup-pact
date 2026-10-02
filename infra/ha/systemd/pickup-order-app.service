@@ -1,0 +1,21 @@
+[Unit]
+Description=Pickup Pact order API (ha_postgres_v1)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=pickup
+Group=pickup
+WorkingDirectory=/opt/pickup-pact
+EnvironmentFile=/etc/pickup-pact/pickup-order.env
+EnvironmentFile=/etc/pickup-pact/secrets/order.env
+ExecStart=/opt/pickup-pact/.venv/bin/python -m uvicorn demo.main:app --host ${PICKUP_BIND_ADDRESS} --port ${PICKUP_ORDER_PORT} --ssl-certfile ${PICKUP_INTERNAL_TLS_CERT} --ssl-keyfile ${PICKUP_INTERNAL_TLS_KEY} --ssl-ca-certs ${PICKUP_INTERNAL_TLS_CA} --ssl-cert-reqs 2 --proxy-headers --forwarded-allow-ips ${PICKUP_ENTRY_ADDRESSES}
+Restart=always
+RestartSec=2
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

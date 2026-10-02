@@ -1,0 +1,21 @@
+[Unit]
+Description=Pickup Pact replaceable recovery worker (ha_postgres_v1)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=pickup
+Group=pickup
+WorkingDirectory=/opt/pickup-pact
+EnvironmentFile=/etc/pickup-pact/pickup-order.env
+EnvironmentFile=/etc/pickup-pact/secrets/order.env
+ExecStart=/opt/pickup-pact/.venv/bin/python -m demo.route.ha.worker
+Restart=always
+RestartSec=2
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

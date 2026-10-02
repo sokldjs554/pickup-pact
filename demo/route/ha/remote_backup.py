@@ -183,6 +183,38 @@ class ResticArchive:
                          expected_cluster_id=expected_cluster_id)
         return receipt
 
+    def archive_directory(self, directory: Path, *, tag: str) -> str:
+        """Append one snapshot of a canonical directory (e.g. a WAL batch) and return its full ID.
+
+        Uses only the append-only writer credential; it neither initializes,
+        removes nor rewrites snapshots.
+        """
+        root = Path(directory).absolute()
+        if root != root.resolve() or any(c in str(root) for c in ':\n\r\0\\') or not root.is_dir():
+            raise ValueError('canonical directory required')
+        if not isinstance(tag, str) or not re.fullmatch(r'[a-z][a-z0-9-]{0,30}', tag):
+            raise ValueError('bounded snapshot tag required')
+        unique = tag + '-' + uuid4().hex
+        self._run(['backup', '--json', '--host', 'pickup-backup', '--tag', tag, '--tag', unique, '--', str(root)])
+        snapshots = json.loads(self._run(['snapshots', '--json', '--tag', unique]))
+        if (not isinstance(snapshots, list) or len(snapshots) != 1 or snapshots[0].get('paths') != [str(root)]
+                or not HEX.fullmatch(str(snapshots[0].get('id', '')))):
+            raise ValueError('new snapshot was not uniquely confirmed')
+        return snapshots[0]['id']
+
+    def list_files(self, snapshot_id: str, directory: str) -> dict[str, int]:
+        """Names and sizes of the regular files directly inside `directory` of a snapshot."""
+        if not isinstance(snapshot_id, str) or not HEX.fullmatch(snapshot_id):
+            raise ValueError('full snapshot identity required')
+        files = {}
+        for line in self._run(['ls', '--json', snapshot_id]).splitlines():
+            entry = json.loads(line)
+            if entry.get('struct_type') == 'node' and entry.get('type') == 'file':
+                path = PurePosixPath(entry.get('path', ''))
+                if str(path.parent) == directory and type(entry.get('size')) is int:
+                    files[path.name] = entry['size']
+        return files
+
     def restore(self, receipt: dict, destination: Path, *, expected_sha256: str, expected_cluster_id: str) -> dict:
         validate_receipt(receipt, expected_sha256=expected_sha256, expected_cluster_id=expected_cluster_id)
         target = _fresh_target(destination)

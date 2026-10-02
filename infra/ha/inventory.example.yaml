@@ -1,0 +1,68 @@
+# Pickup Pact ha_postgres_v1 배포 인벤토리 예시.
+# 실제 서버가 아니라 형식 예시이다. review 단계는 통과하고, deploy 단계는
+# 승인자·승인일·비용 상한과 CHANGE_ME/example.invalid 자리표시자 때문에 실패해야 한다.
+# 비밀번호·토큰·개인키는 이 파일에 넣지 않는다.
+schema: pickup-pact-ha-inventory/v1
+kind: independent_hosts            # 한 컴퓨터 시험은 single_host_rehearsal (HA 증거 아님)
+name: pact-ha-a
+
+hosts:                             # 서로 다른 물리 호스트·장애 영역 3곳
+  - name: pact-a
+    dns: pact-a.pact.internal
+    address: 10.20.1.11
+    physical_host: CHANGE_ME-instance-a
+    failure_domain: zone-a
+    roles: [postgres, etcd, order, merchant, payment, entry]
+  - name: pact-b
+    dns: pact-b.pact.internal
+    address: 10.20.1.12
+    physical_host: CHANGE_ME-instance-b
+    failure_domain: zone-b
+    roles: [postgres, etcd, order, merchant, payment, entry]
+  - name: pact-c
+    dns: pact-c.pact.internal
+    address: 10.20.1.13
+    physical_host: CHANGE_ME-instance-c
+    failure_domain: zone-c
+    roles: [postgres, etcd, order, merchant, payment]
+
+postgres:
+  version: "17.11"
+  image: postgres:17.11-bookworm@sha256:639ab7ceb90e13123085b741fb31ef493fba25463002f6da665352e7b534b652
+  synchronous_node_count: 1        # strict 동기 복제: 동기 대기 노드가 없으면 쓰기를 멈춘다
+  watchdog: required               # 리더 임대 만료 시 옛 리더를 차단
+  client_cidrs: [10.20.1.0/24]
+
+entry:                             # 공개 진입점은 한 프록시 호스트에만 의존하지 않는다
+  method: dns_multi_a              # dns_multi_a | keepalived_vip | managed_lb(유료)
+  public_name: pickup.example.invalid
+  hosts: [pact-a, pact-b]
+
+backup:                            # DB 호스트와 다른 장애 영역의 외부 저장소
+  host:
+    name: pact-backup
+    dns: backup.pact.internal
+    address: 10.30.1.20
+    physical_host: CHANGE_ME-backup-instance
+    failure_domain: zone-d
+  repository_url: https://backup.pact.internal:8000/pickup-pact
+  writer: append_only              # DB 호스트의 자격은 추가만 가능(삭제·보존 정리는 관리자 자격)
+  maintainer_credential_location: operator-vault
+  key_escrow: [operator-vault, offline-sealed-envelope]
+  receipt_locations: [operator-vault, backup-repository]
+  base_backup_interval_hours: 24
+  max_base_backup_age_hours: 30
+  retain_base_backups: 7
+  max_wal_archive_delay_seconds: 300
+  capacity_gib: 200
+  alert_free_ratio: 0.2
+
+approval:                          # 비용·권한·파괴 범위는 사람이 승인한 뒤 채운다
+  approved_by: ""
+  approved_on: ""
+  monthly_cost_cap_krw: 0
+  paid_resources: false
+  production_addresses: [pickup-pact-demo.onrender.com]
+  destructive:
+    test_id: ""
+    hosts: []

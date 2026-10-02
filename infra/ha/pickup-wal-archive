@@ -1,0 +1,28 @@
+#!/bin/sh
+# PostgreSQL archive_command: pickup-wal-archive "%p" "%f"
+# Copies one WAL file into a local spool on a separate disk; the backup uploader
+# moves the spool to the external append-only store and removes a file only after
+# the upload is confirmed. Success means "durably spooled", never "off-host".
+# An existing file with the same name is accepted only if it is byte-identical;
+# anything else fails so PostgreSQL keeps the segment and retries.
+set -eu
+spool="${PICKUP_WAL_SPOOL:-/var/lib/pickup-pact/wal-spool}"
+source_path="$1"
+name="$2"
+case "$name" in
+  ''|*[!0-9A-Za-z._-]*|.*) echo "pickup-wal-archive: invalid WAL file name" >&2; exit 2 ;;
+esac
+[ -d "$spool" ] || { echo "pickup-wal-archive: spool directory missing" >&2; exit 3; }
+target="$spool/$name"
+if [ -e "$target" ]; then
+  if cmp -s "$source_path" "$target"; then exit 0; fi
+  echo "pickup-wal-archive: refusing to replace a different archived file" >&2
+  exit 4
+fi
+partial="$spool/.partial.$name.$$"
+trap 'rm -f "$partial"' EXIT
+cp "$source_path" "$partial"
+sync "$partial"
+mv "$partial" "$target"
+sync "$spool"
+trap - EXIT

@@ -6,6 +6,7 @@ role over mTLS and delivers notifications to the order role over mTLS.
 """
 from __future__ import annotations
 import argparse
+import json
 import os
 from ..payments.http_server import serve
 from .payment_repository import PostgresPaymentRepository
@@ -30,6 +31,11 @@ def main():
     if context is not None:
         context.dsn(env,'PICKUP_PAYMENT_DSN')
         tls=context.server(env,{'order'})
+        if not args.callback_url and env.get('PICKUP_NOTIFICATION_URLS'):
+            try:args.callback_url=json.loads(env['PICKUP_NOTIFICATION_URLS'])
+            except json.JSONDecodeError:parser.error('PICKUP_NOTIFICATION_URLS must be a JSON array')
+            if not isinstance(args.callback_url,list) or not all(isinstance(u,str) for u in args.callback_url):
+                parser.error('PICKUP_NOTIFICATION_URLS must be a JSON array of URLs')
         if not args.callback_url:parser.error('ha_postgres_v1 requires the order notification endpoint')
     repo=PostgresPaymentRepository(dsn,schema=env.get('PICKUP_PAYMENT_SCHEMA','pact_payment'),
         initialize=initialize_flag(env,'PICKUP_PAYMENT_INIT_SCHEMA',context),

@@ -214,3 +214,27 @@ def test_generation_bump_fences_running_processes_and_keeps_original_keys(cluste
             current.close()
     finally:
         old.close()
+
+
+def test_client_side_scram_verifier_logs_in_without_sending_the_password(cluster):
+    import psycopg
+    from psycopg import sql
+    from psycopg.conninfo import make_conninfo
+    from demo.route.ha.scram import verifier
+    admin, run = cluster['admin'], cluster['run']
+    name, password = run + '_scram', secrets.token_hex(24)
+    stored = verifier(password)
+    assert password not in stored and stored.startswith('SCRAM-SHA-256$4096:')
+    admin.execute(sql.SQL('CREATE ROLE {} LOGIN PASSWORD {}').format(sql.Identifier(name), sql.Literal(stored)))
+    try:
+        assert admin.execute('SELECT rolpassword FROM pg_authid WHERE rolname=%s', (name,)).fetchone()[0] == stored
+        dsn = make_conninfo(cluster['runtime']['order'], user=name, password=password, dbname='postgres')
+        with psycopg.connect(dsn) as db:
+            assert db.execute('SELECT current_user').fetchone()[0] == name
+        with pytest.raises(psycopg.OperationalError):
+            psycopg.connect(make_conninfo(dsn, password=secrets.token_hex(24))).close()
+    finally:
+        admin.execute(sql.SQL('DROP ROLE {}').format(sql.Identifier(name)))
+    for weak in ['short', 'ä'*30, 'x'*30+'\n']:
+        with pytest.raises(ValueError):
+            verifier(weak)
