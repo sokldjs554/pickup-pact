@@ -49,12 +49,13 @@
   - 역할별 토큰·비밀은 서로 달라야 하고 32자 이상이다.
   - 가맹점·결제 origin은 역할마다 2개 이상이어야 한다.
   - `PICKUP_HA_REHEARSAL=single_host_development`일 때만 loopback을 허용하고, 그때 범위 표시는 `..._single_host_rehearsal_not_host_ha`이다.
-- [ ] Patroni·etcd·진입점 구성 렌더링과 인벤토리 승인 검증
-- [ ] 단일 호스트 리허설 스크립트: TLS PostgreSQL, 최소 권한 사용자, 역할별 2개 프로세스, mTLS, 실제 고객 흐름
+- [x] Patroni·etcd·진입점 구성 렌더링과 인벤토리 승인 검증(`inventory.py`, `scripts/ha_inventory.py`, `infra/ha/`)
+- [x] 단일 호스트 리허설(`scripts/ha_cluster_rehearsal.py`, `verify_ha_cluster.py`): 렌더링한 설정 그대로 Patroni 3·etcd 3·역할 15개 프로세스
 
 ### 2. 외부 백업 운영
 
-- [ ] 보존·WAL 계획, 주기·지연·업로드 실패·용량 감시, 작성자/보존 관리자 권한 분리, 키·영수증 보관 위치 검증
+- [x] 보존·WAL 계획, 주기·지연·업로드 실패·용량 감시, 작성자/보존 관리자 권한 분리, 키·영수증 보관 위치 검증(`backup_ops.py`, `verify_ha_backup_ops.py`)
+- [x] 전체 클러스터 유실 → 외부 저장소 복원 → 비밀번호·토큰 교체·세대 갱신 → API·브라우저 확인(`verify_ha_cluster_restore.py`)
 
 ### 3. 실제 독립 호스트 장애·복원 시험
 
@@ -67,6 +68,27 @@
 | 2026-10-02 | 2b4d875 | `pytest -q tests/ha` | 111 통과 |
 | 2026-10-02 | 2b4d875 | `pytest -q` | 574 통과 |
 | 2026-10-02 | 작업 중 | `pytest -q tests/ha` (mTLS·설정·권한·세대 추가) | 189 통과 |
+
+## 최종 검증 (커밋 b712f51, 깨끗한 작업 트리, 단일 개발 호스트)
+
+| 항목 | 반복 | 결과 |
+|---|---|---|
+| 전체 Python `pytest -q` (PostgreSQL 17.11 포함) | 3 | 각 733 통과, 실패·건너뜀 0 |
+| JavaScript 상태 계약 `scripts/verify_*.cjs`, `verify_repo.py` | 3 | 모두 통과 |
+| SQLite 공개 모드 실제 HTTP·브라우저(guided, handoff HTTP/브라우저, route, benefits, decision, payment, tabs) | 각 3 | 모두 통과. tabs는 처음에 로컬 Chromium 버전 불일치(playwright 1.63↔빌드 1194)로 실행 전 실패 → playwright 1.56으로 맞춘 뒤 3회 통과 |
+| native PostgreSQL 개발 토폴로지 `verify_ha_journey.py --browsers` | 3 | 24 시나리오·브라우저 8묶음 통과 |
+| 기존 물리 복원 `verify_ha_restore.py` (local / restic HTTPS) | 각 3 | 통과 |
+| WAL 전송·경보 `verify_ha_backup_ops.py` | 3 | 통과 |
+| 클러스터 장애 `verify_ha_cluster.py`(WAL, HA-01~06, 세대 차단) | 3(새 클러스터) | 24/24 통과 |
+| 전체 유실·복원 `verify_ha_cluster_restore.py --browsers` | 3(새 클러스터) | 3/3 통과, 브라우저 4묶음 매회 통과 |
+
+리허설 측정값(운영 RTO/RPO 아님):
+- HA-04 리더 호스트 강제 종료: 최장 쓰기 공백 48.6/32.8/32.8초, 응답한 쓰기 110/112/100건 중 유실 0, 불명확 9/6/6건
+- HA-05 대기 노드 전부 중단 중 쓰기 응답 0건(strict 유지), 대기 노드 복귀 후 재개
+- HA-06 리더 망 분리: 최장 쓰기 공백 40.4/33.7/43.4초, 유실 0, 쓰기 가능 노드 동시 2개 관측 0
+- 전체 유실 후 앱 준비까지 57.6/59.4/58.3초(작은 합성 데이터, 같은 컴퓨터)
+
+SQL 변경: 연결마다 확인하는 세대 조회는 1행 표, `EXPLAIN (ANALYZE, BUFFERS)` 결과 shared hit 1, 실행 0.019 ms.
 
 ## 재개 방법
 
