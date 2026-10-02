@@ -17,7 +17,7 @@ class RepositoryPaymentClient:
         c = validate(command)
         result = self.repo.execute(c, notification_copies=2 if fault == 'duplicate_notification' else 1,
                                    notification_delay=3 if fault == 'late_notification' else 0)
-        if fault == 'drop_reply' and self.repo.consume_fault(c['world_id'], c['operation_key'], fault):
+        if fault == 'drop_reply' and result['ok'] and self.repo.consume_fault(c['world_id'], c['operation_key'], fault):
             raise OSError('response lost after commit')
         return PaymentClient._bound(result, c)
 

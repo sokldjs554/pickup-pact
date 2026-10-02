@@ -117,7 +117,9 @@ class PaymentInbox:
 
 class NotificationServer:
     """A dedicated loopback listener; the public customer's Origin rules stay intact."""
-    def __init__(self, inbox: PaymentInbox):
+    def __init__(self, inbox: PaymentInbox, *, port: int = 0):
+        if type(port) is not int or not 0 <= port <= 65535:
+            raise ValueError('invalid callback port')
         from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
         class Handler(BaseHTTPRequestHandler):
             def log_message(self,*_):pass
@@ -141,7 +143,7 @@ class NotificationServer:
                 self.end_headers()
                 try:self.wfile.write(raw)
                 except (BrokenPipeError,ConnectionResetError):pass
-        self.server=ThreadingHTTPServer(('127.0.0.1',0),Handler);self.server.daemon_threads=True
+        self.server=ThreadingHTTPServer(('127.0.0.1',port),Handler);self.server.daemon_threads=True
         self.url=f'http://127.0.0.1:{self.server.server_port}/internal/payments/events'
         self.thread=None
 

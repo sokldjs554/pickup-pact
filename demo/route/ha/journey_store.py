@@ -17,12 +17,15 @@ class PostgresJourneyStore(JourneyStore):
             raise ValueError('explicit bounded role identity and remote clients required')
         if not isinstance(notification_secret, str) or len(notification_secret) < 24:
             raise ValueError('shared notification secret required')
-        self.automatic_recovery_enabled = False
         self.fleet, self.payment_gateway, self.payment_enabled = fleet, payment_gateway, True
         self.repository = PostgresJourneyRepository(dsn, schema=schema, initialize=initialize)
         self.payment_inbox = PostgresPaymentInbox(self.repository, notification_secret)
         self.operations = self.payment_operations = PostgresCoordinator(self, worker_id, lease_seconds)
         self.node_id = worker_id
+
+    @property
+    def automatic_recovery_enabled(self):
+        return self.repository.worker_ready()
 
     def close(self):
         self.repository.close()

@@ -51,6 +51,17 @@ class PostgresJourneyRepository:
                   AND (lease_until IS NULL OR lease_until<=clock_timestamp())
                 ORDER BY next_at,id LIMIT %s""", (limit,)).fetchall()
 
+    def heartbeat(self, node_id, remove=False):
+        with self.database.transaction() as db:
+            if remove:
+                db.execute('DELETE FROM recovery_nodes WHERE node_id=%s', (key(node_id),))
+            else:
+                db.execute('INSERT INTO recovery_nodes VALUES(%s,clock_timestamp()) ON CONFLICT(node_id) DO UPDATE SET seen_at=excluded.seen_at', (key(node_id),))
+
+    def worker_ready(self):
+        with self.database.transaction(readonly=True) as db:
+            return bool(db.execute("SELECT 1 FROM recovery_nodes WHERE seen_at>clock_timestamp()-interval '15 seconds' LIMIT 1").fetchone())
+
     def storage_ready(self):
         with self.database.transaction(readonly=True) as db:
             return db.execute('SELECT count(*) AS n FROM journeys').fetchone()['n'] >= 0

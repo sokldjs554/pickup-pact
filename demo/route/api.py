@@ -100,9 +100,18 @@ class ExperimentRequest(BaseModel):
     cases: StrictInt=Field(default=120,ge=6,le=200)
 
 # Demo sessions use random capability IDs, never personal or live payment data.
-store=JourneyStore(os.environ.get('ROUTE_DB',str(Path(tempfile.gettempdir())/'pickup-pact-route.sqlite')))
+_backend=os.environ.get('PICKUP_ROUTE_BACKEND','sqlite')
+if _backend not in {'sqlite','postgresql_development'}:
+    raise ValueError('unsupported route storage backend')
+store=(None if _backend=='postgresql_development' else
+       JourneyStore(os.environ.get('ROUTE_DB',str(Path(tempfile.gettempdir())/'pickup-pact-route.sqlite'))))
 
-def create_router():
+def create_router(*, store_provider=None, lifespan=route_lifespan):
+    def selected_store():
+        selected=store_provider() if store_provider is not None else store
+        if selected is None:
+            raise HTTPException(503,'주문 저장소를 연결하고 있어요.')
+        return selected
     async def protect(request: Request,response: Response):
         response.headers['Cache-Control']='no-store'
         if request.method=='POST':
@@ -125,45 +134,61 @@ def create_router():
                     pending.extend(value.values())
                 elif isinstance(value, list):
                     pending.extend(value)
-    router=APIRouter(lifespan=route_lifespan, dependencies=[Depends(protect)], responses={
+    router=APIRouter(lifespan=lifespan, dependencies=[Depends(protect)], responses={
         400: {'description': 'Invalid Unicode in JSON rejected before mutation'},
     })
     @router.get('/api/route/runtime',response_model=RuntimeView,response_model_exclude_unset=True)
     def runtime_status() -> dict:
         payment_ready=False
-        if store.payment_gateway:
-            try:payment_ready=store.payment_gateway.health().get('storage_ready') is True
+        if selected_store().payment_gateway:
+            try:payment_ready=selected_store().payment_gateway.health().get('storage_ready') is True
             except OSError:pass
-        return dict(mode='synthetic', merchant_transport='http' if getattr(store.fleet,'handles_response_loss',False) else 'local',
-                    automatic_recovery=store.automatic_recovery_enabled,
-                    payment_mode='simulator_http_v1' if store.payment_enabled else 'legacy_internal',
-                    payment_transport=getattr(store.payment_gateway,'transport','not_connected'),
+        return dict(mode='synthetic', merchant_transport='http' if getattr(selected_store().fleet,'handles_response_loss',False) else 'local',
+                    automatic_recovery=selected_store().automatic_recovery_enabled,
+                    payment_mode='simulator_http_v1' if selected_store().payment_enabled else 'legacy_internal',
+                    payment_transport=getattr(selected_store().payment_gateway,'transport','not_connected'),
                     payment_connection='available' if payment_ready else 'unavailable',
                     payment_storage_ready=payment_ready,
                     predecision_timeout_seconds=45, retry_limit=8,
-                    scope='single_host_independent_process_and_store_databases')
+                    scope=getattr(selected_store(),'evidence_scope','single_host_independent_process_and_store_databases'),
+                    storage_backend=getattr(selected_store(),'backend','sqlite'),
+                    node_id=getattr(selected_store(),'node_id','single-host'))
+    @router.get('/ready',include_in_schema=False)
+    def readiness():
+        current=selected_store()
+        try:
+            if getattr(current,'backend','sqlite')=='postgresql':
+                if not current.repository.storage_ready():raise OSError()
+                merchant=current.fleet._request('/health')
+                payment=current.payment_gateway.health()
+                if not merchant.get('storage_ready') or not payment.get('storage_ready') or not current.automatic_recovery_enabled:
+                    raise OSError()
+            return dict(ready=True,storage_backend=getattr(current,'backend','sqlite'))
+        except OSError:
+            raise HTTPException(503,'주문·매장·결제·복구 작업자의 준비 상태를 확인하지 못했어요.') from None
     @router.get('/api/route/catalog')
     def catalog_api()->dict: return catalogue()
     @router.post('/api/route/journeys',status_code=201,response_model=JourneyView,response_model_exclude_unset=True)
     def create_journey(body:JourneyInput)->dict:
-        return store.create(body.model_dump(exclude={'payment_card','payment_scenario'}),
+        return invoke(selected_store().create,body.model_dump(exclude={'payment_card','payment_scenario'}),
                             card_token=body.payment_card,payment_fault=body.payment_scenario)
-    def invoke(fn,*args):
-        try: return fn(*args)
+    def invoke(fn,*args,**kwargs):
+        try: return fn(*args,**kwargs)
         except KeyError as exc: raise HTTPException(404,'이 체험을 찾지 못했어요. 새 일정으로 시작해 주세요.') from exc
         except Conflict as exc: raise HTTPException(409,dict(code=exc.code,message=str(exc))) from exc
+        except OSError: raise HTTPException(503, '저장된 처리 결과를 확인하지 못했어요. 같은 요청으로 다시 확인해 주세요.') from None
     @router.get('/api/route/journeys/{journey_id}',response_model=JourneyView,response_model_exclude_unset=True)
-    def journey(journey_id:UUID)->dict: return invoke(store.get,journey_id.hex)
+    def journey(journey_id:UUID)->dict: return invoke(selected_store().get,journey_id.hex)
     @router.post('/api/route/journeys/{journey_id}/commands',response_model=JourneyView,response_model_exclude_unset=True,responses={409:{'description':'Stale state, unsafe transfer or invalid lifecycle'}})
     def commands(journey_id:UUID,body:Command)->dict:
-        return invoke(store.command,journey_id.hex,body.model_dump())
+        return invoke(selected_store().command,journey_id.hex,body.model_dump())
     @router.post('/api/route/journeys/{journey_id}/transfer-controls', response_model=JourneyView,response_model_exclude_unset=True,responses={409:{'description':'Pending operation or changed state'}})
     def transfer_controls(journey_id:UUID,body:TransferControl)->dict:
-        return invoke(store.transfer_control,journey_id.hex,body.model_dump())
+        return invoke(selected_store().transfer_control,journey_id.hex,body.model_dump())
     @router.post('/api/route/journeys/{journey_id}/payment-controls',response_model=JourneyView,response_model_exclude_unset=True,
                  responses={409:{'description':'Fixed legacy mode, pending work or stale state'}})
     def payment_controls(journey_id:UUID,body:PaymentControl)->dict:
-        return invoke(store.payment_control,journey_id.hex,body.model_dump(exclude_none=True))
+        return invoke(selected_store().payment_control,journey_id.hex,body.model_dump(exclude_none=True))
     @router.post('/api/route/transfer-comparison', response_model=ComparisonView,response_model_exclude_unset=True,responses={429:{'description':'Two comparisons are already running in this process'}})
     def transfer_comparison(body:TransferComparisonRequest)->dict:
         from .transfer_comparison import run_transfer_comparison
@@ -175,17 +200,17 @@ def create_router():
             comparison_slots.release()
     @router.get('/api/route/journeys/{journey_id}/comparison')
     def comparison(journey_id:UUID)->dict:
-        return invoke(store.get,journey_id.hex)['comparison']
+        return invoke(selected_store().get,journey_id.hex)['comparison']
     @router.post('/api/route/experiments')
     def experiment(body:ExperimentRequest)->dict:
         return run_experiment(body.seed,body.cases)
     @router.get('/api/route/journeys/{journey_id}/reconciliation',response_model=ReconciliationView,response_model_exclude_unset=True)
     def reconciliation(journey_id:UUID)->dict:
         from .reconciliation import reconcile
-        return invoke(reconcile,store,journey_id.hex)
+        return invoke(reconcile,selected_store(),journey_id.hex)
     @router.get('/api/route/journeys/{journey_id}/receipt',response_model=ReceiptView,response_model_exclude_unset=True)
     def receipt(journey_id:UUID)->dict:
-        s=invoke(store.get,journey_id.hex)
+        s=invoke(selected_store().get,journey_id.hex)
         return dict(mode='synthetic',order=s['order'],receipt=s['receipt'],events=s['events'])
     @router.get('/',include_in_schema=False)
     @router.get('/go',include_in_schema=False)
