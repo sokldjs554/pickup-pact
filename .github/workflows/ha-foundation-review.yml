@@ -15,15 +15,15 @@ jobs:
     timeout-minutes: 25
     services:
       postgres:
-        image: postgres:17.11-bookworm
+        image: postgres:17.11-bookworm@sha256:639ab7ceb90e13123085b741fb31ef493fba25463002f6da665352e7b534b652
         env:
           POSTGRES_DB: pickup_ha_test
           POSTGRES_USER: pickup_test
           POSTGRES_PASSWORD: isolated_ci_only
         ports: ['5432:5432']
         options: >-
-          --health-cmd 'pg_isready -U pickup_test -d pickup_ha_test'
-          --health-interval 5s --health-timeout 5s --health-retries 12
+          --health-cmd=pg_isready
+          --health-interval=5s --health-timeout=5s --health-retries=12
     env:
       PYTHONPATH: .:services/reconciler
       PICKUP_HA_TEST: '1'
@@ -39,7 +39,7 @@ jobs:
         run: |
           mkdir -p verification/ha-foundation
           git rev-parse HEAD > verification/ha-foundation/tested-commit.txt
-          docker image inspect postgres:17.11-bookworm --format '{{json .RepoDigests}}' > verification/ha-foundation/postgres-image.json
+          docker image inspect postgres:17.11-bookworm@sha256:639ab7ceb90e13123085b741fb31ef493fba25463002f6da665352e7b534b652 --format '{{json .RepoDigests}}' > verification/ha-foundation/postgres-image.json
           python -m pip freeze > verification/ha-foundation/dependencies.txt
       - name: Native PostgreSQL storage contracts
         run: |
@@ -60,8 +60,12 @@ jobs:
         if: always()
         run: |
           mkdir -p verification/ha-foundation
-          git archive --format=zip --output=verification/ha-foundation/tested-source.zip HEAD
-          sha256sum verification/ha-foundation/tested-source.zip > verification/ha-foundation/tested-source.sha256
+          if git rev-parse --verify HEAD > /dev/null 2>&1; then
+            git archive --format=zip --output=verification/ha-foundation/tested-source.zip HEAD
+            sha256sum verification/ha-foundation/tested-source.zip > verification/ha-foundation/tested-source.sha256
+          else
+            printf 'Source checkout was not reached. No product test result exists.\n' > verification/ha-foundation/setup-failure.txt
+          fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
