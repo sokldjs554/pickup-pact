@@ -63,7 +63,9 @@
 - [x] 서버 4대(Oracle Osaka AD-1, 무료 체험 크레딧): 접속·사양·FD 분리 점검 통과. pact-a=FD-1, pact-b=FD-2, pact-c=FD-3, pact-backup=FD-1(승인 예외 `backup_failure_domain`, 범위 `oracle_single_ad_fault_domains`)
   - 첫 점검에서 pact-a와 pact-b가 같은 FD로 잡혀 pact-a를 FD-1에 다시 만들었다.
 - [x] 설치 단계: PostgreSQL 17.11, Patroni 4.0.4, etcd 3.5.17, restic 0.19.1(+백업 서버 rest-server 0.14.0), 서버 방화벽(사설망만), softdog 권한 — 4대 모두 통과
-- [ ] 배포 단계: 인증서·설정·systemd 기동
+- [x] 배포 단계(2026-10-03, 135초): 임시 CA(5일) 인증서, etcd 3노드 정족수, Patroni 3노드 수렴(strict 동기), 역할·스키마 마이그레이션 3종, 서비스 5종 ×3대 기동, 앱 3대 `/ready`=200·`storage_backend=postgresql`
+  - 첫 시도는 Oracle VCN 보안 규칙이 서브넷에 적용되지 않아 서버 간 etcd/DB/앱 포트가 차단되어 멈췄다. 규칙(10.0.0.0/16 TCP 전체)을 서브넷의 Security List에 넣은 뒤 재시작했다.
+  - 데이터가 없는 부분 배포만 정리 후 재시작하며, PostgreSQL 데이터가 있으면 거부한다.
 - [ ] HA-01~10, DR-01~08 ×3 (파괴 시험은 별도 확인 후)
 
 ## 개발 검증 기록
