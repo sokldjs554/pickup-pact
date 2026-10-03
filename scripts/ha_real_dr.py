@@ -96,6 +96,7 @@ class RealDR(RealCluster):
                    f'--htpasswd-file {STORE_CONF}/htpasswd --append-only --private-repos --tls --tls-cert {STORE_CONF}/tls.crt '
                    f'--tls-key {STORE_CONF}/tls.key --tls-min-ver 1.3 --max-size {quota_bytes}')
         deadline = time.monotonic()+20
+        last = ''
         while time.monotonic() < deadline:
             try:
                 with self._opener().open(self._request('config'), timeout=2):
@@ -103,12 +104,13 @@ class RealDR(RealCluster):
             except HTTPError as exc:
                 if exc.code == 404:
                     return  # 인증된 빈 저장소(아직 초기화 전)
-                raise OSError('저장소 인증이 시작 중에 실패했다') from None
-            except (URLError, OSError):
+                raise OSError(f'저장소 인증이 시작 중에 실패했다({exc.code})') from None
+            except (URLError, OSError) as exc:
+                last = f'{type(exc).__name__}: {exc}'[:200]
                 time.sleep(.3)
         logs = self.local(f'sudo journalctl -u {STORE_UNIT} --no-pager -n 12 -o cat 2>&1 | cut -c1-200; '
                           f'systemctl is-active {STORE_UNIT}; ls -ld {STORE_DATA} {STORE_CONF}; sudo ss -ltn | grep {STORE_PORT}', check=False).stdout
-        raise OSError('HTTPS 저장소가 준비되지 않았다: '+logs.replace('\n', ' | ')[:900])
+        raise OSError('HTTPS 저장소가 준비되지 않았다(마지막 오류 '+last+'): '+logs.replace('\n', ' | ')[:900])
 
     def stop_store(self):
         self.local(f'sudo systemctl stop {STORE_UNIT} 2>/dev/null; sudo systemctl reset-failed {STORE_UNIT} 2>/dev/null; true', check=False)
