@@ -70,7 +70,8 @@ def verify(hosts, inventory_path: Path, out: Path, *, only: list[str], repeat: i
         # 3. DB 서버에는 시험 도구 주소로 제한한 공개키만 등록한다.
         entry = f'from="10.0.0.20",no-port-forwarding,no-agent-forwarding,no-X11-forwarding {public}'
         for host in db:
-            host.run(f"echo {shlex.quote(entry)} >> ~/.ssh/authorized_keys")
+            # 장애 시험에서 호스트가 즉시 재부팅(동기화 없음)되어도 시험 도구의 접속 키가 남도록 디스크에 확정한다.
+            host.run(f"echo {shlex.quote(entry)} >> ~/.ssh/authorized_keys && sync")
         args = ['--work', WORK, '--output', f'{WORK}/out', '--repeat', str(repeat)]
         if only:
             args += ['--only', *only]

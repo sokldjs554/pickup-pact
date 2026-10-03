@@ -169,6 +169,15 @@ class RealCluster:
         """pact-partition 표시가 붙은 규칙만 제거한다(나머지 규칙은 그대로 다시 적용)."""
         self.sh(letter, "sudo iptables-save | grep -v 'pact-partition' | sudo iptables-restore", check=False)
 
+    def ensure_units(self):
+        """멈춘 유닛이 있으면 시작한다(앞선 시험의 장애가 남지 않게)."""
+        for letter in HOSTS:
+            try:
+                for unit in ALL_UNITS:
+                    self.sh(letter, f'systemctl is-active --quiet {unit} || sudo systemctl start {unit}', timeout=150, check=False)
+            except Exception:  # noqa: BLE001
+                pass
+
     def clear_faults(self):
         for letter in HOSTS:
             try:
@@ -233,7 +242,8 @@ def main():
                 began = time.monotonic()
                 row = dict(id=name)
                 try:
-                    cluster.wait_cluster(members=3)
+                    cluster.ensure_units()
+                    cluster.wait_cluster(members=3, timeout=240)
                     cluster.wait_apps(HOSTS)
                     row.update(scenario(cluster, api))
                     row['passed'] = True

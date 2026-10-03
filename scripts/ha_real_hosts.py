@@ -165,6 +165,7 @@ done
 echo "== boot"; uptime -s; ls -l /dev/watchdog 2>&1 | cut -c1-80; lsmod | grep -c softdog
 echo "== patroni state"; systemctl show patroni -p ActiveState -p SubState -p Result -p ExecMainStatus | tr '\n' ' '; echo
 echo "== patroni journal"; sudo journalctl -u patroni --no-pager -b -n 14 -o cat 2>&1 | cut -c1-300
+echo "== softdog boot config"; cat /etc/modules-load.d/softdog.conf 2>&1 | head -2; sudo journalctl -b -u systemd-modules-load --no-pager -o cat 2>&1 | tail -4 | cut -c1-200
 echo "== authorized_keys harness lines"; grep -c pact-harness ~/.ssh/authorized_keys
 echo "== etcd env"; grep -E "ETCD_(NAME|LISTEN|INITIAL_ADVERTISE)" /etc/pickup-pact/etcd.env
 '''
@@ -179,9 +180,47 @@ def diagnose(hosts: list[Host], out: Path) -> bool:
     return True
 
 
+def refresh_units(hosts: list[Host], out: Path) -> bool:
+    """수정한 systemd 유닛을 DB 서버에 올리고, 멈춘 유닛을 시작해 3노드로 되돌린다(데이터는 건드리지 않는다)."""
+    import io
+    import tarfile
+    buffer = io.BytesIO()
+    with tarfile.open(fileobj=buffer, mode='w') as archive:
+        for unit in sorted((ROOT/'infra/ha/systemd').glob('*.service')):
+            raw = unit.read_bytes()
+            info = tarfile.TarInfo(f'etc/systemd/system/{unit.name}')
+            info.size, info.mode = len(raw), 0o644
+            archive.addfile(info, io.BytesIO(raw))
+    report = {}
+    units = ['etcd', 'patroni', 'pickup-merchant', 'pickup-order-notification', 'pickup-payment', 'pickup-order-app', 'pickup-order-worker']
+    for host in [h for h in hosts if h.name != 'pact-backup']:
+        host.run_bytes('sudo tar -xp -C /', buffer.getvalue())
+        host.run('sudo systemctl daemon-reload')
+        started = []
+        for unit in units:
+            if host.run(f'systemctl is-active --quiet {unit}', check=False).returncode:
+                host.run(f'sudo systemctl start {unit}', check=False, timeout=150)
+                started.append(unit)
+        report[host.name] = dict(started=started, states=host.run('systemctl is-active '+' '.join(units), check=False).stdout.split())
+    deadline = time.monotonic()+240
+    members = None
+    while time.monotonic() < deadline:
+        done = hosts[0].run('sudo -u postgres /opt/patroni/bin/patronictl -c /etc/pickup-pact/patroni.yml list -f json', check=False, timeout=60)
+        if done.returncode == 0 and done.stdout.strip():
+            members = [(m['Member'], m['Role'], m['State']) for m in json.loads(done.stdout)]
+            if len(members) == 3 and all(m[2] in {'running', 'streaming'} for m in members):
+                break
+        time.sleep(5)
+    ok = bool(members) and len(members) == 3 and all(m[2] in {'running', 'streaming'} for m in members)
+    out.mkdir(parents=True, exist_ok=True)
+    (out/'refresh-units.json').write_text(json.dumps(dict(passed=ok, hosts=report, members=members), ensure_ascii=False, indent=2))
+    print(json.dumps(dict(passed=ok, hosts=report, members=members), ensure_ascii=False))
+    return ok
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('phase', choices=['preflight', 'install', 'deploy', 'diagnose', 'verify-basic', 'verify-faults'])
+    parser.add_argument('phase', choices=['preflight', 'install', 'deploy', 'diagnose', 'verify-basic', 'verify-faults', 'refresh-units'])
     parser.add_argument('--inventory', type=Path, default=ROOT/'infra/ha/hosts/oracle-osaka.json')
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args(argv)
@@ -209,6 +248,8 @@ def main(argv=None) -> int:
             return 1
         print(json.dumps(dict(passed=ok)))
         return 0 if ok else 1
+    if args.phase == 'refresh-units':
+        return 0 if refresh_units(hosts, args.output) else 1
     if args.phase == 'diagnose':
         return 0 if diagnose(hosts, args.output) else 1
     if args.phase == 'deploy':
