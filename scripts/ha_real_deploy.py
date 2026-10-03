@@ -120,8 +120,15 @@ class Deployment:
             return dict(zip([h.name for h in hosts], pool.map(fn, hosts)))
 
     def upload(self, host) -> str:
-        if host.run('test ! -e /etc/pickup-pact/patroni.yml && test ! -d /var/lib/etcd/pickup-pact && echo fresh', check=False).stdout.strip() != 'fresh':
-            raise SystemExit(f'{host.name}: 이미 배포된 서버다(최초 배포만 지원)')
+        # 데이터베이스가 한 번이라도 초기화된 서버는 건드리지 않는다. etcd만 시작하다 멈춘 부분 배포는 정리 후 다시 시작한다.
+        if host.run('test -d /var/lib/postgresql/17/pickup && echo data || echo nodata').stdout.strip() == 'data':
+            raise SystemExit(f'{host.name}: PostgreSQL 데이터가 있는 서버다(최초 배포만 지원)')
+        leftovers = host.run('test -e /etc/pickup-pact/patroni.yml -o -d /var/lib/etcd/pickup-pact && echo partial || echo fresh').stdout.strip()
+        if leftovers == 'partial':
+            host.run('sudo systemctl disable --now etcd patroni >/dev/null 2>&1; sudo rm -rf /var/lib/etcd/pickup-pact '
+                     '/etc/pickup-pact/tls /etc/pickup-pact/secrets /etc/pickup-pact/*.yml /etc/pickup-pact/*.env', timeout=120)
+            host.run('sudo install -d -m 0755 /etc/pickup-pact && sudo install -d -m 0750 /etc/pickup-pact/tls /etc/pickup-pact/secrets')
+            self.evidence.setdefault('cleaned_partial', []).append(host.name)
         host.run_bytes('sudo tar -xp -C /', self.bundles[host.name])
         host.run('sudo mkdir -p /opt/pickup-pact')
         host.run_bytes('sudo tar -x -C /opt/pickup-pact', self.code)
