@@ -162,6 +162,10 @@ for ip in 10.0.0.11 10.0.0.12 10.0.0.13 10.0.0.20; do
   done
   echo "$row"
 done
+echo "== boot"; uptime -s; ls -l /dev/watchdog 2>&1 | cut -c1-80; lsmod | grep -c softdog
+echo "== patroni state"; systemctl show patroni -p ActiveState -p SubState -p Result -p ExecMainStatus | tr '\n' ' '; echo
+echo "== patroni journal"; sudo journalctl -u patroni --no-pager -b -n 14 -o cat 2>&1 | cut -c1-300
+echo "== authorized_keys harness lines"; grep -c pact-harness ~/.ssh/authorized_keys
 echo "== etcd env"; grep -E "ETCD_(NAME|LISTEN|INITIAL_ADVERTISE)" /etc/pickup-pact/etcd.env
 '''
 
