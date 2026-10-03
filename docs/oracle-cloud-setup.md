@@ -104,9 +104,14 @@ cat ~/.ssh/pact-ha.pub   # 서버를 만들 때 이 공개키를 붙여 넣는�
 
 ## 8. 시험 후 삭제 (필수)
 
-1. **Compute → Instances**: 4대 모두 **Terminate**, "Permanently delete the attached boot volume" 체크
-2. **Block Storage → Boot Volumes / Block Volumes**: 남은 디스크가 없는지 확인
-3. **Networking → Virtual Cloud Networks**: `pact-ha-vcn` 삭제
-4. **Networking → Reserved Public IPs**: 남은 IP가 없는지 확인
-5. 다음 날 **Cost Analysis**에서 비용이 더 늘지 않았는지 확인한다.
-6. GitHub Secret `PACT_HA_SSH_KEY`를 삭제하고, 본인 PC의 `~/.ssh/pact-ha` 키도 폐기한다.
+시험 서버는 시험이 끝나면 지운다. 서버와 디스크, 네트워크, 키를 모두 지워야 크레딧이 더 소모되지 않는다. **지우기 전에** 더 확인할 시험(HA-07~10 등)이 남았는지 정하고, 증거가 필요하면 먼저 GitHub Actions 아티팩트를 내려받는다(보존 30일).
+
+1. **Compute → Instances**: pact-a, pact-b, pact-c, pact-backup을 하나씩 **Terminate**한다. "Permanently delete the attached boot volume"을 체크한다.
+2. **Block Storage → Boot Volumes / Block Volumes**: 남은 디스크가 없는지 확인한다(없어야 정상).
+3. **Networking → Virtual Cloud Networks → pact-ha-vcn**: 인스턴스를 모두 지운 뒤 VCN을 삭제한다(서브넷·Security List·라우트·게이트웨이가 함께 정리된다. 막히면 남은 서브넷부터 지운다).
+4. **Networking → IP management → Reserved Public IPs**: 남은 IP가 없는지 확인한다.
+5. **Billing & Cost Management → Cost Analysis / Budgets**: 다음 날 비용이 더 늘지 않는지 확인한다. 계정은 Pay As You Go로 업그레이드하지 않은 상태를 유지한다. 예산 경보는 둬도 된다.
+6. **GitHub**: 저장소 Settings → Secrets and variables → Actions에서 `PACT_HA_SSH_KEY`를 삭제한다.
+7. **본인 PC**: `~/.ssh/pact-ha`와 `~/.ssh/pact-ha.pub`을 삭제(폐기)한다. 다른 곳에 복사한 적이 있으면 그것도 지운다.
+8. 저장소의 `infra/ha/hosts/oracle-osaka.json`에는 삭제된 서버의 공인 IP가 남는다. 비밀은 아니지만 재사용되지 않으므로, 다음 시험 때 새 값으로 바꾼다.
+9. 시험 중 생성한 인증서·비밀번호·토큰·저장소 키는 서버와 함께 사라진다. 이 값들은 어디에도 따로 보관하지 않았다.
