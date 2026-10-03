@@ -150,6 +150,18 @@ echo "== etcd warnings"; sudo journalctl -u etcd --no-pager -p warning -o cat 2>
 echo "== etcd dial errors"; sudo journalctl -u etcd --no-pager -o cat 2>&1 | grep -o 'dial tcp [0-9.:]*: [a-z ]*[a-z:]*' | sort | uniq -c | head -6
 echo "== peer reachability"; for ip in 10.0.0.11 10.0.0.12 10.0.0.13; do timeout 3 bash -c "exec 3<>/dev/tcp/$ip/2380" 2>/dev/null && echo "$ip:2380 open" || echo "$ip:2380 closed"; done
 echo "== listening"; sudo ss -ltn | awk '$4 ~ /:(2379|2380|5432|8008)$/ {print $4}' | sort | tr '\n' ' '; echo
+echo "== port probe (open=열림, refused=도달했지만 대기 프로세스 없음, blocked=네트워크에서 차단)"
+for ip in 10.0.0.11 10.0.0.12 10.0.0.13 10.0.0.20; do
+  [ "$ip" = "$(hostname -I | awk '{print $1}')" ] && continue
+  row="$ip"
+  for port in 22 2379 2380 5432 8008 8000 8443 8444 8445; do
+    start=$(date +%s%N)
+    if timeout 3 bash -c "exec 3<>/dev/tcp/$ip/$port" 2>/dev/null; then kind=open
+    else ms=$(( ($(date +%s%N)-start)/1000000 )); if [ "$ms" -lt 800 ]; then kind=refused; else kind=blocked; fi; fi
+    row="$row $port=$kind"
+  done
+  echo "$row"
+done
 echo "== etcd env"; grep -E "ETCD_(NAME|LISTEN|INITIAL_ADVERTISE)" /etc/pickup-pact/etcd.env
 '''
 
