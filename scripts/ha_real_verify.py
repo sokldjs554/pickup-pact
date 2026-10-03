@@ -61,7 +61,7 @@ def verify(hosts, inventory_path: Path, out: Path, *, only: list[str], repeat: i
         if driver == 'ha_real_dr.py':
             # 인벤토리가 쓰는 백업 저장소 이름을 모든 서버에서 해석할 수 있게 한다(이미 설치된 서버용).
             for host in hosts:
-                host.run("grep -q 'backup.pact.internal' /etc/hosts || sudo sed -i 's/^\\(10\\.0\\.0\\.20 .*\\)$/\\1 backup.pact.internal/' /etc/hosts")
+                host.run("grep -q ' backup\\.pact\\.internal' /etc/hosts || sudo sed -i 's/^\\(10\\.0\\.0\\.20 .*\\)$/\\1 backup.pact.internal/' /etc/hosts")
         if driver == 'ha_real_dr.py':  # 기본 백업(pg_basebackup)에 필요한 PostgreSQL 17 클라이언트
             backup.run('sudo apt-get install -y -qq postgresql-common gnupg >/dev/null && '
                        'sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y >/dev/null 2>&1 && sudo apt-get update -qq && '
