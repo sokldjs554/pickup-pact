@@ -56,7 +56,10 @@ jobs:
         run: |
           python3 - <<'PY'
           import json, glob
-          for path in sorted(glob.glob('verification/ha-real-hosts/*/results.json')):
+          for path in sorted(glob.glob('verification/ha-real-hosts/*/*.json')):
+              if not path.endswith('results.json'):
+                  print(f"::notice title={path.split('/')[-1]}::" + open(path).read()[:60000].replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A'))
+                  continue
               data = json.load(open(path))
               print(f"::notice title=overall passed={data.get('passed')}::" + json.dumps({k: v for k, v in data.items() if k != 'repetitions'}, ensure_ascii=False))
               for rep in data.get('repetitions', []):
