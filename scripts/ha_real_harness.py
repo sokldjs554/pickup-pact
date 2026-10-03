@@ -382,10 +382,11 @@ def ha10(cluster, api):
                 pass
             time.sleep(.5)
         assert back is not None, f'{label}: 중단했던 진입점이 돌아오지 않았다'
-        time.sleep(3)
+        # 복귀한 진입점이 앱 백엔드를 다시 정상으로 올릴 때까지(헬스체크 약 4초) 두고, 두 진입점이 함께 서비스하는지 표본을 충분히 모은다.
+        time.sleep(15)
         probe.stop()
         during = probe.window(began+.5, ended)
-        after = probe.window(ended+back+1, time.monotonic())
+        after = probe.window(ended+back+8, time.monotonic())
         summary = _summarize(during)
         assert summary['failed'] == 0, f'{label}: 공개 주소가 {summary["failed"]}번 응답하지 못했다'
         # 복구 직전 4초(연결 시간 초과 3초 + 여유)에 시작해 연결을 기다리던 요청은 복구 뒤 SYN 재전송으로 연결될 수 있어 판정에서 뺀다.
