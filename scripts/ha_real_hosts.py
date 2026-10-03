@@ -145,11 +145,12 @@ def install(hosts: list[Host], inventory: dict, out: Path) -> bool:
 
 DIAGNOSE = r'''
 echo "== units"; systemctl is-active etcd patroni 2>&1 | tr '\n' ' '; echo
-echo "== etcd journal"; sudo journalctl -u etcd --no-pager -n 25 -o cat 2>&1 | cut -c1-260
-echo "== etcd files"; sudo ls -l /etc/pickup-pact/tls | awk '{print $1, $3, $9}'
+echo "== etcd state"; systemctl show etcd -p ActiveState -p SubState -p Result -p NRestarts -p ExecMainStatus | tr '\n' ' '; echo
+echo "== etcd warnings"; sudo journalctl -u etcd --no-pager -p warning -o cat 2>&1 | grep -v "prober detected" | tail -6 | cut -c1-420
+echo "== etcd dial errors"; sudo journalctl -u etcd --no-pager -o cat 2>&1 | grep -o 'dial tcp [0-9.:]*: [a-z ]*[a-z:]*' | sort | uniq -c | head -6
+echo "== peer reachability"; for ip in 10.0.0.11 10.0.0.12 10.0.0.13; do timeout 3 bash -c "exec 3<>/dev/tcp/$ip/2380" 2>/dev/null && echo "$ip:2380 open" || echo "$ip:2380 closed"; done
 echo "== listening"; sudo ss -ltn | awk '$4 ~ /:(2379|2380|5432|8008)$/ {print $4}' | sort | tr '\n' ' '; echo
-echo "== firewall"; sudo iptables -S INPUT | head -8
-echo "== hosts"; grep -A5 pickup-pact-begin /etc/hosts
+echo "== etcd env"; grep -E "ETCD_(NAME|LISTEN|INITIAL_ADVERTISE)" /etc/pickup-pact/etcd.env
 '''
 
 
