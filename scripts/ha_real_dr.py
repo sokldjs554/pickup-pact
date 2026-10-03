@@ -635,11 +635,19 @@ def main():
     parser.add_argument('--mode', choices=['backup', 'full'], default='backup')
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
-    report = full_stage(args) if args.mode == 'full' else backup_stage(args)
-    scenarios = report.pop('scenarios', None) or [dict(id='DR-backup', **report)]
-    scenarios.append(dict(id='DR-summary', **{k: v for k, v in report.items() if k not in {'scenarios'}}))
-    (args.output/'results.json').write_text(json.dumps(dict(repetitions=[dict(repeat=1, scenarios=scenarios)],
-                                                            passed=report.get('passed', False), scope=SCOPE), ensure_ascii=False, indent=2))
+    repetitions, failures = [], 0
+    for number in range(1, max(1, args.repeat)+1):
+        report = full_stage(args) if args.mode == 'full' else backup_stage(args)
+        scenarios = report.pop('scenarios', None) or [dict(id='DR-backup', **report)]
+        scenarios.append(dict(id='DR-summary', **{k: v for k, v in report.items() if k not in {'scenarios'}}))
+        repetitions.append(dict(repeat=number, scenarios=scenarios, passed=bool(report.get('passed'))))
+        failures += 0 if report.get('passed') else 1
+        (args.output/'results.json').write_text(json.dumps(dict(repetitions=repetitions, passed=failures == 0, scope=SCOPE),
+                                                            ensure_ascii=False, indent=2))
+        print(json.dumps({'repeat': number, 'passed': report.get('passed'), 'total_s': report.get('total_s')}), flush=True)
+        if not report.get('passed'):
+            break  # 한 번 실패하면 클러스터 상태를 확인하기 전에 다음 삭제를 하지 않는다
+    report = dict(passed=failures == 0 and len(repetitions) == max(1, args.repeat))
     print(json.dumps({'passed': report.get('passed'), 'scope': SCOPE}), flush=True)
     return 0 if report.get('passed') else 1
 
