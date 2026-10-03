@@ -22,6 +22,7 @@ from demo.route.ha import inventory as inv  # noqa: E402
 WORK = '/dev/shm/pact-harness'
 BASIC = ['WAL-ARCHIVE', 'HA-01', 'HA-02', 'HA-03']
 FAULTS = ['HA-04', 'HA-05', 'HA-06']
+CONCURRENCY = ['HA-07-multihost', 'HA-08-multihost', 'HA-09-multihost']
 UNPARTITION = "sudo iptables-save | grep -v 'pact-partition' | sudo iptables-restore"
 
 

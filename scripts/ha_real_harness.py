@@ -262,7 +262,103 @@ def wal_archive(cluster, api):
     return dict(leader=leader, archived_count=archived, failed_count=failed, spooled_files=len(spooled))
 
 
-SCENARIOS = [('WAL-ARCHIVE', wal_archive), ('HA-01', base.ha01), ('HA-02', base.ha02), ('HA-03', base.ha03),
+def _drive_to_ready(api, host, fault='none'):
+    """예약 → 매장 변경 → 제조 완료(수령 직전)까지 한 호스트로 진행한다."""
+    state = api.settle(host, api.start(host, fault=fault))
+    oat = next(plan for plan in state['all_plans'] if plan['store_id'] == 'oat')
+    state = api.settle(host, api.command(host, state, 'transfer', quote_id=oat['quote_id']))
+    minutes = max(0, state['current_plan']['start_at']-state['clock'])
+    if minutes:
+        state = api.command(host, state, 'advance', minutes=minutes)
+    state = api.command(host, state, 'start')
+    state = api.command(host, state, 'advance', minutes=max(0, state['order']['ready_at']-state['clock']))
+    return api.command(host, state, 'ready')
+
+
+def ha07_multihost(cluster, api):
+    """청구 응답이 유실된 주문 6건을 세 호스트에서 동시에 만들고, 세 호스트의 복구 작업자가 경합해도 주문마다 청구 1건."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    def pipeline(index):
+        host = HOSTS[index % 3]
+        state = _drive_to_ready(api, host, 'capture_reply_lost')
+        state = api.command(host, state, 'claim', pickup_code=state['order']['pickup_code'])
+        assert state['handoff_pending'], '청구 결과가 보류 상태로 남지 않았다'
+        return state
+
+    with ThreadPoolExecutor(6) as pool:
+        pending = list(pool.map(pipeline, range(6)))
+    started = time.monotonic()
+
+    def finish(index):
+        state = api.settle(HOSTS[(index+1) % 3], pending[index], timeout=180)
+        return api.proof(HOSTS[(index+2) % 3], state)
+
+    with ThreadPoolExecutor(6) as pool:
+        proofs = list(pool.map(finish, range(6)))
+    assert all(p['capture_count'] == 1 and p['held_krw'] == 0 for p in proofs), proofs
+    return dict(orders=6, concurrent_pending=len(pending), recovered_s=round(time.monotonic()-started, 1),
+                capture_counts=[p['capture_count'] for p in proofs], held_krw=[p['held_krw'] for p in proofs])
+
+
+def ha08_multihost(cluster, api):
+    """같은 주문의 두 번째 확정을 세 호스트에서 동시에 시도한다: 다른 키 3개 → 청구 1건, 같은 키 3개 → 같은 결과."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    def attempt(args):
+        host, key = args
+        try:
+            return 'ok', base.Api.command(api, host, state, 'claim', request_id=key, pickup_code=state['order']['pickup_code'])
+        except AssertionError as exc:
+            return 'rejected', str(exc)[:160]
+
+    state = _drive_to_ready(api, 'a')
+    with ThreadPoolExecutor(3) as pool:
+        different = list(pool.map(attempt, [(h, uuid4().hex) for h in HOSTS]))
+    final = api.settle('b', api.call('b', '/api/route/journeys/'+state['id']))
+    proof = api.proof('c', final)
+    assert any(kind == 'ok' for kind, _ in different), different
+    # 같은 요청 키를 세 호스트에서 동시에: 모두 같은 원래 결과
+    state = _drive_to_ready(api, 'b')
+    key = uuid4().hex
+    with ThreadPoolExecutor(3) as pool:
+        same = list(pool.map(attempt, [(h, key) for h in HOSTS]))
+    assert all(kind == 'ok' for kind, _ in same), same
+    assert len({json.dumps(result['order'], sort_keys=True) for _, result in same}) == 1, '같은 키의 결과가 다르다'
+    proof_same = api.proof('a', api.settle('c', api.call('c', '/api/route/journeys/'+state['id'])))
+    return dict(different_keys=[kind for kind, _ in different], proof_different_keys=proof,
+                same_key=[kind for kind, _ in same], proof_same_key=proof_same)
+
+
+def ha09_multihost(cluster, api):
+    """다중 탭: 같은 주문 상태에서 세 호스트(호스트마다 2탭)가 서로 다른 키로 같은 전이를 동시에 보낸다. 전이는 한 번만 효력이 있고 끝까지 불변조건을 지킨다."""
+    from concurrent.futures import ThreadPoolExecutor
+    state = api.start('a')
+    oat = next(plan for plan in state['all_plans'] if plan['store_id'] == 'oat')
+
+    def tab(host):
+        try:
+            return 'ok', base.Api.command(api, host, state, 'transfer', request_id=uuid4().hex, quote_id=oat['quote_id'])
+        except AssertionError as exc:
+            return 'rejected', str(exc)[:160]
+
+    with ThreadPoolExecutor(6) as pool:
+        outcomes = list(pool.map(tab, [HOSTS[i % 3] for i in range(6)]))
+    assert any(kind == 'ok' for kind, _ in outcomes), outcomes
+    state = api.settle('b', api.call('b', '/api/route/journeys/'+state['id']))
+    assert state['order']['price'] == 3200
+    minutes = max(0, state['current_plan']['start_at']-state['clock'])
+    if minutes:
+        state = api.command('c', state, 'advance', minutes=minutes)
+    state = api.command('a', state, 'start')
+    state = api.command('b', state, 'advance', minutes=max(0, state['order']['ready_at']-state['clock']))
+    state = api.command('c', state, 'ready')
+    state = api.settle('a', api.command('b', state, 'claim', pickup_code=state['order']['pickup_code']))
+    return dict(tab_outcomes=[kind for kind, _ in outcomes], proof=api.proof('c', state))
+
+
+SCENARIOS = [('HA-07-multihost', ha07_multihost), ('HA-08-multihost', ha08_multihost), ('HA-09-multihost', ha09_multihost),
+             ('WAL-ARCHIVE', wal_archive), ('HA-01', base.ha01), ('HA-02', base.ha02), ('HA-03', base.ha03),
              ('HA-04', base.ha04), ('HA-05', base.ha05), ('HA-06', base.ha06)]
 
 
