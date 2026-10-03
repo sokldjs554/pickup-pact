@@ -11,7 +11,7 @@ on:
       phase:
         description: '실행 단계'
         type: choice
-        options: [preflight, install]
+        options: [preflight, install, deploy]
         default: preflight
 permissions:
   contents: read
@@ -31,7 +31,7 @@ jobs:
           phase="${{ inputs.phase }}"
           # push로 시작되면 저장소의 phase 파일이 단계를 정한다(허용 목록만).
           [ -n "$phase" ] || phase="$(tr -d '[:space:]' < infra/ha/hosts/phase)"
-          case "$phase" in preflight|install) ;; *) echo "허용되지 않은 단계: $phase"; exit 1;; esac
+          case "$phase" in preflight|install|deploy) ;; *) echo "허용되지 않은 단계: $phase"; exit 1;; esac
           echo "name=$phase" >> "$GITHUB_OUTPUT"
       - name: Prepare the SSH key
         env:
@@ -42,8 +42,15 @@ jobs:
           umask 077
           printf '%s\n' "$PACT_HA_SSH_KEY" > "$RUNNER_TEMP/pact-ha-key"
           echo "PACT_HA_SSH_KEY_FILE=$RUNNER_TEMP/pact-ha-key" >> "$GITHUB_ENV"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install runner dependencies
+        run: python -m pip install -q -r requirements-ha.txt
       - name: Run the phase
-        run: python3 scripts/ha_real_hosts.py "${{ steps.phase.outputs.name }}" --output verification/ha-real-hosts/${{ steps.phase.outputs.name }}
+        env:
+          PYTHONPATH: .:services/reconciler
+        run: python scripts/ha_real_hosts.py "${{ steps.phase.outputs.name }}" --output verification/ha-real-hosts/${{ steps.phase.outputs.name }}
       - name: Remove the SSH key
         if: always()
         run: shred -u "$RUNNER_TEMP/pact-ha-key" || rm -f "$RUNNER_TEMP/pact-ha-key"

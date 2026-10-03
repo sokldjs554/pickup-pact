@@ -15,13 +15,14 @@ def _run(*args, cwd):
 
 
 class PrivateAuthority:
-    def __init__(self, root: Path, name: str = 'pickup-test-ca'):
+    def __init__(self, root: Path, name: str = 'pickup-test-ca', days: int = 2):
+        self.days = days
         self.root = Path(root)
         self.root.mkdir(parents=True, exist_ok=True)
         os.chmod(self.root, 0o700)
         self.cert, self.key = self.root/(name+'.crt'), self.root/(name+'.key')
         _run('req', '-x509', '-newkey', 'ec', '-pkeyopt', 'ec_paramgen_curve:P-256', '-nodes',
-             '-keyout', str(self.key), '-out', str(self.cert), '-days', '2', '-subj', '/CN='+name,
+             '-keyout', str(self.key), '-out', str(self.cert), '-days', str(self.days), '-subj', '/CN='+name,
              '-addext', 'basicConstraints=critical,CA:TRUE',
              '-addext', 'keyUsage=critical,keyCertSign,cRLSign',
              '-addext', 'subjectKeyIdentifier=hash', cwd=self.root)
@@ -42,6 +43,6 @@ class PrivateAuthority:
         _run('req', '-newkey', 'ec', '-pkeyopt', 'ec_paramgen_curve:P-256', '-nodes', '-keyout', str(key),
              '-out', str(csr), '-subj', '/CN='+(common_name or name), cwd=self.root)
         _run('x509', '-req', '-in', str(csr), '-CA', str(self.cert), '-CAkey', str(self.key),
-             '-CAcreateserial', '-out', str(cert), '-days', '2', '-extfile', str(extensions), cwd=self.root)
+             '-CAcreateserial', '-out', str(cert), '-days', str(self.days), '-extfile', str(extensions), cwd=self.root)
         os.chmod(key, 0o600)
         return str(cert), str(key)

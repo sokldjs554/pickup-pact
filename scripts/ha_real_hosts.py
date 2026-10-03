@@ -14,6 +14,7 @@ import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT/'scripts'))
 
 
 def load(path: Path) -> dict:
@@ -31,11 +32,20 @@ class Host:
                 '-o', 'ConnectTimeout=20', '-o', 'ServerAliveInterval=15', f"{self.user}@{self.spec['public']}"]
 
     def run(self, command: str, *, timeout=300, check=True) -> subprocess.CompletedProcess:
-        done = subprocess.run(self.ssh_args()+['bash', '-lc', shlex.quote(command)], capture_output=True, text=True, timeout=timeout)
+        done = subprocess.run(self.ssh_args()+['bash', '-lc', shlex.quote(command)], capture_output=True, text=True,
+                              timeout=timeout, stdin=subprocess.DEVNULL)
         if check and done.returncode:
             raise RuntimeError(f'{self.name}: exit {done.returncode}: {done.stderr.strip()[:500]}')
         return done
 
+
+    def run_bytes(self, command: str, data: bytes, *, timeout=300) -> subprocess.CompletedProcess:
+        """표준 입력으로 바이트(비밀값 포함)를 전달한다. 명령행에는 값이 나오지 않는다."""
+        done = subprocess.run(self.ssh_args()+['bash', '-lc', shlex.quote(command)], input=data, capture_output=True, timeout=timeout)
+        done.stdout, done.stderr = done.stdout.decode(errors='replace'), done.stderr.decode(errors='replace')
+        if done.returncode and not command.startswith('sudo -u postgres psql'):
+            raise RuntimeError(f'{self.name}: exit {done.returncode}: {done.stderr.strip()[-500:]}')
+        return done
 
     def run_script(self, script: Path, args: list[str], *, timeout=1500) -> subprocess.CompletedProcess:
         done = subprocess.run(self.ssh_args()+['sudo', 'bash', '-s', '--']+args, input=script.read_text(),
@@ -135,7 +145,7 @@ def install(hosts: list[Host], inventory: dict, out: Path) -> bool:
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('phase', choices=['preflight', 'install'])
+    parser.add_argument('phase', choices=['preflight', 'install', 'deploy'])
     parser.add_argument('--inventory', type=Path, default=ROOT/'infra/ha/hosts/oracle-osaka.json')
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args(argv)
@@ -152,6 +162,15 @@ def main(argv=None) -> int:
         return 0 if preflight(hosts, inventory, args.output) else 1
     if args.phase == 'install':
         return 0 if install(hosts, inventory, args.output) else 1
+    if args.phase == 'deploy':
+        from ha_real_deploy import Deployment
+        try:
+            result = Deployment(hosts, ROOT/'infra/ha/inventory.oracle-osaka.yaml', args.output).run()
+        except BaseException as exc:  # noqa: BLE001
+            print(json.dumps(dict(passed=False, error=f'{type(exc).__name__}: {str(exc)[:800]}'), ensure_ascii=False))
+            return 1
+        print(json.dumps(dict(passed=result['passed'], seconds=result['seconds'], scope=result['scope'])))
+        return 0 if result['passed'] else 1
     return 2
 
 
