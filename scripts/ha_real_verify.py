@@ -65,7 +65,11 @@ def verify(hosts, inventory_path: Path, out: Path, *, only: list[str], repeat: i
         if driver == 'ha_real_dr.py':  # 기본 백업(pg_basebackup)에 필요한 PostgreSQL 17 클라이언트
             backup.run('sudo apt-get install -y -qq postgresql-common gnupg >/dev/null && '
                        'sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y >/dev/null 2>&1 && sudo apt-get update -qq && '
-                       'sudo apt-get install -y -qq --no-install-recommends postgresql-client-17 >/dev/null', timeout=600)
+                       'sudo apt-get install -y -qq --no-install-recommends postgresql-client-17 postgresql-17 >/dev/null && '
+                       # pg_verifybackup은 서버 패키지에 있다. 설치로 생기는 빈 클러스터는 이 호스트에서 쓰지 않으므로 지우고 서비스를 끈다.
+                       'sudo systemctl disable --now postgresql >/dev/null 2>&1; '
+                       '(pg_lsclusters -h | grep -q "^17 main" && sudo pg_dropcluster 17 main --stop) || true; '
+                       'sudo ln -sf /usr/lib/postgresql/17/bin/pg_verifybackup /usr/local/bin/pg_verifybackup', timeout=900)
         backup.run('python3 -m venv /opt/pact-harness/.venv && /opt/pact-harness/.venv/bin/pip install -q --disable-pip-version-check '
                    '-r /opt/pact-harness/requirements-ha.txt', timeout=900)
         # 2. 비공개 자료: 메모리 디스크에만 둔다.
