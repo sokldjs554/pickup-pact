@@ -28,5 +28,6 @@
       "fault_domain": "unspecified"
     }
   ],
-  "description": "Oracle Cloud 무료 체험 크레딧으로 만든 시험 서버 4대(Japan Central, Osaka). 시험 후 삭제한다."
+  "description": "Oracle Cloud 무료 체험 크레딧으로 만든 시험 서버 4대(Japan Central, Osaka). 시험 후 삭제한다.",
+  "private_cidr": "10.0.0.0/24"
 }

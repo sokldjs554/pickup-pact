@@ -11,7 +11,7 @@ on:
       phase:
         description: '실행 단계'
         type: choice
-        options: [preflight]
+        options: [preflight, install]
         default: preflight
 permissions:
   contents: read
@@ -24,6 +24,15 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+      - name: Resolve the phase
+        id: phase
+        run: |
+          set -euo pipefail
+          phase="${{ inputs.phase }}"
+          # push로 시작되면 저장소의 phase 파일이 단계를 정한다(허용 목록만).
+          [ -n "$phase" ] || phase="$(tr -d '[:space:]' < infra/ha/hosts/phase)"
+          case "$phase" in preflight|install) ;; *) echo "허용되지 않은 단계: $phase"; exit 1;; esac
+          echo "name=$phase" >> "$GITHUB_OUTPUT"
       - name: Prepare the SSH key
         env:
           PACT_HA_SSH_KEY: ${{ secrets.PACT_HA_SSH_KEY }}
@@ -33,14 +42,14 @@ jobs:
           umask 077
           printf '%s\n' "$PACT_HA_SSH_KEY" > "$RUNNER_TEMP/pact-ha-key"
           echo "PACT_HA_SSH_KEY_FILE=$RUNNER_TEMP/pact-ha-key" >> "$GITHUB_ENV"
-      - name: Run ${{ inputs.phase || 'preflight' }}
-        run: python3 scripts/ha_real_hosts.py "${{ inputs.phase || 'preflight' }}" --output verification/ha-real-hosts/${{ inputs.phase || 'preflight' }}
+      - name: Run the phase
+        run: python3 scripts/ha_real_hosts.py "${{ steps.phase.outputs.name }}" --output verification/ha-real-hosts/${{ steps.phase.outputs.name }}
       - name: Remove the SSH key
         if: always()
         run: shred -u "$RUNNER_TEMP/pact-ha-key" || rm -f "$RUNNER_TEMP/pact-ha-key"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: ha-real-hosts-${{ inputs.phase || 'preflight' }}
+          name: ha-real-hosts-${{ steps.phase.outputs.name }}
           path: verification/ha-real-hosts
           retention-days: 30

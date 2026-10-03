@@ -37,6 +37,14 @@ class Host:
         return done
 
 
+    def run_script(self, script: Path, args: list[str], *, timeout=1500) -> subprocess.CompletedProcess:
+        done = subprocess.run(self.ssh_args()+['sudo', 'bash', '-s', '--']+args, input=script.read_text(),
+                              capture_output=True, text=True, timeout=timeout)
+        if done.returncode:
+            raise RuntimeError(f'{self.name}: install exit {done.returncode}: {done.stderr.strip()[-1500:]}')
+        return done
+
+
 PROBE = r'''
 set -u
 echo "os=$(. /etc/os-release; echo $PRETTY_NAME)"
@@ -100,9 +108,34 @@ def preflight(hosts: list[Host], inventory: dict, out: Path) -> bool:
     return ok
 
 
+def install(hosts: list[Host], inventory: dict, out: Path) -> bool:
+    from concurrent.futures import ThreadPoolExecutor
+    cidr = inventory['private_cidr']
+    pairs = ','.join(f"{h.spec['private']} {h.name}" for h in hosts)
+    script = ROOT/'infra/ha/hosts/install.sh'
+
+    def one(host):
+        role = 'backup' if host.name == 'pact-backup' else 'db'
+        try:
+            done = host.run_script(script, [role, cidr, pairs])
+            facts = dict(x.split('=', 1) for x in done.stdout.splitlines() if '=' in x)
+            return host.name, dict(passed=True, **facts)
+        except Exception as exc:  # noqa: BLE001 - 서버별 실패를 모두 모은다
+            return host.name, dict(passed=False, error=str(exc)[:1800])
+
+    with ThreadPoolExecutor(max_workers=len(hosts)) as pool:
+        report = dict(pool.map(one, hosts))
+    ok = all(row['passed'] for row in report.values())
+    out.mkdir(parents=True, exist_ok=True)
+    (out/'install.json').write_text(json.dumps(dict(inventory=inventory['name'], scope=inventory['scope'], passed=ok, hosts=report),
+                                                ensure_ascii=False, indent=2))
+    print(json.dumps(dict(passed=ok, hosts=report), ensure_ascii=False, indent=2))
+    return ok
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('phase', choices=['preflight'])
+    parser.add_argument('phase', choices=['preflight', 'install'])
     parser.add_argument('--inventory', type=Path, default=ROOT/'infra/ha/hosts/oracle-osaka.json')
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args(argv)
@@ -117,6 +150,8 @@ def main(argv=None) -> int:
     hosts = [Host(spec, inventory['ssh_user'], key, known) for spec in inventory['hosts']]
     if args.phase == 'preflight':
         return 0 if preflight(hosts, inventory, args.output) else 1
+    if args.phase == 'install':
+        return 0 if install(hosts, inventory, args.output) else 1
     return 2
 
 
