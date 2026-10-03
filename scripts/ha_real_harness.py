@@ -144,9 +144,10 @@ class RealCluster:
         """호스트를 즉시 크래시시키고(sysrq b: 정상 종료·동기화 없음) 다음 부팅에서 DB 역할(etcd, Patroni)이 올라오지 않게 한다.
 
         실제 호스트는 임대 TTL(30초)보다 빨리 돌아오면 장애 조치 없이 다시 리더가 된다. 장시간 정지를 모사하려고
-        etcd와 patroni를 mask해 디스크에 확정한 뒤 크래시시키고, start_host가 시험이 정한 시점에 되돌린다.
+        정지 조건 파일을 디스크에 확정한 뒤 크래시시키고, start_host가 시험이 정한 시점에 파일을 지운다.
         """
-        self.sh(letter, 'sudo systemctl mask etcd patroni >/dev/null 2>&1; sync')
+        # 정지 조건 파일: 있으면 etcd·patroni가 시작되지 않는다(드롭인은 ensure_hold_dropins가 둔다).
+        self.sh(letter, 'sudo touch /etc/pickup-pact/hold && sync')
         subprocess.run(self._ssh(letter)+['sudo', 'sh', '-c', shlex.quote('echo 1 > /proc/sys/kernel/sysrq; echo b > /proc/sysrq-trigger')],
                        capture_output=True, timeout=15, stdin=subprocess.DEVNULL)
 
@@ -163,7 +164,7 @@ class RealCluster:
             time.sleep(4)
         else:
             raise AssertionError(f'pact-{letter}가 재부팅 후 응답하지 않는다')
-        self.sh(letter, 'sudo systemctl unmask etcd patroni', check=False)
+        self.sh(letter, 'sudo rm -f /etc/pickup-pact/hold && sync', check=False)
         for unit in ALL_UNITS:
             self.sh(letter, f'systemctl is-active --quiet {unit} || sudo systemctl start {unit}', timeout=150, check=False)
 
@@ -175,6 +176,21 @@ class RealCluster:
     def heal(self, letter):
         """pact-partition 표시가 붙은 규칙만 제거한다(나머지 규칙은 그대로 다시 적용)."""
         self.sh(letter, "sudo iptables-save | grep -v 'pact-partition' | sudo iptables-restore", check=False)
+
+    def ensure_hold_dropins(self):
+        """호스트 정지 조건 드롭인: /etc/pickup-pact/hold 파일이 있으면 etcd·patroni 시작을 건너뛴다."""
+        for letter in HOSTS:
+            self.sh(letter, "sudo rm -f /etc/pickup-pact/hold; for u in etcd patroni; do sudo mkdir -p /etc/systemd/system/$u.service.d && "
+                            "printf '[Unit]\\nConditionPathExists=!/etc/pickup-pact/hold\\n' | sudo tee /etc/systemd/system/$u.service.d/hold.conf >/dev/null; done; "
+                            "sudo systemctl daemon-reload && sync")
+
+    def remove_hold_dropins(self):
+        for letter in HOSTS:
+            try:
+                self.sh(letter, 'sudo rm -f /etc/pickup-pact/hold /etc/systemd/system/etcd.service.d/hold.conf '
+                                '/etc/systemd/system/patroni.service.d/hold.conf && sudo systemctl daemon-reload', check=False)
+            except Exception:  # noqa: BLE001
+                pass
 
     def ensure_units(self):
         """멈춘 유닛이 있으면 시작한다(앞선 시험의 장애가 남지 않게)."""
@@ -239,6 +255,7 @@ def main():
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     cluster = RealCluster(args.work)
+    cluster.ensure_hold_dropins()
     api = RealApi(cluster)
     report = dict(scope=SCOPE, timings='시험 환경 측정값이며 운영 RTO/RPO가 아니다',
                   fault_injection={'host_failure': 'sysrq b 즉시 재부팅(전원 차단과 같은 효과)',
@@ -271,6 +288,7 @@ def main():
                 print(json.dumps({'repeat': number, 'scenario': name, 'passed': row['passed'], 'elapsed_s': row['elapsed_s']}), flush=True)
     finally:
         cluster.clear_faults()
+        cluster.remove_hold_dropins()
     report['passed'] = failures == 0
     (args.output/'results.json').write_text(json.dumps(report, ensure_ascii=False, indent=2))
     print(json.dumps({'passed': report['passed'], 'failures': failures, 'scope': SCOPE}), flush=True)

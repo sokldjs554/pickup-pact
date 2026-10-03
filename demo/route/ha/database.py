@@ -18,6 +18,13 @@ def transaction_lock(db, namespace: str, identity: str) -> None:
 
 
 class PostgresDatabase:
+    # A network partition drops packets silently, so a connection to the cut-off leader neither fails nor answers
+    # (the server-side statement_timeout cannot help a client that never hears back). Detect it on the client:
+    # keepalive probes for an idle connection and tcp_user_timeout for one with unacknowledged data. Worst case
+    # about 10 seconds, after which the pool reconnects through the multi-host DSN to the new leader.
+    TCP_LIVENESS={'keepalives':1,'keepalives_idle':5,'keepalives_interval':2,'keepalives_count':3,
+                  'tcp_user_timeout':10000}
+
     def __init__(self, dsn: str, *, schema: str, maximum_connections: int=8, runtime_guard=None):
         if (not isinstance(schema,str) or not re.fullmatch(r'[a-z][a-z0-9_]{0,47}',schema)
                 or schema=='public' or schema.startswith('pg_')):
@@ -38,7 +45,8 @@ class PostgresDatabase:
         self._pool=ConnectionPool(dsn,min_size=1,max_size=maximum_connections,
             open=False,timeout=5,max_waiting=64,max_lifetime=120,
             kwargs={'autocommit':True,'row_factory':dict_row,'connect_timeout':3,
-                    'target_session_attrs':'read-write','application_name':'pickup-native-storage'},
+                    'target_session_attrs':'read-write','application_name':'pickup-native-storage',
+                    **self.TCP_LIVENESS},
             check=self._check)
         try:
             self._pool.open(wait=True,timeout=8)

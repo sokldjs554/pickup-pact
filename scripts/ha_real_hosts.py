@@ -195,10 +195,16 @@ def refresh_units(hosts: list[Host], out: Path) -> bool:
             info.size, info.mode = len(raw), 0o644
             archive.addfile(info, io.BytesIO(raw))
     report = {}
+    code = subprocess.run(['git', 'archive', '--format=tar', 'HEAD'], cwd=ROOT, check=True, capture_output=True).stdout
+    services = ['pickup-merchant', 'pickup-order-notification', 'pickup-payment', 'pickup-order-app', 'pickup-order-worker']
     units = ['etcd', 'patroni', 'pickup-merchant', 'pickup-order-notification', 'pickup-payment', 'pickup-order-app', 'pickup-order-worker']
     for host in [h for h in hosts if h.name != 'pact-backup']:
         host.run_bytes('sudo tar -xp -C /', buffer.getvalue())
         host.run('sudo systemctl daemon-reload')
+        # 앱 코드를 현재 커밋으로 갱신하고 서비스만 재시작한다(DB·etcd는 건드리지 않는다). 호스트를 하나씩 해서 서비스가 계속 남는다.
+        host.run_bytes('sudo tar -x -C /opt/pickup-pact', code)
+        host.run('sudo systemctl restart '+' '.join(services), timeout=240)
+        time.sleep(8)
         started = []
         for unit in units:
             if host.run(f'systemctl is-active --quiet {unit}', check=False).returncode:
