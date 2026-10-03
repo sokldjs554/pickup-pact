@@ -166,6 +166,8 @@ done
 echo "== boot"; uptime -s; ls -l /dev/watchdog 2>&1 | cut -c1-80; lsmod | grep -c softdog
 echo "== patroni state"; systemctl show patroni -p ActiveState -p SubState -p Result -p ExecMainStatus | tr '\n' ' '; echo
 echo "== patroni journal"; sudo journalctl -u patroni --no-pager -b -n 14 -o cat 2>&1 | cut -c1-300
+echo "== patroni last"; sudo journalctl -u patroni --no-pager -n 25 -o cat 2>&1 | cut -c1-260
+echo "== postgres log"; sudo sh -c 'ls -t /var/lib/postgresql/17/pickup/log/* 2>/dev/null | head -1 | xargs -r tail -n 25' 2>&1 | cut -c1-260
 echo "== softdog boot config"; cat /etc/modules-load.d/softdog.conf 2>&1 | head -2; sudo journalctl -b -u systemd-modules-load --no-pager -o cat 2>&1 | tail -4 | cut -c1-200
 echo "== authorized_keys harness lines"; grep -c pact-harness ~/.ssh/authorized_keys
 echo "== etcd env"; grep -E "ETCD_(NAME|LISTEN|INITIAL_ADVERTISE)" /etc/pickup-pact/etcd.env
