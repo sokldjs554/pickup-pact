@@ -107,6 +107,14 @@ def verify(hosts, inventory_path: Path, out: Path, *, only: list[str], repeat: i
         log_lines = backup.run(f'cat {WORK}/log.txt', check=False, timeout=60).stdout.splitlines()
         (out/'harness.log').write_text('\n'.join(log_lines)+'\n')
         passed = bool(json.loads(results).get('passed'))
+        post = {}
+        for host in db:
+            try:
+                post[host.name] = host.run(f"echo keys={{$(grep -c {marker} ~/.ssh/authorized_keys)}} boot=$(uptime -s) "
+                                           f"mtime=$(stat -c %y ~/.ssh/authorized_keys | cut -c1-19)", check=False, timeout=40).stdout.strip()
+            except Exception as exc:  # noqa: BLE001
+                post[host.name] = f'unreachable: {type(exc).__name__}'
+        (out/'post-state.json').write_text(json.dumps(post, ensure_ascii=False, indent=2))
     finally:
         # 5. 정리: 임시 키 제거, 분리 규칙 제거, 비공개 자료 삭제 (서버가 재부팅 중이면 기다린다).
         for host in db:
