@@ -357,8 +357,8 @@ def ha10(cluster, api):
         probe = EntryProbe(entry)
         probe.start()
         time.sleep(2)
-        began = time.monotonic()
         inject(letter)
+        began = time.monotonic()  # 장애가 실제로 적용된 뒤부터 센다(적용 직전에 시작한 요청을 중단 뒤로 세지 않는다)
         try:
             time.sleep(3)  # 헬스체크·연결 실패가 반영되도록
             order = entry_api.finish('a', 'b', entry_api.start('a'))
@@ -381,7 +381,7 @@ def ha10(cluster, api):
         assert back is not None, f'{label}: 중단했던 진입점이 돌아오지 않았다'
         time.sleep(3)
         probe.stop()
-        during = probe.window(began+1, ended)
+        during = probe.window(began+.5, ended)
         after = probe.window(ended+back+1, time.monotonic())
         summary = _summarize(during)
         assert summary['failed'] == 0, f'{label}: 공개 주소가 {summary["failed"]}번 응답하지 못했다'
