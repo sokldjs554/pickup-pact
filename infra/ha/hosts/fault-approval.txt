@@ -1,0 +1,5 @@
+approved_by: sokldjs
+approved_on: 2026-10-03
+confirmed_in: 채팅("3회 반복 한번에 하자"), 직전 안내에서 영향 범위를 확인한 뒤의 응답
+scope: HA-04(DB 리더 호스트 즉시 재부팅), HA-05(대기 DB 중단), HA-06(리더 호스트 망 분리)
+targets: pact-a, pact-b, pact-c (승인된 시험 서버)에서만, 2026-10-03~2026-10-05 안, 3회 반복

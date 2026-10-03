@@ -51,6 +51,17 @@ jobs:
         env:
           PYTHONPATH: .:services/reconciler
         run: python scripts/ha_real_hosts.py "${{ steps.phase.outputs.name }}" --output verification/ha-real-hosts/${{ steps.phase.outputs.name }}
+      - name: Summarize results as annotations
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import json, glob
+          for path in sorted(glob.glob('verification/ha-real-hosts/*/results.json')):
+              data = json.load(open(path))
+              print(f"::notice title=overall passed={data.get('passed')}::" + json.dumps({k: v for k, v in data.items() if k != 'repetitions'}, ensure_ascii=False))
+              for rep in data.get('repetitions', []):
+                  print(f"::notice title=repeat {rep['repeat']}::" + json.dumps(rep, ensure_ascii=False, default=str)[:60000].replace('%', '%25').replace('\n', '%0A'))
+          PY
       - name: Remove the SSH key
         if: always()
         run: shred -u "$RUNNER_TEMP/pact-ha-key" || rm -f "$RUNNER_TEMP/pact-ha-key"

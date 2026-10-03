@@ -199,7 +199,7 @@ def main(argv=None) -> int:
         faults = args.phase == 'verify-faults'
         try:
             ok = verify(hosts, ROOT/'infra/ha/inventory.oracle-osaka.yaml', args.output,
-                        only=FAULTS if faults else BASIC, repeat=int(os.environ.get('PACT_REPEAT', '1')), faults=faults)
+                        only=FAULTS if faults else BASIC, repeat=int(os.environ.get('PACT_REPEAT') or (ROOT/'infra/ha/hosts/repeat.txt').read_text().strip() or 1), faults=faults)
         except BaseException as exc:  # noqa: BLE001
             print(json.dumps(dict(passed=False, error=f'{type(exc).__name__}: {str(exc)[:800]}'), ensure_ascii=False))
             return 1
