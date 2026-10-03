@@ -1,0 +1,42 @@
+name: ha-real-hosts
+# 승인된 Oracle 시험 서버(infra/ha/hosts/oracle-osaka.json)에만 SSH로 접속한다.
+# 수동 실행 전용. 개인키는 저장소 Secret PACT_HA_SSH_KEY에서만 읽는다.
+on:
+  workflow_dispatch:
+    inputs:
+      phase:
+        description: '실행 단계'
+        type: choice
+        options: [preflight]
+        default: preflight
+permissions:
+  contents: read
+concurrency:
+  group: ha-real-hosts
+  cancel-in-progress: false
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare the SSH key
+        env:
+          PACT_HA_SSH_KEY: ${{ secrets.PACT_HA_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$PACT_HA_SSH_KEY" || { echo "PACT_HA_SSH_KEY secret이 비어 있다"; exit 1; }
+          umask 077
+          printf '%s\n' "$PACT_HA_SSH_KEY" > "$RUNNER_TEMP/pact-ha-key"
+          echo "PACT_HA_SSH_KEY_FILE=$RUNNER_TEMP/pact-ha-key" >> "$GITHUB_ENV"
+      - name: Run ${{ inputs.phase }}
+        run: python3 scripts/ha_real_hosts.py "${{ inputs.phase }}" --output verification/ha-real-hosts/${{ inputs.phase }}
+      - name: Remove the SSH key
+        if: always()
+        run: shred -u "$RUNNER_TEMP/pact-ha-key" || rm -f "$RUNNER_TEMP/pact-ha-key"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ha-real-hosts-${{ inputs.phase }}
+          path: verification/ha-real-hosts
+          retention-days: 30

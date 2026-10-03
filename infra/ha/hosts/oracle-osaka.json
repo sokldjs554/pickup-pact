@@ -1,0 +1,11 @@
+{
+  "name": "pact-ha-oracle-osaka",
+  "scope": "oracle_single_ad_fault_domains",
+  "ssh_user": "ubuntu",
+  "hosts": [
+    {"name": "pact-a", "public": "161.33.39.79", "private": "10.0.0.11", "fault_domain": "FAULT-DOMAIN-1"},
+    {"name": "pact-b", "public": "138.2.57.141", "private": "10.0.0.12", "fault_domain": "FAULT-DOMAIN-2"},
+    {"name": "pact-c", "public": "152.69.198.99", "private": "10.0.0.13", "fault_domain": "FAULT-DOMAIN-3"},
+    {"name": "pact-backup", "public": "161.33.47.241", "private": "10.0.0.20", "fault_domain": "unspecified"}
+  ]
+}
