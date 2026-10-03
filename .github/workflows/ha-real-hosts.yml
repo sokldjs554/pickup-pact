@@ -5,7 +5,7 @@ on:
   push:
     # push로는 읽기 전용 preflight만 실행된다. 설치·시험 단계는 수동 실행(workflow_dispatch) 전용.
     branches: [feat/ha-dr-foundation-20261002]
-    paths: ['.github/workflows/ha-real-hosts.yml', 'infra/ha/hosts/**']
+    paths: ['.github/workflows/ha-real-hosts.yml', 'infra/ha/hosts/**', 'scripts/ha_real_*.py']
   workflow_dispatch:
     inputs:
       phase:
