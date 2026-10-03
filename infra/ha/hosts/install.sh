@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 시험 서버에 패키지·사용자·방화벽·watchdog 권한을 설치한다. 인증서·비밀번호·설정은 다루지 않는다(deploy 단계).
-# 사용: sudo bash -s -- <db|backup> <사설망 CIDR> <"ip name,ip name,...">
+# 사용: sudo bash -s -- <db|backup> <사설망 CIDR> <"ip=name,ip=name,...">
 # 같은 서버에 다시 실행해도 결과가 같다. 끝에 key=value 줄로 설치된 버전을 출력한다.
 set -euo pipefail
 ROLE="$1"; CIDR="$2"; HOSTS="$3"
@@ -21,7 +21,7 @@ sed -i '/# pickup-pact-begin/,/# pickup-pact-end/d' /etc/hosts
 {
   echo '# pickup-pact-begin'
   IFS=, read -ra pairs <<< "$HOSTS"
-  for pair in "${pairs[@]}"; do set -- $pair; echo "$1 $2.pact.internal $2"; done
+  for pair in "${pairs[@]}"; do echo "${pair%%=*} ${pair##*=}.pact.internal ${pair##*=}"; done
   echo '# pickup-pact-end'
 } >> /etc/hosts
 

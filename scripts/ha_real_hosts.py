@@ -111,7 +111,7 @@ def preflight(hosts: list[Host], inventory: dict, out: Path) -> bool:
 def install(hosts: list[Host], inventory: dict, out: Path) -> bool:
     from concurrent.futures import ThreadPoolExecutor
     cidr = inventory['private_cidr']
-    pairs = ','.join(f"{h.spec['private']} {h.name}" for h in hosts)
+    pairs = ','.join(f"{h.spec['private']}={h.name}" for h in hosts)
     script = ROOT/'infra/ha/hosts/install.sh'
 
     def one(host):
