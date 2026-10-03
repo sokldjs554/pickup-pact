@@ -143,9 +143,28 @@ def install(hosts: list[Host], inventory: dict, out: Path) -> bool:
     return ok
 
 
+DIAGNOSE = r'''
+echo "== units"; systemctl is-active etcd patroni 2>&1 | tr '\n' ' '; echo
+echo "== etcd journal"; sudo journalctl -u etcd --no-pager -n 25 -o cat 2>&1 | cut -c1-260
+echo "== etcd files"; sudo ls -l /etc/pickup-pact/tls | awk '{print $1, $3, $9}'
+echo "== listening"; sudo ss -ltn | awk '$4 ~ /:(2379|2380|5432|8008)$/ {print $4}' | sort | tr '\n' ' '; echo
+echo "== firewall"; sudo iptables -S INPUT | head -8
+echo "== hosts"; grep -A5 pickup-pact-begin /etc/hosts
+'''
+
+
+def diagnose(hosts: list[Host], out: Path) -> bool:
+    report = {h.name: h.run(DIAGNOSE, check=False, timeout=120).stdout for h in hosts if h.name != 'pact-backup'}
+    out.mkdir(parents=True, exist_ok=True)
+    (out/'diagnose.json').write_text(json.dumps(report, ensure_ascii=False, indent=2))
+    for name, text in report.items():
+        print(f'##### {name}\n{text}')
+    return True
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('phase', choices=['preflight', 'install', 'deploy'])
+    parser.add_argument('phase', choices=['preflight', 'install', 'deploy', 'diagnose'])
     parser.add_argument('--inventory', type=Path, default=ROOT/'infra/ha/hosts/oracle-osaka.json')
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args(argv)
@@ -162,6 +181,8 @@ def main(argv=None) -> int:
         return 0 if preflight(hosts, inventory, args.output) else 1
     if args.phase == 'install':
         return 0 if install(hosts, inventory, args.output) else 1
+    if args.phase == 'diagnose':
+        return 0 if diagnose(hosts, args.output) else 1
     if args.phase == 'deploy':
         from ha_real_deploy import Deployment
         try:
