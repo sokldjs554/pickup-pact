@@ -271,11 +271,14 @@ ENTRY_HOSTS = {'10.0.0.11': 'a', '10.0.0.12': 'b'}
 class EntryClient:
     """공개 주소(다중 A 레코드)를 쓰는 클라이언트. 브라우저·curl처럼 주소를 섞어 시도하고, 연결이 안 되면 다음 주소로 넘어간다."""
 
-    def __init__(self, trust: Path, connect_timeout=3.0):
+    def __init__(self, trust: Path, connect_timeout=3.0, *, keepalive=False, read_timeout=20.0):
         import httpx
         context = ssl.create_default_context(cafile=str(trust))
-        self.http = httpx.Client(verify=context, trust_env=False, follow_redirects=False,
-                                 timeout=httpx.Timeout(20.0, connect=connect_timeout))
+        # 기본은 요청마다 새 연결(키프얼라이브 끔): 이미 열려 있던 연결은 서버가 조용히 사라지면 읽기 시간 초과까지 멈추므로,
+        # "새 요청이 남은 진입점으로 가는지"를 보려면 새 연결로 판정한다. 재사용 연결의 노출은 별도로 측정한다.
+        limits = httpx.Limits(max_keepalive_connections=20 if keepalive else 0)
+        self.http = httpx.Client(verify=context, trust_env=False, follow_redirects=False, limits=limits,
+                                 timeout=httpx.Timeout(read_timeout, connect=connect_timeout))
         self.httpx = httpx
 
     def request(self, method, path, body=None, *, only=None):
@@ -406,9 +409,31 @@ def ha10(cluster, api):
     def undrop_443(letter):
         cluster.sh(letter, "sudo iptables-save | grep -v 'pact-entry-drop' | sudo iptables-restore", check=False)
 
+    def keepalive_exposure():
+        """이미 열려 있던(재사용) 연결은 진입점이 조용히 사라지면 새 연결처럼 다른 주소로 넘어가지 못한다. 그 노출 시간을 잰다."""
+        warm = EntryClient(trust, keepalive=True, read_timeout=5.0)
+        _, response = warm.request('GET', '/ready', only='10.0.0.12')
+        assert response.status_code == 200
+        drop_443('b')
+        try:
+            began = time.monotonic()
+            try:
+                warm.request('GET', '/ready', only='10.0.0.12')
+                outcome = 'answered'
+            except Exception as exc:  # noqa: BLE001
+                outcome = type(exc).__name__
+            stuck_ms = round((time.monotonic()-began)*1000)
+            _, fresh = entry.request('GET', '/ready')
+        finally:
+            undrop_443('b')
+        return dict(reused_connection_outcome=outcome, reused_connection_stuck_ms=stuck_ms, new_request_status=fresh.status_code,
+                    note='재사용 연결은 클라이언트의 읽기 시간 초과까지 멈춘다. 새 요청은 남은 진입점으로 간다.')
+
     try:
         report['service_stop_pact_a'] = outage('service_stop', '10.0.0.11', stop_service, start_service)
         report['silent_drop_pact_b'] = outage('silent_drop', '10.0.0.12', drop_443, undrop_443)
+        time.sleep(1)
+        report['keepalive_exposure'] = keepalive_exposure()
     finally:
         for letter in ('a', 'b'):
             undrop_443(letter)
