@@ -283,9 +283,84 @@ def reboot_probe(hosts: list[Host], out: Path) -> bool:
     return came_back
 
 
+NATIVE_GROUPS = {
+    'HA-07': ['tests/ha/test_native_fences.py::test_late_owner_cannot_overwrite_takeover_and_does_not_hold_order_lock',
+              'tests/ha/test_payment_postgres.py::test_outbox_lease_takeover_fences_a_late_success',
+              'tests/ha/test_payment_postgres.py::test_outbox_workers_cannot_claim_same_event',
+              'tests/ha/test_operation_store.py',
+              'tests/ha/test_native_journey.py::test_other_instance_recovers_unknown_payment_without_new_key'],
+    'HA-08': ['tests/ha/test_payment_postgres.py::test_simultaneous_same_key_receives_one_original_receipt',
+              'tests/ha/test_payment_postgres.py::test_different_keys_cannot_capture_order_twice',
+              'tests/ha/test_payment_postgres.py::test_competing_authorizations_for_order_cannot_both_capture',
+              'tests/ha/test_payment_postgres.py::test_credit_limit_race_is_guarded_across_different_orders',
+              'tests/ha/test_payment_postgres.py::test_voided_authorization_cannot_be_revived',
+              'tests/ha/test_payment_postgres.py::test_same_key_different_payload_is_conflict_without_effect'],
+    'HA-09': ['tests/ha/test_native_fences.py::test_review_required_is_readable_but_never_automatically_claimed',
+              'tests/ha/test_native_fences.py::test_payment_notification_can_wake_but_never_apply_order_money',
+              'tests/ha/test_native_fences.py::test_capacity_guest_control_replays_across_apps',
+              'tests/ha/test_native_journey.py::test_two_apps_share_same_request_order_and_final_proof',
+              'tests/ha/test_native_journey.py::test_concurrent_same_reservation_across_instances_is_one_order',
+              'tests/ha/test_native_journey.py::test_decline_and_rejected_transfer_preserve_benefits',
+              'tests/ha/test_native_journey.py::test_merchant_capacity_is_shared_and_receipts_are_fenced',
+              'tests/ha/test_native_journey.py::test_merchant_abort_tombstone_rejects_late_hold',
+              'tests/ha/test_payment_postgres.py::test_replay_after_reply_is_discarded_preserves_transaction_and_fault',
+              'tests/ha/test_payment_postgres.py::test_locked_wallet_does_not_block_another_world',
+              'tests/ha/test_payment_postgres.py::test_decline_does_not_create_authorization_or_outbox'],
+}
+
+
+def native_suite(hosts: list[Host], out: Path, repeat: int) -> bool:
+    """HA-07~09의 불변조건 시험 묶음을 실서버 PostgreSQL 17(현재 리더)에서 실행한다.
+
+    라이브 앱 데이터베이스는 건드리지 않는다. 이 시험 전용 데이터베이스를 만들어 쓰고 끝나면 지운다.
+    시험 프로세스는 리더 서버 한 대 안에서 도는 동시 경합이며, 여러 호스트가 동시에 경합하는 증거는 아니다.
+    """
+    import io
+    members = json.loads(hosts[0].run('sudo -u postgres /opt/patroni/bin/patronictl -c /etc/pickup-pact/patroni.yml list -f json', timeout=60).stdout)
+    leader_name = next(m['Member'] for m in members if m['Role'] == 'Leader')
+    leader = next(h for h in hosts if h.name == leader_name)
+    code = subprocess.run(['git', 'archive', '--format=tar', 'HEAD'], cwd=ROOT, check=True, capture_output=True).stdout
+    database = 'pact_ha_native_test'
+    report = dict(host=leader_name, database=database, scope='oracle_single_ad_fault_domains', groups={})
+    ok = True
+    try:
+        leader.run('sudo rm -rf /opt/pact-native-test && sudo mkdir -p /opt/pact-native-test')
+        leader.run_bytes('sudo tar -x -C /opt/pact-native-test', code)
+        leader.run(f'sudo -u postgres psql -X -q -c "DROP DATABASE IF EXISTS {database} WITH (FORCE)" -c "CREATE DATABASE {database}"')
+        report['postgres'] = leader.run('sudo -u postgres psql -X -At -c "select version()"').stdout.strip()[:80]
+        for group, tests in NATIVE_GROUPS.items():
+            runs = []
+            for number in range(1, repeat+1):
+                command = ("cd /opt/pact-native-test && sudo -u postgres env PYTHONDONTWRITEBYTECODE=1 PICKUP_HA_TEST=1 "
+                           f"PICKUP_PG_TEST_DSN='host=/var/run/postgresql dbname={database} user=postgres' "
+                           "PYTHONPATH=.:services/reconciler:tests/ha /opt/pickup-pact/.venv/bin/python -m pytest -q -p no:cacheprovider -rA "
+                           + ' '.join(tests) + ' 2>&1 | tail -n 80')
+                done = leader.run(command, check=False, timeout=1500)
+                lines = done.stdout.splitlines()
+                passed = [l.split(' ', 1)[1].split('::')[-1] for l in lines if l.startswith('PASSED ')]
+                failed = [l for l in lines if l.startswith(('FAILED ', 'ERROR '))]
+                skipped = [l for l in lines if l.startswith('SKIPPED ')]
+                summary = next((l for l in reversed(lines) if ' passed' in l or ' failed' in l or ' error' in l), '')
+                runs.append(dict(run=number, passed=len(passed), failed=failed[:5], skipped=len(skipped), summary=summary.strip('= ')))
+                ok &= not failed and not skipped and bool(passed)
+                if number == 1:
+                    report['groups'].setdefault(group, {})['tests'] = sorted(set(passed))
+            report['groups'][group]['runs'] = runs
+    finally:
+        try:
+            leader.run(f'sudo -u postgres psql -X -q -c "DROP DATABASE IF EXISTS {database} WITH (FORCE)"; sudo rm -rf /opt/pact-native-test', check=False)
+        except Exception:  # noqa: BLE001
+            pass
+    report['passed'] = ok
+    out.mkdir(parents=True, exist_ok=True)
+    (out/'native-suite.json').write_text(json.dumps(report, ensure_ascii=False, indent=2))
+    print(json.dumps(report, ensure_ascii=False))
+    return ok
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('phase', choices=['preflight', 'install', 'deploy', 'diagnose', 'verify-basic', 'verify-faults', 'refresh-units', 'reboot-probe', 'dr-backup', 'dr-restore'])
+    parser.add_argument('phase', choices=['preflight', 'install', 'deploy', 'diagnose', 'verify-basic', 'verify-faults', 'refresh-units', 'reboot-probe', 'dr-backup', 'dr-restore', 'native-suite'])
     parser.add_argument('--inventory', type=Path, default=ROOT/'infra/ha/hosts/oracle-osaka.json')
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args(argv)
@@ -324,6 +399,8 @@ def main(argv=None) -> int:
             return 1
         print(json.dumps(dict(passed=ok)))
         return 0 if ok else 1
+    if args.phase == 'native-suite':
+        return 0 if native_suite(hosts, args.output, int((ROOT/'infra/ha/hosts/repeat.txt').read_text().strip() or 1)) else 1
     if args.phase == 'reboot-probe':
         return 0 if reboot_probe(hosts, args.output) else 1
     if args.phase == 'refresh-units':
