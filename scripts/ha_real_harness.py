@@ -385,7 +385,10 @@ def ha10(cluster, api):
         after = probe.window(ended+back+1, time.monotonic())
         summary = _summarize(during)
         assert summary['failed'] == 0, f'{label}: 공개 주소가 {summary["failed"]}번 응답하지 못했다'
-        assert address not in summary['served_by'], f'{label}: 중단한 진입점이 응답했다'
+        # 복구 직전 4초(연결 시간 초과 3초 + 여유)에 시작해 연결을 기다리던 요청은 복구 뒤 SYN 재전송으로 연결될 수 있어 판정에서 뺀다.
+        settled = _summarize(probe.window(began+.5, ended-4))
+        assert address not in settled['served_by'], f'{label}: 중단한 진입점이 응답했다'
+        summary['settled_requests'] = settled['requests']
         both = sorted({e['address'] for e in after if e['ok']})
         assert both == sorted(ENTRY_ADDRESSES), f'{label}: 복귀 뒤 두 진입점이 함께 서비스하지 않는다: {both}'
         return dict(stopped=f'pact-{letter}', during_outage=summary, order_during_outage=order, entry_back_after_s=back,
