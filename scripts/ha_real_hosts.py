@@ -237,9 +237,47 @@ def refresh_units(hosts: list[Host], out: Path) -> bool:
     return ok
 
 
+def reboot_probe(hosts: list[Host], out: Path) -> bool:
+    """대기 노드 한 대를 즉시 재부팅(sysrq b)해서, 등록한 SSH 키가 재부팅 뒤에도 남는지 확인한다."""
+    approval = ROOT/'infra/ha/hosts/fault-approval.txt'
+    if not approval.is_file() or 'approved_by: sokldjs' not in approval.read_text():
+        raise SystemExit('소유자 확인 기록이 필요하다')
+    members = json.loads(hosts[0].run('sudo -u postgres /opt/patroni/bin/patronictl -c /etc/pickup-pact/patroni.yml list -f json', timeout=60).stdout)
+    target_name = next(m['Member'] for m in members if m['Role'] == 'Replica')
+    target = next(h for h in hosts if h.name == target_name)
+    marker = 'pact-probe-'+str(int(time.time()))
+    entry = f'from="10.0.0.20" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPROBEPROBEPROBEPROBEPROBEPROBEPROBEPROBEPR {marker}'
+    facts = {'target': target_name}
+    target.run(f"echo '{entry}' >> ~/.ssh/authorized_keys && sync")
+    facts['before'] = target.run(f"grep -c {marker} ~/.ssh/authorized_keys; stat -c '%y %s' ~/.ssh/authorized_keys; uptime -s").stdout.split('\n')
+    subprocess.run(target.ssh_args()+['sudo', 'sh', '-c', shlex.quote('echo 1 > /proc/sys/kernel/sysrq; echo b > /proc/sysrq-trigger')],
+                   capture_output=True, timeout=20, stdin=subprocess.DEVNULL)
+    deadline = time.monotonic()+420
+    came_back = False
+    time.sleep(20)
+    while time.monotonic() < deadline:
+        try:
+            if target.run('true', check=False, timeout=15).returncode == 0:
+                came_back = True
+                break
+        except subprocess.TimeoutExpired:
+            pass
+        time.sleep(5)
+    facts['came_back'] = came_back
+    if came_back:
+        facts['after'] = target.run(f"grep -c {marker} ~/.ssh/authorized_keys; stat -c '%y %s' ~/.ssh/authorized_keys; uptime -s; wc -l < ~/.ssh/authorized_keys; "
+                                    "cloud-init status 2>&1 | head -2; sudo journalctl -b --no-pager -o cat 2>/dev/null | grep -i -E 'authorized|ssh key|ssh_authorized' | tail -5 | cut -c1-200; "
+                                    "ls -l /dev/watchdog 2>&1 | cut -c1-60; systemctl is-active patroni etcd", check=False).stdout.split('\n')
+        target.run(f"sed -i '/{marker}/d' ~/.ssh/authorized_keys", check=False)
+    out.mkdir(parents=True, exist_ok=True)
+    (out/'reboot-probe.json').write_text(json.dumps(facts, ensure_ascii=False, indent=2))
+    print(json.dumps(facts, ensure_ascii=False))
+    return came_back
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('phase', choices=['preflight', 'install', 'deploy', 'diagnose', 'verify-basic', 'verify-faults', 'refresh-units'])
+    parser.add_argument('phase', choices=['preflight', 'install', 'deploy', 'diagnose', 'verify-basic', 'verify-faults', 'refresh-units', 'reboot-probe'])
     parser.add_argument('--inventory', type=Path, default=ROOT/'infra/ha/hosts/oracle-osaka.json')
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args(argv)
@@ -267,6 +305,8 @@ def main(argv=None) -> int:
             return 1
         print(json.dumps(dict(passed=ok)))
         return 0 if ok else 1
+    if args.phase == 'reboot-probe':
+        return 0 if reboot_probe(hosts, args.output) else 1
     if args.phase == 'refresh-units':
         return 0 if refresh_units(hosts, args.output) else 1
     if args.phase == 'diagnose':
