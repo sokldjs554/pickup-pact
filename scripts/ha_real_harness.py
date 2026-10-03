@@ -141,13 +141,19 @@ class RealCluster:
         self.sh(letter, f'sudo systemctl start {UNITS[part]}', timeout=120)
 
     def kill_host(self, letter):
-        """커널 즉시 재부팅(sysrq b): 정상 종료·디스크 동기화 없이 호스트가 멈춘다."""
+        """호스트를 즉시 크래시시키고(sysrq b: 정상 종료·동기화 없음) 다음 부팅에서 DB 역할(etcd, Patroni)이 올라오지 않게 한다.
+
+        실제 호스트는 임대 TTL(30초)보다 빨리 돌아오면 장애 조치 없이 다시 리더가 된다. 장시간 정지를 모사하려고
+        etcd와 patroni를 mask해 디스크에 확정한 뒤 크래시시키고, start_host가 시험이 정한 시점에 되돌린다.
+        """
+        self.sh(letter, 'sudo systemctl mask etcd patroni >/dev/null 2>&1; sync')
         subprocess.run(self._ssh(letter)+['sudo', 'sh', '-c', shlex.quote('echo 1 > /proc/sys/kernel/sysrq; echo b > /proc/sysrq-trigger')],
                        capture_output=True, timeout=15, stdin=subprocess.DEVNULL)
 
     def start_host(self, letter, timeout=420):
-        """재부팅한 호스트가 SSH에 응답하고 유닛이 모두 올라올 때까지 기다린다(자동 시작이 안 되면 시작)."""
+        """재부팅한 호스트가 SSH에 응답할 때까지 기다린 뒤 DB 역할을 되돌리고 유닛을 시작한다."""
         deadline = time.monotonic()+timeout
+        time.sleep(15)  # 크래시가 반영되기 전에 응답하는 옛 연결을 건너뛴다
         while time.monotonic() < deadline:
             try:
                 if self.sh(letter, 'true', timeout=12, check=False).returncode == 0:
@@ -157,6 +163,7 @@ class RealCluster:
             time.sleep(4)
         else:
             raise AssertionError(f'pact-{letter}가 재부팅 후 응답하지 않는다')
+        self.sh(letter, 'sudo systemctl unmask etcd patroni', check=False)
         for unit in ALL_UNITS:
             self.sh(letter, f'systemctl is-active --quiet {unit} || sudo systemctl start {unit}', timeout=150, check=False)
 
@@ -189,6 +196,13 @@ class RealCluster:
         leader = self.leader()
         done = self.sh(leader, f'sudo -u postgres psql -X -q -At -v ON_ERROR_STOP=1 -c {shlex.quote(sql)}', timeout=60)
         return done.stdout.strip()
+
+
+class RealApi(base.Api):
+    """실서버 장애 조치(약 45초 이상) 동안 주문 복구를 기다릴 수 있도록 대기 시간을 늘린다."""
+
+    def settle(self, letter, state, timeout=60):
+        return super().settle(letter, state, timeout=max(timeout, 180))
 
 
 def wal_archive(cluster, api):
@@ -225,7 +239,7 @@ def main():
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     cluster = RealCluster(args.work)
-    api = base.Api(cluster)
+    api = RealApi(cluster)
     report = dict(scope=SCOPE, timings='시험 환경 측정값이며 운영 RTO/RPO가 아니다',
                   fault_injection={'host_failure': 'sysrq b 즉시 재부팅(전원 차단과 같은 효과)',
                                    'network_partition': 'DB 호스트 사이 트래픽만 방화벽으로 차단',
