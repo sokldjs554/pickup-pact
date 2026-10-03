@@ -323,16 +323,19 @@ def ha08_multihost(cluster, api):
     key = uuid4().hex
     with ThreadPoolExecutor(3) as pool:
         same = list(pool.map(attempt, [(h, key) for h in HOSTS]))
+    # 같은 키의 동시 중복: 모두 오류 없이 응답한다. 처음 요청이 처리 중이면 서비스는 두 번째 처리를 하지 않고 현재 보기(duplicate=true)를 돌려준다.
     assert all(kind == 'ok' for kind, _ in same), same
-    orders = [result['order'] for _, result in same]
-    differing = sorted({k for o in orders for k in o if any(o.get(k) != other.get(k) for other in orders)})
-    if differing:
-        detail = {k: [str(o.get(k))[:60] for o in orders] for k in differing[:6]}
-        raise AssertionError('같은 키의 결과가 다르다: '+json.dumps(detail, ensure_ascii=False)[:700]+
-                             ' | duplicate 표시: '+json.dumps([result.get('duplicate') for _, result in same]))
-    proof_same = api.proof('a', api.settle('c', api.call('c', '/api/route/journeys/'+state['id'])))
+    winners = [result for _, result in same if not result.get('duplicate')]
+    assert len(winners) == 1, f'원래 처리는 정확히 한 번이어야 한다: {len(winners)}'
+    interim = [dict(state=result['order']['state'], handoff=(result.get('handoff') or {}).get('status')) for _, result in same if result.get('duplicate')]
+    final_same = api.settle('c', api.call('c', '/api/route/journeys/'+state['id']))
+    proof_same = api.proof('a', final_same)
+    # 처리가 끝난 뒤 같은 키로 다시 보내면 세 호스트 모두 원래 응답과 같아야 한다.
+    replays = [base.Api.command(api, host, state, 'claim', request_id=key, pickup_code=state['order']['pickup_code']) for host in HOSTS]
+    assert all(r.get('duplicate') and r['order'] == winners[0]['order'] for r in replays), '완료 뒤 재전송이 원래 응답과 다르다'
     return dict(different_keys=[kind for kind, _ in different], proof_different_keys=proof,
-                same_key=[kind for kind, _ in same], proof_same_key=proof_same)
+                same_key=[kind for kind, _ in same], concurrent_duplicate_views=interim, replay_after_completion_identical=True,
+                proof_same_key=proof_same)
 
 
 def ha08_sequential_replay(cluster, api):
