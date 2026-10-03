@@ -23,13 +23,16 @@ import shutil
 import ssl
 import subprocess
 import sys
+import tempfile
 import time
 from urllib.error import HTTPError, URLError
 from urllib.request import HTTPSHandler, ProxyHandler, Request, build_opener
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from ha_real_harness import ADDRESSES, HOSTS, RealApi, RealCluster  # noqa: E402
-from demo.route.ha.backup import required_wal, seal_bundle  # noqa: E402
+from demo.route.ha import inventory as inv  # noqa: E402
+from demo.route.ha.backup import required_wal, seal_bundle, verify_bundle  # noqa: E402
+from demo.route.ha.scram import verifier  # noqa: E402
 from demo.route.ha.remote_backup import ResticArchive, ResticSettings  # noqa: E402
 
 SCOPE = 'oracle_single_ad_fault_domains'
@@ -275,6 +278,351 @@ def backup_stage(args) -> dict:
     return report
 
 
+# =============================================================== 복원 단계(전체)
+ROLES = ('order', 'merchant', 'payment')
+APPROVED_PATHS = ('/var/lib/postgresql/17/pickup', '/var/lib/pickup-pact/wal-spool', '/var/lib/etcd/pickup-pact',
+                  '/var/lib/pickup-pact/restore')
+SERVICE_UNITS = ['pickup-order-worker', 'pickup-order-app', 'pickup-order-notification', 'pickup-payment', 'pickup-merchant']
+START_ORDER = ['pickup-merchant', 'pickup-order-notification', 'pickup-payment', 'pickup-order-app', 'pickup-order-worker']
+INVENTORY = Path(__file__).resolve().parents[1]/'infra/ha/inventory.oracle-osaka.yaml'
+PRODUCTION_ADDRESSES = ('pickup-pact-demo.onrender.com',)
+
+
+def _put(dr: 'RealDR', letter: str, path: str, data: bytes, *, mode='0644', owner='root:root') -> None:
+    user, group = owner.split(':')
+    done = subprocess.run(dr._ssh(letter)+['sudo', 'install', '-m', mode, '-o', user, '-g', group, '/dev/stdin', path],
+                          input=data, capture_output=True, timeout=120)
+    if done.returncode:
+        raise RuntimeError(f'pact-{letter}: 파일을 쓰지 못했다({done.returncode})')
+
+
+class Guard:
+    """파괴 명령은 승인된 시험 호스트와 고정된 경로만 받는다. 운영 주소·임의 DSN·다른 경로는 거부한다."""
+
+    def __init__(self, data: dict):
+        self.hosts = {h.name[-1] for h in inv.hosts_of(data) if h.name in set(data['approval']['destructive']['hosts'])}
+        self.scope = data['name']
+        self.production = {str(v).lower() for v in data['approval']['production_addresses']}
+
+    def check(self, target: str, path: str) -> None:
+        if str(target).lower() in self.production or '.' in str(target) or '@' in str(target) or '=' in str(target):
+            raise PermissionError('운영 주소나 임의 접속 문자열은 파괴 대상이 될 수 없다')
+        if target not in self.hosts:
+            raise PermissionError('승인된 시험 호스트가 아니다')
+        if path not in APPROVED_PATHS:
+            raise PermissionError('승인된 시험 경로가 아니다')
+
+
+def _passwords() -> dict:
+    return {f'{role}_{kind}': secrets.token_hex(24) for role in ROLES for kind in ('owner', 'runtime')}
+
+
+def _tokens() -> dict:
+    return {k: secrets.token_hex(32) for k in ('ROUTE_MERCHANT_TOKEN', 'ROUTE_PAYMENT_TOKEN', 'ROUTE_PAYMENT_NOTIFY_SECRET')}
+
+
+SECRET_KEYS = {'order': ['ROUTE_MERCHANT_TOKEN', 'ROUTE_PAYMENT_TOKEN', 'ROUTE_PAYMENT_NOTIFY_SECRET'],
+               'merchant': ['ROUTE_MERCHANT_TOKEN'], 'payment': ['ROUTE_PAYMENT_TOKEN', 'ROUTE_PAYMENT_NOTIFY_SECRET']}
+
+
+class FullDR(RealDR):
+    def __init__(self, workdir, staging):
+        super().__init__(workdir, staging)
+        self.data = inv.load(str(INVENTORY))
+        self.guard = Guard(self.data)
+        self.restore_id = secrets.token_hex(4)
+        self.passwords = _passwords()
+        self.tokens = _tokens()
+        self.leader_letter = 'a'
+
+    # ---- 진행 중 주문과 복원 지점
+    def pending_capture(self, api, state):
+        from verify_ha_cluster_restore import progress_to_pickup
+        for letter in HOSTS:
+            self.stop_part(letter, 'worker')
+        state = progress_to_pickup(api, 'c', state)
+        state = api.command('c', state, 'claim', pickup_code=state['order']['pickup_code'])
+        assert state['handoff_pending'], '청구 결과가 보류 상태로 남지 않았다'
+        return state
+
+    # ---- 파괴
+    def destroy(self) -> dict:
+        removed = {}
+        for letter in HOSTS:
+            self.guard.check(letter, '/var/lib/postgresql/17/pickup')
+            done = self.sh(letter, f"test -f /etc/pickup-pact/patroni.yml && grep -qx 'scope: {self.guard.scope}' /etc/pickup-pact/patroni.yml && echo ours", check=False)
+            if done.stdout.strip() != 'ours':
+                raise PermissionError(f'pact-{letter}: 이 시험이 배포한 클러스터가 아니다. 삭제하지 않는다')
+        for letter in HOSTS:
+            self.sh(letter, 'sudo systemctl stop '+' '.join(SERVICE_UNITS)+' patroni etcd', timeout=240, check=False)
+            self.sh(letter, 'sudo pkill -KILL -u postgres -x postgres || true', check=False)
+            for path in APPROVED_PATHS:
+                self.guard.check(letter, path)
+            glob = '/var/lib/pickup-pact/wal-spool/*'
+            self.sh(letter, 'sudo rm -rf /var/lib/postgresql/17/pickup /var/lib/etcd/pickup-pact /var/lib/pickup-pact/restore '
+                            f'{glob} && sync')
+            left = self.sh(letter, 'ls /var/lib/postgresql/17/ /var/lib/etcd/ /var/lib/pickup-pact/wal-spool/ 2>/dev/null | tr "\\n" " "').stdout
+            removed[f'pact-{letter}'] = left.strip()
+            assert 'pickup' not in left.replace('pickup-pact', '').split(), left
+        return removed
+
+    # ---- 복원
+    def restore(self, receipt, seal, cluster_id, target_name) -> dict:
+        report: dict = {}
+        fetched = self.stage/'fetched'
+        started = time.monotonic()
+        fetched.mkdir()
+        self.archive.restore(receipt, fetched/'bundle', expected_sha256=seal, expected_cluster_id=cluster_id)
+        report['downloaded_s'] = round(time.monotonic()-started, 1)
+        # 이전 값 기록(이전 토큰 거부 확인용), 그리고 새 비밀값으로 교체
+        old = {k: v for k, v in (line.split('=', 1) for line in self.sh('a', 'sudo cat /etc/pickup-pact/secrets/order.env').stdout.split() if '=' in line)}
+        self.previous_tokens = old
+        # 세대 2로 렌더링한 설정(복원 지정 리더만 복원 부트스트랩)
+        data = {**self.data, 'operating': {'generation': 2},
+                'restore': {'leader': f'pact-{self.leader_letter}', 'base_dir': '/var/lib/pickup-pact/restore/base',
+                            'wal_dir': '/var/lib/pickup-pact/restore/wal', 'target_name': target_name}}
+        problems = inv.validate(data, 'review')
+        if problems:
+            raise AssertionError('복원 인벤토리 거부: '+'; '.join(problems))
+        out = self.stage/'rendered'
+        inv.render(data, out)
+        for letter in HOSTS:
+            base = out/'hosts'/f'pact-{letter}'
+            for rendered in sorted(base.iterdir()):
+                if rendered.name == 'haproxy.cfg':
+                    continue
+                _put(self, letter, f'/etc/pickup-pact/{rendered.name}', rendered.read_bytes())
+            for role in ROLES:
+                text = ''.join(f'{k}={self.tokens[k]}\n' for k in SECRET_KEYS[role])
+                _put(self, letter, f'/etc/pickup-pact/secrets/{role}.env', text.encode(), mode='0600')
+                _put(self, letter, f'/etc/pickup-pact/secrets/{role}.pgpass',
+                     f'*:*:*:{inv.runtime_user(role)}:{self.passwords[role+"_runtime"]}\n'.encode(), mode='0600', owner='pickup:pickup')
+            for script in ('pickup-wal-archive', 'pickup-restore-bootstrap'):
+                _put(self, letter, f'/usr/local/bin/{script}', (Path(__file__).resolve().parents[1]/'infra/ha'/script).read_bytes(), mode='0755')
+        # 내려받아 검증한 묶음을 지정 리더에만 올린다.
+        lead = self.leader_letter
+        self.sh(lead, 'sudo install -d -m 0700 -o postgres -g postgres /var/lib/pickup-pact/restore')
+        pipe = subprocess.run(f"tar -C {fetched/'bundle'} -cf - base wal | "+' '.join(shlex.quote(a) for a in self._ssh(lead))+
+                              " 'sudo tar -x -C /var/lib/pickup-pact/restore --no-same-owner && sudo chown -R postgres:postgres /var/lib/pickup-pact/restore && sudo chmod -R go-rwx /var/lib/pickup-pact/restore'",
+                              shell=True, capture_output=True, timeout=600)
+        if pipe.returncode:
+            raise RuntimeError('복원 묶음을 지정 리더에 올리지 못했다: '+pipe.stderr.decode()[-200:])
+        shutil.rmtree(fetched, ignore_errors=True)
+        # 새 etcd → 지정 리더 → 나머지
+        for letter in HOSTS:
+            self.sh(letter, 'sudo rm -f /etc/pickup-pact/hold; true', check=False)
+        procs = [subprocess.Popen(self._ssh(letter)+['sudo', 'systemctl', 'start', 'etcd'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) for letter in HOSTS]
+        for proc in procs:
+            proc.wait(timeout=240)
+        self.wait_etcd()
+        self.sh(lead, 'sudo systemctl start patroni', timeout=120)
+        deadline = time.monotonic()+420
+        became = False
+        while time.monotonic() < deadline and not became:
+            try:
+                became = self.leader(via=lead) == lead
+            except RuntimeError:
+                pass
+            if not became:
+                time.sleep(3)
+        if not became:
+            raise AssertionError('복원된 구성원이 리더가 되지 못했다')
+        report['restored_leader_after_s'] = round(time.monotonic()-started, 1)
+        for letter in HOSTS:
+            if letter != lead:
+                self.sh(letter, 'sudo systemctl start patroni', timeout=120)
+        self.wait_cluster(members=3, timeout=420)
+        statements = [f"ALTER ROLE {user} PASSWORD '{verifier(self.passwords[f'{role}_{kind}'])}';"
+                      for role in ROLES for kind, user in (('owner', inv.owner_user(role)), ('runtime', inv.runtime_user(role)))]
+        done = subprocess.run(self._ssh(lead)+['sudo', '-u', 'postgres', 'psql', '-X', '-q', '-v', 'ON_ERROR_STOP=1', '-d', 'postgres', '-f', '-'],
+                              input='\n'.join(statements).encode()+b'\n', capture_output=True, timeout=120)
+        if done.returncode:
+            raise AssertionError('역할 비밀번호 교체 실패')
+        report['bumped'] = self.bump_generation(lead, expected=1)
+        for letter in HOSTS:
+            for unit in START_ORDER:
+                self.sh(letter, f'sudo systemctl start {unit}', timeout=120)
+        self.wait_apps(HOSTS, timeout=300)
+        report['apps_ready_after_loss_s'] = round(time.monotonic()-started, 1)
+        report['restored_members'] = [(m['Member'], m['Role'], m['State'], m.get('TL')) for m in self.members()]
+        return report
+
+    def wait_etcd(self, timeout=120):
+        endpoints = ','.join(f'https://{ADDRESSES[x]}:2379' for x in HOSTS)
+        command = (f'sudo /usr/local/bin/etcdctl --endpoints={endpoints} --cacert=/etc/pickup-pact/tls/ca.crt '
+                   '--cert=/etc/pickup-pact/tls/etcd-client.crt --key=/etc/pickup-pact/tls/etcd-client.key endpoint health --cluster -w json')
+        deadline = time.monotonic()+timeout
+        while time.monotonic() < deadline:
+            done = self.sh('a', command, check=False, timeout=40)
+            if done.returncode == 0:
+                health = json.loads(done.stdout)
+                if len(health) == 3 and all(item.get('health') for item in health):
+                    return
+            time.sleep(2)
+        raise AssertionError('새 etcd 정족수가 건강해지지 않았다')
+
+    def bump_generation(self, letter, *, expected: int) -> list:
+        self.sh(letter, 'sudo install -d -o pickup -g pickup -m 0700 /dev/shm/pact-migrate')
+        results = []
+        try:
+            for role in ROLES:
+                _put(self, letter, f'/dev/shm/pact-migrate/{role}-owner.pgpass',
+                     f'*:*:*:{inv.owner_user(role)}:{self.passwords[role+"_owner"]}\n'.encode(), mode='0600', owner='pickup:pickup')
+                hosts, ports = inv.order_dsn_hosts(self.data)
+                dsn = (f'host={hosts} port={ports} dbname={inv.DATABASES[role]} user={inv.owner_user(role)} sslmode=verify-full '
+                       f'sslrootcert=/etc/pickup-pact/tls/ca.crt passfile=/dev/shm/pact-migrate/{role}-owner.pgpass '
+                       'target_session_attrs=read-write connect_timeout=3')
+                command = (f'cd /opt/pickup-pact && sudo -u pickup env PYTHONPATH=/opt/pickup-pact:/opt/pickup-pact/services/reconciler '
+                           f'PICKUP_MIGRATE_DSN={shlex.quote(dsn)} /opt/pickup-pact/.venv/bin/python -m demo.route.ha.migrate '
+                           f'bump-generation --role {role} --expected {expected} --reason restore-{self.restore_id}')
+                done = self.sh(letter, command, check=False, timeout=180)
+                if done.returncode:
+                    raise AssertionError(f'세대 갱신 실패({role}): '+done.stderr[-300:])
+                results.append(json.loads(done.stdout))
+        finally:
+            self.sh(letter, 'sudo rm -rf /dev/shm/pact-migrate', check=False)
+        assert all(item['generation'] == 2 and item['changed'] for item in results), results
+        return results
+
+    def internal_transport(self, generation: int):
+        from demo.route.ha.transport import TransportPolicy
+        directory = self.secrets/'order-mtls'
+        if not directory.exists():
+            directory.mkdir(mode=0o700)
+            for name in ('order.crt', 'order.key'):
+                data = self.sh('a', f'sudo cat /etc/pickup-pact/tls/{name}').stdout
+                (directory/name).write_text(data)
+                (directory/name).chmod(0o600)
+        return TransportPolicy.mtls(role='order', allowed_hosts=[f'pact-{x}.pact.internal' for x in HOSTS], ca_file=str(self.ca),
+                                    cert_file=str(directory/'order.crt'), key_file=str(directory/'order.key'), generation=generation)
+
+
+def _scan_for_secrets(report: dict, secret_values: list[str]) -> bool:
+    text = json.dumps(report, ensure_ascii=False)
+    return not any(value and value in text for value in secret_values)
+
+
+def full_stage(args) -> dict:
+    stage = Path(args.stage)
+    if stage.exists():
+        subprocess.run(['rm', '-rf', str(stage)], check=True)
+    stage.mkdir(mode=0o700)
+    dr = FullDR(args.work, stage)
+    dr.ensure_hold_dropins()
+    api = RealApi(dr)
+    rows: dict[str, dict] = {}
+    report: dict = dict(scope=SCOPE, timings='시험 환경 측정값이며 운영 RTO/RPO가 아니다')
+
+    def record(name, **facts):
+        rows[name] = dict(id=name, passed=True, **facts)
+
+    try:
+        began = time.monotonic()
+        dr.ensure_units()
+        dr.wait_cluster(members=3, timeout=240)
+        dr.wait_apps(HOSTS)
+        dr.setup_store()
+        first = api.start('a')
+        completed = api.finish('a', 'b', first)
+        pending = api.settle('a', api.start('a', fault='capture_reply_lost'))
+        oat = next(plan for plan in pending['all_plans'] if plan['store_id'] == 'oat')
+        pending = api.settle('b', api.command('b', pending, 'transfer', quote_id=oat['quote_id']))
+        base = dr.base_backup()
+        pending = dr.pending_capture(api, pending)
+        target = dr.restore_point('pact_target_'+secrets.token_hex(6))
+        later = api.call('a', '/api/route/journeys', {})
+        bundle = stage/'bundle'
+        seal, metadata = dr.collect_bundle(bundle, base=base, target=target)
+        # DR-03: 누락·변조·미완성 묶음은 유효한 백업으로 승인하지 않는다(복사본으로 확인).
+        copy = stage/'tamper'
+        shutil.copytree(bundle, copy)
+        victim = next((copy/'wal').iterdir())
+        original = victim.read_bytes()
+        refused = []
+        for label, mutate in [('wal_missing', lambda: victim.unlink()),
+                              ('wal_modified', lambda: None)]:
+            if label == 'wal_modified':
+                victim.write_bytes(bytes([original[0] ^ 1])+original[1:])
+            else:
+                mutate()
+            try:
+                verify_bundle(copy, expected_sha256=seal, expected_cluster_id=metadata['cluster_id'])
+            except (OSError, ValueError):
+                refused.append(label)
+        shutil.rmtree(copy)
+        assert refused == ['wal_missing', 'wal_modified'], refused
+        started = time.monotonic()
+        receipt = dr.archive.upload(bundle, expected_sha256=seal, expected_cluster_id=metadata['cluster_id'])
+        report['upload_and_readback_s'] = round(time.monotonic()-started, 1)
+        controls = dr.negative_controls(receipt, bundle, seal, metadata['cluster_id'])
+        record('DR-03', bundles_refused=refused, store_checks=controls)
+        record('DR-04', note='저장소 중단·용량 초과 때 영수증 없음(음성 대조). 경보 판정은 backup_ops 시험에서 확인', store_checks=controls)
+        vault = dict(receipt=receipt, seal=seal, cluster_id=metadata['cluster_id'])
+        (args.output/'receipt.json').write_text(json.dumps(dict(receipt=receipt, seal_sha256=seal), indent=2))
+        report.update(required_wal=metadata['required_wal'], target=target['target'], cluster_id=metadata['cluster_id'])
+        # DR-08: 운영 주소·시험하지 않는 대상은 파괴 명령이 거부한다(실행하기 전에 확인).
+        denied = []
+        for target_name, path in [('pickup-pact-demo.onrender.com', '/var/lib/postgresql/17/pickup'), ('host=db.example user=x', '/var/lib/postgresql/17/pickup'),
+                                  ('x', '/var/lib/postgresql/17/pickup'), ('a', '/home/ubuntu'), ('a', '/')]:
+            try:
+                dr.guard.check(target_name, path)
+            except PermissionError:
+                denied.append(f'{target_name}:{path}')
+        assert len(denied) == 5, denied
+        record('DR-08', refused=denied)
+        # DR-01: 클러스터 데이터·WAL 스풀·etcd 전체 제거, 로컬 묶음 삭제
+        destroyed_at = time.monotonic()
+        removed = dr.destroy()
+        shutil.rmtree(bundle)
+        assert not bundle.exists()
+        restored = dr.restore(vault['receipt'], vault['seal'], vault['cluster_id'], target['target'])
+        report['restore'] = restored
+        record('DR-01', removed=removed, restored_members=restored['restored_members'], from_external_store_only=True,
+               downloaded_s=restored['downloaded_s'], apps_ready_after_loss_s=round(time.monotonic()-destroyed_at, 1))
+        # DR-02: 복원 지점과 거래 집합이 일치하고 이후 기록은 없다.
+        done_again = api.call('b', '/api/route/journeys/'+first['id'])
+        assert api.proof('a', done_again) == completed, '완료된 주문이 복원 뒤 다르다'
+        missing = api.http.get(dr.app_url('a')+'/api/route/journeys/'+later['id'])
+        assert missing.status_code == 404, missing.status_code
+        record('DR-02', restore_point=target['target'], completed_order_restored=True, post_target_order_absent=True)
+        # DR-05: 원래 키로 재개, 재청구 없음
+        resumed = api.settle('b', api.call('b', '/api/route/journeys/'+pending['id']), timeout=240)
+        proof = api.proof('c', resumed)
+        assert proof['capture_count'] == 1 and proof['held_krw'] == 0
+        record('DR-05', resumed_with_original_key=proof)
+        # DR-06: 이전 세대·이전 토큰 거부, 현재 값은 통과, 기존 거래는 조회 가능
+        from demo.route.merchant_http import HttpMerchantFleet
+        merchant = 'https://pact-a.pact.internal:8443'
+        current = HttpMerchantFleet(merchant, dr.tokens['ROUTE_MERCHANT_TOKEN'], 2, transport=dr.internal_transport(2))
+        assert current.snapshot('dr-probe')
+        refused6 = []
+        for label, token, generation in [('previous_token', dr.previous_tokens['ROUTE_MERCHANT_TOKEN'], 2),
+                                         ('previous_generation', dr.tokens['ROUTE_MERCHANT_TOKEN'], 1)]:
+            try:
+                HttpMerchantFleet(merchant, token, 2, transport=dr.internal_transport(generation)).snapshot('dr-probe')
+            except OSError:
+                refused6.append(label)
+        assert refused6 == ['previous_token', 'previous_generation'], refused6
+        record('DR-06', refused=refused6, existing_order_readable=True)
+        # DR-07: 키·영수증·봉인값은 DB 호스트 밖(이 시험 도구와 저장소)에만 있었고, 증거에는 비밀값이 없다.
+        secret_values = list(dr.passwords.values())+list(dr.tokens.values())+list(dr.previous_tokens.values())+[dr.encryption, dr.writer]
+        assert _scan_for_secrets(dict(report=report, rows=rows), secret_values), '증거에 비밀값이 있다'
+        record('DR-07', recovered_from='receipt+seal+encryption key held outside the database hosts', secrets_in_evidence=False)
+        report['total_s'] = round(time.monotonic()-began, 1)
+        report['passed'] = True
+    except Exception as exc:  # noqa: BLE001 - 실패도 증거로 남긴다
+        report.update(passed=False, error=f'{type(exc).__name__}: {exc}'[:1500])
+    finally:
+        try:
+            dr.teardown_store()
+        finally:
+            subprocess.run(['rm', '-rf', str(stage), str(dr.secrets)], check=False)
+            dr.clear_faults()
+            dr.remove_hold_dropins()
+    report['scenarios'] = list(rows.values())
+    return report
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--work', type=Path, required=True)
@@ -282,10 +630,13 @@ def main():
     parser.add_argument('--stage', default='/var/tmp/pact-dr')
     parser.add_argument('--only', nargs='*', default=None)
     parser.add_argument('--repeat', type=int, default=1)
+    parser.add_argument('--mode', choices=['backup', 'full'], default='backup')
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
-    report = backup_stage(args)
-    (args.output/'results.json').write_text(json.dumps(dict(repetitions=[dict(repeat=1, scenarios=[dict(id='DR-backup', **report)])],
+    report = full_stage(args) if args.mode == 'full' else backup_stage(args)
+    scenarios = report.pop('scenarios', None) or [dict(id='DR-backup', **report)]
+    scenarios.append(dict(id='DR-summary', **{k: v for k, v in report.items() if k not in {'scenarios'}}))
+    (args.output/'results.json').write_text(json.dumps(dict(repetitions=[dict(repeat=1, scenarios=scenarios)],
                                                             passed=report.get('passed', False), scope=SCOPE), ensure_ascii=False, indent=2))
     print(json.dumps({'passed': report.get('passed'), 'scope': SCOPE}), flush=True)
     return 0 if report.get('passed') else 1

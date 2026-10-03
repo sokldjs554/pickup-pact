@@ -5,6 +5,8 @@
 # recovery_target_name, promote) is configured by Patroni from recovery_conf.
 # It never overwrites a non-empty data directory.
 set -eu
+# Under systemd the PostgreSQL server binaries are not on PATH (only client tools are linked into /usr/bin).
+PATH="/usr/lib/postgresql/17/bin:$PATH"
 datadir=''
 for argument in "$@"; do
   case "$argument" in --datadir=*) datadir="${argument#--datadir=}" ;; esac

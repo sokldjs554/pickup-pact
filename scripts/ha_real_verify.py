@@ -35,7 +35,7 @@ def gate(inventory_path: Path, needs_destructive: bool) -> dict:
 
 
 def verify(hosts, inventory_path: Path, out: Path, *, only: list[str], repeat: int, faults: bool,
-           driver: str = 'ha_real_harness.py') -> bool:
+           driver: str = 'ha_real_harness.py', driver_args: list[str] | None = None) -> bool:
     gate(inventory_path, faults)
     if faults:
         approval = ROOT/'infra/ha/hosts/fault-approval.txt'
@@ -101,6 +101,7 @@ def verify(hosts, inventory_path: Path, out: Path, *, only: list[str], repeat: i
         args = ['--work', WORK, '--output', f'{WORK}/out', '--repeat', str(repeat)]
         if only:
             args += ['--only', *only]
+        args += list(driver_args or [])
         script = (f'cd /opt/pact-harness && PYTHONPATH=.:services/reconciler PICKUP_HA_TEST=1 '
                   f'/opt/pact-harness/.venv/bin/python scripts/{driver} {" ".join(args)} > {WORK}/log.txt 2>&1; echo $? > {WORK}/exit')
         backup.run_bytes(f'cat > {WORK}/run.sh', script.encode())
