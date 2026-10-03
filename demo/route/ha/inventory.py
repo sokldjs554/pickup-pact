@@ -36,6 +36,7 @@ ENTRY_METHODS = {'dns_multi_a', 'keepalived_vip', 'managed_lb'}
 NAME = re.compile(r'^[a-z][a-z0-9-]{0,30}$')
 DNS = re.compile(r'^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$')
 DIGEST = re.compile(r'^[a-z0-9./_:-]+@sha256:[0-9a-f]{64}$')
+EXCEPTION_RULES = {'backup_failure_domain'}
 TEST_ID = re.compile(r'^ha-rehearsal-[0-9a-f]{8,32}$')
 PLACEHOLDER = re.compile(r'CHANGE_ME|TODO|example\.invalid', re.I)
 TLS_DIR = '/etc/pickup-pact/tls'
@@ -225,7 +226,9 @@ def validate(data: dict, stage: str = 'review', *, today: dt.date | None = None)
     if not isinstance(entry.get('public_name'), str) or not DNS.fullmatch(entry['public_name']):
         problems.append('entry.public_name: public DNS name required')
 
-    problems += _backup_problems(data.get('backup') or {}, hosts, database, independent)
+    exceptions, exception_problems = accepted_exceptions(data)
+    problems += exception_problems
+    problems += _backup_problems(data.get('backup') or {}, hosts, database, independent, frozenset(exceptions))
     operating = data.get('operating') or {}
     if type(operating.get('generation', 1)) is not int or not 1 <= operating.get('generation', 1) <= 1_000_000:
         problems.append('operating.generation: positive integer required')
@@ -244,11 +247,11 @@ def validate(data: dict, stage: str = 'review', *, today: dt.date | None = None)
         problems += _approval_problems(data, kind, method, today or dt.date.today())
         problems += [f'{path}: placeholder value' for path in _placeholders(data)]
     if stage == 'destructive':
-        problems += _destructive_problems(data, hosts)
+        problems += _destructive_problems(data, hosts, today or dt.date.today())
     return problems
 
 
-def _backup_problems(backup, hosts, database, independent) -> list[str]:
+def _backup_problems(backup, hosts, database, independent, excepted=frozenset()) -> list[str]:
     problems = []
     if not isinstance(backup, dict) or not backup:
         return ['backup: external backup store required']
@@ -261,7 +264,8 @@ def _backup_problems(backup, hosts, database, independent) -> list[str]:
             (independent and store.get('physical_host') in {h.physical_host for h in hosts}):
         problems.append('backup.host: must not be a cluster host')
     if not store.get('failure_domain') or \
-            (independent and store.get('failure_domain') in {h.failure_domain for h in database}):
+            (independent and 'backup_failure_domain' not in excepted
+             and store.get('failure_domain') in {h.failure_domain for h in database}):
         problems.append('backup.host: needs a failure domain without database members')
     url = str(backup.get('repository_url', ''))
     match = re.fullmatch(r'https://([a-z0-9.-]+):(\d{1,5})/[A-Za-z0-9._/-]{1,120}', url)
@@ -296,6 +300,25 @@ def _backup_problems(backup, hosts, database, independent) -> list[str]:
     return problems
 
 
+def accepted_exceptions(data) -> tuple[dict, list[str]]:
+    """Explicitly approved weaker conditions, by rule. Each needs a reason and an evidence scope label."""
+    problems, found = [], {}
+    raw = (data.get('approval') or {}).get('accepted_exceptions') or []
+    if not isinstance(raw, list):
+        return {}, ['approval.accepted_exceptions: list required']
+    for item in raw:
+        rule = item.get('rule') if isinstance(item, dict) else None
+        if rule not in EXCEPTION_RULES:
+            problems.append('approval.accepted_exceptions: rule must be one of '+', '.join(sorted(EXCEPTION_RULES)))
+        elif rule in found:
+            problems.append(f'approval.accepted_exceptions: duplicate rule {rule}')
+        elif not str(item.get('reason', '')).strip() or not re.fullmatch(r'[a-z][a-z0-9_]{5,60}', str(item.get('scope', ''))):
+            problems.append(f'approval.accepted_exceptions.{rule}: reason and evidence scope label required')
+        else:
+            found[rule] = item
+    return found, problems
+
+
 def _approval_problems(data, kind, method, today) -> list[str]:
     problems = []
     if kind != 'independent_hosts':
@@ -322,7 +345,7 @@ def _approval_problems(data, kind, method, today) -> list[str]:
     return problems
 
 
-def _destructive_problems(data, hosts) -> list[str]:
+def _destructive_problems(data, hosts, today) -> list[str]:
     problems = []
     approval = data.get('approval') or {}
     scope = approval.get('destructive') or {}
@@ -332,6 +355,15 @@ def _destructive_problems(data, hosts) -> list[str]:
         production = []
     if not isinstance(scope.get('test_id'), str) or not TEST_ID.fullmatch(scope['test_id']):
         problems.append('approval.destructive.test_id: ha-rehearsal-<hex> label required')
+    window = scope.get('window') or {}
+    try:
+        start, end = dt.date.fromisoformat(str(window.get('from'))), dt.date.fromisoformat(str(window.get('until')))
+        if not start <= end <= start+dt.timedelta(days=14):
+            problems.append('approval.destructive.window: from..until, at most 14 days')
+        elif not start <= today <= end:
+            problems.append('approval.destructive.window: today is outside the approved window')
+    except ValueError:
+        problems.append('approval.destructive.window: ISO from and until dates required')
     names = {h.name: h for h in hosts}
     targets = scope.get('hosts') or []
     if not targets or any(name not in names for name in targets):
@@ -672,6 +704,8 @@ def render(data: dict, out: Path) -> dict:
         'kind': data['kind'],
         'evidence_scope': ('single_host_rehearsal_not_host_ha' if data['kind'] == 'single_host_rehearsal'
                            else 'configuration_only_not_deployed'),
+        'accepted_exceptions': {rule: dict(reason=item['reason'], scope=item['scope'])
+                                for rule, item in accepted_exceptions(data)[0].items()},
         'stages': {stage: not validate(data, stage) for stage in STAGES},
         'files': dict(sorted(files.items())),
     }

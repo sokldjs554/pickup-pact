@@ -50,6 +50,11 @@ echo "sudo=$(sudo -n true 2>/dev/null && echo yes || echo no)"
 echo "ntp_synced=$(timedatectl show -p NTPSynchronized --value 2>/dev/null)"
 echo "softdog=$(sudo -n modprobe softdog 2>/dev/null && echo loadable || echo missing)"
 echo "ufw=$(sudo -n ufw status 2>/dev/null | head -1)"
+meta() { curl -sf -m 5 -H 'Authorization: Bearer Oracle' "http://169.254.169.254/opc/v2/instance/$1"; }
+echo "fault_domain=$(meta faultDomain)"
+echo "availability_domain=$(meta availabilityDomain)"
+echo "region=$(meta canonicalRegionName)"
+echo "shape=$(meta shape)"
 echo "ssh_fingerprint=$(ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub 2>/dev/null | cut -d' ' -f2)"
 '''
 
@@ -70,6 +75,8 @@ def preflight(hosts: list[Host], inventory: dict, out: Path) -> bool:
             problems.append('메모리 부족')
         if host.name != 'pact-backup' and row.get('softdog') != 'loadable':
             problems.append('softdog 모듈 사용 불가')
+        if host.spec.get('fault_domain', 'unspecified') != 'unspecified' and row.get('fault_domain') != host.spec['fault_domain']:
+            problems.append(f"fault domain 불일치: {row.get('fault_domain')}")
         row['problems'] = problems
         report[host.name] = row
         ok &= not problems
@@ -88,7 +95,7 @@ def preflight(hosts: list[Host], inventory: dict, out: Path) -> bool:
                                                  ensure_ascii=False, indent=2))
     print(json.dumps(dict(passed=ok, hosts={k: dict(arch=v.get('arch'), cpus=v.get('cpus'), mem_mib=v.get('mem_mib'),
                                                       disk_gib=v.get('disk_free_gib'), problems=v['problems'], tcp22=v.get('private_tcp22'),
-                                                      ssh_ed25519=v.get('ssh_fingerprint')) for k, v in report.items()}),
+                                                      fault_domain=v.get('fault_domain'), ad=v.get('availability_domain'), region=v.get('region'), shape=v.get('shape'), ssh_ed25519=v.get('ssh_fingerprint')) for k, v in report.items()}),
                      ensure_ascii=False, indent=2))
     return ok
 

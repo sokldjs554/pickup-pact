@@ -37,7 +37,8 @@ def approved():
     data['entry']['public_name'] = 'pickup.pact-rehearsal.net'
     data['approval'] = {'approved_by': 'operator', 'approved_on': '2026-10-01', 'monthly_cost_cap_krw': 90000,
                         'paid_resources': True, 'production_addresses': ['pickup-pact-demo.onrender.com'],
-                        'destructive': {'test_id': 'ha-rehearsal-0a1b2c3d', 'hosts': ['pact-a', 'pact-b', 'pact-c']}}
+                        'destructive': {'test_id': 'ha-rehearsal-0a1b2c3d', 'hosts': ['pact-a', 'pact-b', 'pact-c'],
+                                        'window': {'from': '2026-10-01', 'until': '2026-10-04'}}}
     return data
 
 
@@ -144,6 +145,53 @@ def test_destructive_scope_is_labelled_and_never_touches_production():
         found = problems(change(approved()), 'destructive')
         assert any(item.startswith(expected) for item in found), (expected, found)
         assert problems(change(approved()), 'deploy') == []  # only the destructive gate checks the scope
+
+
+def test_destructive_window_is_bounded_and_must_include_today():
+    for window, expected in [({'from': '2026-10-03', 'until': '2026-10-05'}, 'today is outside'),
+                             ({'from': '2026-09-25', 'until': '2026-10-01'}, 'today is outside'),
+                             ({'from': '2026-10-01', 'until': '2026-10-30'}, 'at most 14 days'),
+                             ({'from': '2026-10-05', 'until': '2026-10-01'}, 'at most 14 days'),
+                             ({'from': 'soon'}, 'ISO from and until')]:
+        data = approved()
+        data['approval']['destructive']['window'] = window
+        found = problems(data, 'destructive')
+        assert any(expected in item and item.startswith('approval.destructive.window') for item in found), (window, found)
+    data = approved()
+    del data['approval']['destructive']['window']
+    assert any(item.startswith('approval.destructive.window') for item in problems(data, 'destructive'))
+
+
+def shared_backup_domain():
+    data = approved()
+    for host, domain in zip(data['hosts'], ['fd-1', 'fd-2', 'fd-3']):
+        host['failure_domain'] = domain
+    data['backup']['host']['failure_domain'] = 'fd-2'
+    return data
+
+
+def test_backup_sharing_a_database_failure_domain_needs_an_explicit_recorded_exception():
+    data = shared_backup_domain()
+    assert any(item.startswith('backup.host: needs a failure domain') for item in problems(data))
+    data['approval']['accepted_exceptions'] = [{'rule': 'backup_failure_domain', 'scope': 'oracle_single_ad_fault_domains',
+                                                'reason': 'only three fault domains exist in the availability domain'}]
+    assert problems(data, 'destructive') == []
+    for bad in [{'rule': 'cluster_quorum', 'scope': 'oracle_single_ad_fault_domains', 'reason': 'x'},
+                {'rule': 'backup_failure_domain', 'scope': 'oracle_single_ad_fault_domains', 'reason': ' '},
+                {'rule': 'backup_failure_domain', 'scope': 'Bad Scope', 'reason': 'x'}]:
+        data['approval']['accepted_exceptions'] = [bad]
+        assert any(item.startswith('approval.accepted_exceptions') for item in problems(data)), bad
+    data['approval']['accepted_exceptions'] = []
+    data['backup']['host']['name'] = 'pact-a'  # the exception never allows the store to be a cluster host
+    assert any(item.startswith('backup.host: must not be a cluster host') for item in problems(data))
+
+
+def test_accepted_exception_is_named_in_the_render_manifest(tmp_path):
+    data = shared_backup_domain()
+    data['approval']['accepted_exceptions'] = [{'rule': 'backup_failure_domain', 'scope': 'oracle_single_ad_fault_domains',
+                                                'reason': 'only three fault domains exist in the availability domain'}]
+    manifest = inventory.render(data, tmp_path/'out')
+    assert manifest['accepted_exceptions']['backup_failure_domain']['scope'] == 'oracle_single_ad_fault_domains'
 
 
 def test_rehearsal_may_share_one_machine_but_is_labelled(tmp_path):
