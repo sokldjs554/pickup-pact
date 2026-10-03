@@ -59,7 +59,12 @@
 
 ### 3. 실제 독립 호스트 장애·복원 시험
 
-- [ ] 승인 대기. 비용·호스트·파괴 범위가 승인되기 전에는 실행하지 않는다.
+- [x] 승인 기록: sokldjs, 2026-10-03, 비용 상한 0원, 파괴 시험 2026-10-03~05, `infra/ha/inventory.oracle-osaka.yaml` (검토·배포·파괴 3단계 검사 통과)
+- [x] 서버 4대(Oracle Osaka AD-1, 무료 체험 크레딧): 접속·사양·FD 분리 점검 통과. pact-a=FD-1, pact-b=FD-2, pact-c=FD-3, pact-backup=FD-1(승인 예외 `backup_failure_domain`, 범위 `oracle_single_ad_fault_domains`)
+  - 첫 점검에서 pact-a와 pact-b가 같은 FD로 잡혀 pact-a를 FD-1에 다시 만들었다.
+- [x] 설치 단계: PostgreSQL 17.11, Patroni 4.0.4, etcd 3.5.17, restic 0.19.1(+백업 서버 rest-server 0.14.0), 서버 방화벽(사설망만), softdog 권한 — 4대 모두 통과
+- [ ] 배포 단계: 인증서·설정·systemd 기동
+- [ ] HA-01~10, DR-01~08 ×3 (파괴 시험은 별도 확인 후)
 
 ## 개발 검증 기록
 
