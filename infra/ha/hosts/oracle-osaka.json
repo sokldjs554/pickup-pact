@@ -5,7 +5,7 @@
   "hosts": [
     {
       "name": "pact-a",
-      "public": "161.33.39.79",
+      "public": "129.225.195.164",
       "private": "10.0.0.11",
       "fault_domain": "FAULT-DOMAIN-1"
     },
