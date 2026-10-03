@@ -324,7 +324,12 @@ def ha08_multihost(cluster, api):
     with ThreadPoolExecutor(3) as pool:
         same = list(pool.map(attempt, [(h, key) for h in HOSTS]))
     assert all(kind == 'ok' for kind, _ in same), same
-    assert len({json.dumps(result['order'], sort_keys=True) for _, result in same}) == 1, '같은 키의 결과가 다르다'
+    orders = [result['order'] for _, result in same]
+    differing = sorted({k for o in orders for k in o if any(o.get(k) != other.get(k) for other in orders)})
+    if differing:
+        detail = {k: [str(o.get(k))[:60] for o in orders] for k in differing[:6]}
+        raise AssertionError('같은 키의 결과가 다르다: '+json.dumps(detail, ensure_ascii=False)[:700]+
+                             ' | duplicate 표시: '+json.dumps([result.get('duplicate') for _, result in same]))
     proof_same = api.proof('a', api.settle('c', api.call('c', '/api/route/journeys/'+state['id'])))
     return dict(different_keys=[kind for kind, _ in different], proof_different_keys=proof,
                 same_key=[kind for kind, _ in same], proof_same_key=proof_same)
