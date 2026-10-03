@@ -66,19 +66,19 @@ class RealDR(RealCluster):
             path = self.secrets/name
             path.write_text(value+'\n')
             path.chmod(0o600)
-        self.cert, self.store_key = self.secrets/'store-ca.pem', self.secrets/'store.key'
-        self._certificate(self.cert, self.store_key)
+        self.store_cert, self.store_key = self.secrets/'store-ca.pem', self.secrets/'store.key'
+        self._certificate(self.store_cert, self.store_key)
         subprocess.run(['htpasswd', '-iBc', str(self.secrets/'htpasswd'), 'backup'], input=self.writer+'\n',
                        capture_output=True, text=True, check=True, timeout=15)
         # 저장소 프로세스는 별도 사용자(restic)로 실행하고, 설정 파일은 그 사용자만 읽는다.
         self.local(f'sudo rm -rf {STORE_CONF} && sudo install -d -m 0750 -o root -g restic {STORE_CONF} && '
-                   f'sudo install -m 0640 -o root -g restic {self.cert} {STORE_CONF}/tls.crt && '
+                   f'sudo install -m 0640 -o root -g restic {self.store_cert} {STORE_CONF}/tls.crt && '
                    f'sudo install -m 0640 -o root -g restic {self.store_key} {STORE_CONF}/tls.key && '
                    f'sudo install -m 0640 -o root -g restic {self.secrets}/htpasswd {STORE_CONF}/htpasswd && '
                    f'sudo rm -rf {STORE_DATA}/backup && sudo install -d -m 0700 -o restic -g restic {STORE_DATA}')
         self.start_store(quota_bytes)
         self.settings = ResticSettings(repository=f'rest:https://{STORE_DNS}:{STORE_PORT}/backup/',
-                                       allowed_authority=f'{STORE_DNS}:{STORE_PORT}', ca_file=self.cert,
+                                       allowed_authority=f'{STORE_DNS}:{STORE_PORT}', ca_file=self.store_cert,
                                        password_file=self.secrets/'password_file', username_file=self.secrets/'username_file',
                                        credential_file=self.secrets/'credential_file')
         self.archive = ResticArchive(self.settings)
@@ -119,7 +119,7 @@ class RealDR(RealCluster):
         self.local(f'sudo systemctl stop {STORE_UNIT} 2>/dev/null; sudo systemctl reset-failed {STORE_UNIT} 2>/dev/null; true', check=False)
 
     def _opener(self):
-        return build_opener(ProxyHandler({}), HTTPSHandler(context=ssl.create_default_context(cafile=str(self.cert))))
+        return build_opener(ProxyHandler({}), HTTPSHandler(context=ssl.create_default_context(cafile=str(self.store_cert))))
 
     def _request(self, suffix, method='GET'):
         auth = base64.b64encode(('backup:'+self.writer).encode()).decode()
@@ -334,6 +334,7 @@ class FullDR(RealDR):
         self.passwords = _passwords()
         self.tokens = _tokens()
         self.leader_letter = 'a'
+        self.generation = 1
 
     # ---- 진행 중 주문과 복원 지점
     def pending_capture(self, api, state):
@@ -378,7 +379,7 @@ class FullDR(RealDR):
         old = {k: v for k, v in (line.split('=', 1) for line in self.sh('a', 'sudo cat /etc/pickup-pact/secrets/order.env').stdout.split() if '=' in line)}
         self.previous_tokens = old
         # 세대 2로 렌더링한 설정(복원 지정 리더만 복원 부트스트랩)
-        data = {**self.data, 'operating': {'generation': 2},
+        data = {**self.data, 'operating': {'generation': self.generation+1},
                 'restore': {'leader': f'pact-{self.leader_letter}', 'base_dir': '/var/lib/pickup-pact/restore/base',
                             'wal_dir': '/var/lib/pickup-pact/restore/wal', 'target_name': target_name}}
         problems = inv.validate(data, 'review')
@@ -438,7 +439,7 @@ class FullDR(RealDR):
                               input='\n'.join(statements).encode()+b'\n', capture_output=True, timeout=120)
         if done.returncode:
             raise AssertionError('역할 비밀번호 교체 실패')
-        report['bumped'] = self.bump_generation(lead, expected=1)
+        report['bumped'] = self.bump_generation(lead, expected=self.generation)
         for letter in HOSTS:
             for unit in START_ORDER:
                 self.sh(letter, f'sudo systemctl start {unit}', timeout=120)
@@ -481,7 +482,7 @@ class FullDR(RealDR):
                 results.append(json.loads(done.stdout))
         finally:
             self.sh(letter, 'sudo rm -rf /dev/shm/pact-migrate', check=False)
-        assert all(item['generation'] == 2 and item['changed'] for item in results), results
+        assert all(item['generation'] == expected+1 and item['changed'] for item in results), results
         return results
 
     def internal_transport(self, generation: int):
@@ -521,6 +522,7 @@ def full_stage(args) -> dict:
         dr.ensure_units()
         dr.wait_cluster(members=3, timeout=240)
         dr.wait_apps(HOSTS)
+        dr.generation = int(dr.sh('a', "sudo sed -n 's/^PICKUP_OPERATING_GENERATION=//p' /etc/pickup-pact/pickup-order.env").stdout.strip())
         dr.setup_store()
         first = api.start('a')
         completed = api.finish('a', 'b', first)
@@ -593,17 +595,17 @@ def full_stage(args) -> dict:
         # DR-06: 이전 세대·이전 토큰 거부, 현재 값은 통과, 기존 거래는 조회 가능
         from demo.route.merchant_http import HttpMerchantFleet
         merchant = 'https://pact-a.pact.internal:8443'
-        current = HttpMerchantFleet(merchant, dr.tokens['ROUTE_MERCHANT_TOKEN'], 2, transport=dr.internal_transport(2))
+        current = HttpMerchantFleet(merchant, dr.tokens['ROUTE_MERCHANT_TOKEN'], 2, transport=dr.internal_transport(dr.generation+1))
         assert current.snapshot('dr-probe')
         refused6 = []
-        for label, token, generation in [('previous_token', dr.previous_tokens['ROUTE_MERCHANT_TOKEN'], 2),
-                                         ('previous_generation', dr.tokens['ROUTE_MERCHANT_TOKEN'], 1)]:
+        for label, token, generation in [('previous_token', dr.previous_tokens['ROUTE_MERCHANT_TOKEN'], dr.generation+1),
+                                         ('previous_generation', dr.tokens['ROUTE_MERCHANT_TOKEN'], dr.generation)]:
             try:
                 HttpMerchantFleet(merchant, token, 2, transport=dr.internal_transport(generation)).snapshot('dr-probe')
             except OSError:
                 refused6.append(label)
         assert refused6 == ['previous_token', 'previous_generation'], refused6
-        record('DR-06', refused=refused6, existing_order_readable=True)
+        record('DR-06', refused=refused6, existing_order_readable=True, generation_before=dr.generation, generation_after=dr.generation+1)
         # DR-07: 키·영수증·봉인값은 DB 호스트 밖(이 시험 도구와 저장소)에만 있었고, 증거에는 비밀값이 없다.
         secret_values = list(dr.passwords.values())+list(dr.tokens.values())+list(dr.previous_tokens.values())+[dr.encryption, dr.writer]
         assert _scan_for_secrets(dict(report=report, rows=rows), secret_values), '증거에 비밀값이 있다'
