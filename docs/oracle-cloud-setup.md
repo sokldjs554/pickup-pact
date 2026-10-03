@@ -6,8 +6,8 @@ Task 5의 실제 독립 호스트 시험(HA-01~10, DR-01~08)을 위한 준비 �
 
 가입하면 **30일 무료 체험 크레딧(US$300)**이 나온다. 이 크레딧으로 시험하면 비용이 들지 않는다.
 
-- **필요한 자원:** ARM(A1) 1 OCPU·6GB 서버 3대와 소형 x86 백업 서버 1대.
-- **크레딧 소모 예상:** 무료분을 하나도 빼지 않는 최악의 경우에도 3일 약 $4, 한 달 내내 켜 둬도 약 $41이다. 크레딧 안에 넉넉히 들어간다.
+- **필요한 자원:** x86 AMD(E4.Flex) 1 OCPU·6GB 서버 3대와 소형 x86 백업 서버 1대. A1(ARM)은 용량 부족(Out of capacity)이 잦아 쓰지 않는다.
+- **크레딧 소모 예상:** 3일 약 $7~10이다. 크레딧 안에 넉넉히 들어가고, 업그레이드하지 않으면 실제 결제는 0원이다.
 - **업그레이드 금지:** 계정을 **Pay As You Go로 업그레이드하지 않는다.**
   - 업그레이드하지 않으면 체험이 끝나도 카드로 자동 청구되지 않는다.
   - 체험 종료 후 30일 유예 기간이 지나면, 무료 범위를 넘는 자원은 Oracle이 회수한다.
@@ -24,7 +24,7 @@ Task 5의 실제 독립 호스트 시험(HA-01~10, DR-01~08)을 위한 준비 �
      - 시험 트래픽은 대부분 같은 리전 서버끼리 오가므로 거리는 결과에 거의 영향이 없다.
      - SSH·브라우저 접속만 조금 느려진다.
    - 일본 리전도 가용 영역은 1개이고, 그 안의 fault domain 3개로 서버를 나눈다.
-   - A1 서버가 "Out of capacity"로 만들어지지 않는 경우가 잦다. 그때는 시간을 두고 다시 시도하거나, 다른 fault domain을 먼저 만든다.
+   - A1 서버는 "Out of capacity"로 만들어지지 않는 경우가 잦다. 그래서 x86 AMD E4.Flex(없으면 E5.Flex)를 쓴다.
 
 ## 2. 예산 경보 (서버를 만들기 전에)
 
@@ -41,8 +41,7 @@ Task 5의 실제 독립 호스트 시험(HA-01~10, DR-01~08)을 위한 준비 �
 1. **Networking → Virtual Cloud Networks → Start VCN Wizard → Create VCN with Internet Connectivity**를 선택한다.
    - 이름: `pact-ha-vcn`
    - VCN CIDR: `10.0.0.0/16`
-   - Public subnet: `10.0.1.0/24`
-   - Private subnet: `10.0.2.0/24` (사용하지 않아도 됨)
+   - Public subnet: `10.0.0.0/24`
 2. Public subnet의 **Security List**에서 Ingress 규칙을 아래만 남긴다.
 
 | 출발지 | 프로토콜/포트 | 용도 |
@@ -72,15 +71,16 @@ cat ~/.ssh/pact-ha.pub   # 서버를 만들 때 이 공개키를 붙여 넣는�
 
 | 이름 | Shape | 이미지 | Fault domain | Private IP | 역할 |
 |---|---|---|---|---|---|
-| pact-a | VM.Standard.A1.Flex, **1 OCPU · 6 GB** | Ubuntu 24.04 (aarch64) | FAULT-DOMAIN-1 | 10.0.1.11 | PostgreSQL·etcd·주문·가맹점·결제·진입점 |
-| pact-b | VM.Standard.A1.Flex, **1 OCPU · 6 GB** | Ubuntu 24.04 (aarch64) | FAULT-DOMAIN-2 | 10.0.1.12 | 위와 같음 |
-| pact-c | VM.Standard.A1.Flex, **1 OCPU · 6 GB** | Ubuntu 24.04 (aarch64) | FAULT-DOMAIN-3 | 10.0.1.13 | PostgreSQL·etcd·주문·가맹점·결제 |
-| pact-backup | VM.Standard.E2.1.Micro (Always Free) | Ubuntu 24.04 | 아무 곳 | 10.0.1.20 | Restic append-only 저장소 |
+| pact-a | VM.Standard.E4.Flex (없으면 E5.Flex), **1 OCPU · 6 GB** | Ubuntu 24.04 (x86_64) | FAULT-DOMAIN-1 | 10.0.0.11 | PostgreSQL·etcd·주문·가맹점·결제·진입점 |
+| pact-b | VM.Standard.E4.Flex (없으면 E5.Flex), **1 OCPU · 6 GB** | Ubuntu 24.04 (x86_64) | FAULT-DOMAIN-2 | 10.0.0.12 | 위와 같음 |
+| pact-c | VM.Standard.E4.Flex (없으면 E5.Flex), **1 OCPU · 6 GB** | Ubuntu 24.04 (x86_64) | FAULT-DOMAIN-3 | 10.0.0.13 | PostgreSQL·etcd·주문·가맹점·결제 |
+| pact-backup | VM.Standard.E2.1.Micro (Always Free) | Ubuntu 24.04 | 아무 곳 | 10.0.0.20 | Restic append-only 저장소 |
 
 - Boot volume은 기본값(약 47GB)을 쓴다. 4대 합계가 무료 200GB 안에 들어간다.
 - Subnet은 `pact-ha-vcn`의 public subnet이고, **Assign a public IPv4 address**를 켠다.
 - SSH keys에는 4장의 공개키를 붙여 넣는다.
-- 만든 뒤 각 서버의 **공인 IP**와 **OCID**를 메모한다.
+- Shape를 고를 때 **Browse all shapes → AMD** 탭에서 고른다. Shape를 바꾼 뒤 이미지가 x86 Ubuntu 24.04인지 다시 확인한다.
+- 만든 뒤 각 서버의 **Fault domain, Private IP, 공인 IP**를 메모한다.
 
 ## 6. 이 환경의 한계 (결과 문서에 그대로 적는다)
 
