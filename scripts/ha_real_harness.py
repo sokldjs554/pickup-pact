@@ -193,20 +193,24 @@ class RealCluster:
                 pass
 
     def ensure_units(self):
-        """멈춘 유닛이 있으면 시작한다(앞선 시험의 장애가 남지 않게)."""
+        """정지 조건과 멈춘 유닛을 모두 되돌린다(앞선 시험의 장애가 남지 않게)."""
         for letter in HOSTS:
             try:
+                self.sh(letter, 'sudo rm -f /etc/pickup-pact/hold && sync', check=False)
                 for unit in ALL_UNITS:
                     self.sh(letter, f'systemctl is-active --quiet {unit} || sudo systemctl start {unit}', timeout=150, check=False)
             except Exception:  # noqa: BLE001
                 pass
 
     def clear_faults(self):
+        """분리 규칙과 정지 조건 파일을 지우고, 멈춘 유닛을 시작한다."""
         for letter in HOSTS:
             try:
                 self.heal(letter)
+                self.sh(letter, 'sudo rm -f /etc/pickup-pact/hold && sync', check=False)
             except Exception:  # noqa: BLE001
                 pass
+        self.ensure_units()
 
     def psql_leader(self, sql: str) -> str:
         leader = self.leader()
@@ -219,6 +223,22 @@ class RealApi(base.Api):
 
     def settle(self, letter, state, timeout=60):
         return super().settle(letter, state, timeout=max(timeout, 180))
+
+    def command(self, letter, state, action, request_id=None, **extra):
+        """저장소가 장애 조치 중이면 서비스는 503으로 "같은 요청으로 다시 확인"을 안내한다. 같은 요청 키로 다시 보낸다."""
+        from uuid import uuid4
+        request_id = request_id or uuid4().hex
+        deadline = time.monotonic()+180
+        while True:
+            try:
+                return super().command(letter, state, action, request_id=request_id, **extra)
+            except AssertionError as exc:
+                if '-> 503' not in str(exc) or time.monotonic() > deadline:
+                    raise
+            except Exception:  # noqa: BLE001 - 연결 오류도 같은 키로 재시도
+                if time.monotonic() > deadline:
+                    raise
+            time.sleep(1.5)
 
 
 def wal_archive(cluster, api):

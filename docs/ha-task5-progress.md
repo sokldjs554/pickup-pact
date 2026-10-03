@@ -67,6 +67,12 @@
   - 첫 시도는 Oracle VCN 보안 규칙이 서브넷에 적용되지 않아 서버 간 etcd/DB/앱 포트가 차단되어 멈췄다. 규칙(10.0.0.0/16 TCP 전체)을 서브넷의 Security List에 넣은 뒤 재시작했다.
   - 데이터가 없는 부분 배포만 정리 후 재시작하며, PostgreSQL 데이터가 있으면 거부한다.
 - [x] 실서버 기본 시험 1회(2026-10-03, 같은 클러스터): WAL-ARCHIVE, HA-01, HA-02, HA-03 통과(각 3.9/2.1/34.7/3.3초). 시험 도구는 클러스터 밖 pact-backup에서 실행하고, DB 서버는 `from=10.0.0.20`으로 제한한 임시 SSH 키로 조작했다(끝나면 제거).
+- 실서버 시험에서 처음 드러난 문제와 고친 내용(로컬 Docker 리허설에서는 보이지 않던 것)
+  1. **재부팅 후 watchdog 장치 없음**: 즉시 재부팅한 호스트에서 `/dev/watchdog`이 없어 Patroni가 `watchdog: required` 때문에 시작하지 못하고 복귀하지 못했다. `patroni.service`가 시작 전에 `softdog`를 올리고 소유자를 맞추도록 수정했다.
+  2. **오래 내려간 대기 노드가 복귀하지 못함**: Patroni가 TTL 이후 슬롯을 지워 새 리더의 WAL이 정리되면 `requested WAL segment ... has already been removed`로 `starting`에 갇혔다. 렌더링 설정에 `wal_keep_size: 2GB`를 넣었고(테스트 추가), 이미 배포된 클러스터에는 `patronictl edit-config`로 적용했다. 정체된 노드는 `patronictl reinit`으로 복구했다.
+  3. **망 분리 시 DB 연결이 멈춤**: 방화벽이 패킷을 조용히 버리면 기존 연결이 오류 없이 멈추고 서버 쪽 `statement_timeout`은 소용이 없다. DB 풀 연결에 `keepalives*`와 `tcp_user_timeout=10000`을 추가했다(`demo/route/ha/database.py`, 테스트 추가).
+  4. **빨리 돌아오는 호스트는 장애 조치를 만들지 않는다**: 즉시 재부팅한 호스트가 리더 임대 TTL(30초) 안에 돌아오면 같은 호스트가 다시 리더가 된다(정상 동작). 시험은 정지 조건 파일로 etcd·patroni 시작을 막아 장시간 정지를 모사한다(복귀는 시험이 정한 시점).
+  - 호스트 장애는 전원 차단이 아니라 `sysrq b` 즉시 재부팅(정상 종료·디스크 동기화 없음)이다. 부팅 후 DB 역할의 정지는 조건 파일로 모사한다.
 - [ ] 장애 주입 시험 HA-04(호스트 즉시 재부팅), HA-05(대기 DB 중단), HA-06(망 분리): 소유자 확인 후 실행
 - [ ] HA-07~10, DR-01~08, 3회 반복
 

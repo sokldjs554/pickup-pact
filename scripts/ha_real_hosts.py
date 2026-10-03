@@ -200,6 +200,8 @@ def refresh_units(hosts: list[Host], out: Path) -> bool:
     units = ['etcd', 'patroni', 'pickup-merchant', 'pickup-order-notification', 'pickup-payment', 'pickup-order-app', 'pickup-order-worker']
     for host in [h for h in hosts if h.name != 'pact-backup']:
         host.run_bytes('sudo tar -xp -C /', buffer.getvalue())
+        # 시험이 중간에 멈춰 정지 조건 파일이나 드롭인이 남았으면 지운다(시험 도구가 시작할 때 다시 둔다).
+        host.run('sudo rm -f /etc/pickup-pact/hold /etc/systemd/system/etcd.service.d/hold.conf /etc/systemd/system/patroni.service.d/hold.conf')
         host.run('sudo systemctl daemon-reload')
         # 앱 코드를 현재 커밋으로 갱신하고 서비스만 재시작한다(DB·etcd는 건드리지 않는다). 호스트를 하나씩 해서 서비스가 계속 남는다.
         host.run_bytes('sudo tar -x -C /opt/pickup-pact', code)
