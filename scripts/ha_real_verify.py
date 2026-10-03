@@ -22,6 +22,7 @@ from demo.route.ha import inventory as inv  # noqa: E402
 WORK = '/dev/shm/pact-harness'
 BASIC = ['WAL-ARCHIVE', 'HA-01', 'HA-02', 'HA-03']
 FAULTS = ['HA-04', 'HA-05', 'HA-06']
+ENTRY = ['HA-10']
 CONCURRENCY = ['HA-08-sequential-replay', 'HA-07-multihost', 'HA-08-multihost', 'HA-09-multihost']
 UNPARTITION = "sudo iptables-save | grep -v 'pact-partition' | sudo iptables-restore"
 
@@ -99,6 +100,10 @@ def verify(hosts, inventory_path: Path, out: Path, *, only: list[str], repeat: i
         print('[ssh-check]', json.dumps(reach, ensure_ascii=False), flush=True)
         if any(value != 'ok' for value in reach.values()):
             raise AssertionError('시험 도구가 DB 서버에 접속하지 못한다: '+json.dumps(reach, ensure_ascii=False))
+        if 'HA-10' in only:  # 진입점 시험: 두 진입점의 공개 인증서(개인키 아님)를 시험 도구의 신뢰 목록으로 올린다.
+            trust = ''.join(next(h for h in db if h.name == name).run('sudo cat /etc/pickup-pact/tls/public.crt').stdout
+                            for name in ('pact-a', 'pact-b'))
+            backup.run_bytes(f'umask 077 && cat > {WORK}/entry-trust.pem', trust.encode())
         args = ['--work', WORK, '--output', f'{WORK}/out', '--repeat', str(repeat)]
         if only:
             args += ['--only', *only]

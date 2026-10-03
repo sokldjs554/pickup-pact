@@ -358,9 +358,38 @@ def native_suite(hosts: list[Host], out: Path, repeat: int) -> bool:
     return ok
 
 
+def entry_setup(hosts: list[Host], out: Path) -> bool:
+    """pact-a, pact-b에 HAProxy 진입점을 설치하고 인벤토리가 렌더링한 설정으로 시작한다(데이터는 건드리지 않는다)."""
+    sys.path.insert(0, str(ROOT))
+    from demo.route.ha import inventory as inv
+    import tempfile
+    data = inv.load(str(ROOT/'infra/ha/inventory.oracle-osaka.yaml'))
+    rendered = Path(tempfile.mkdtemp(prefix='pact-entry-'))/'cfg'
+    inv.render(data, rendered)
+    report = {}
+    for name in data['entry']['hosts']:
+        host = next(h for h in hosts if h.name == name)
+        private = host.spec['private']
+        done = host.run_script(ROOT/'infra/ha/hosts/entry-setup.sh', [private, '10.0.0.0/24'], timeout=900)
+        config = (rendered/'hosts'/name/'haproxy.cfg').read_bytes()
+        host.run_bytes('sudo install -m 0644 -o root -g root /dev/stdin /etc/haproxy/haproxy.cfg', config)
+        check = host.run('sudo haproxy -c -f /etc/haproxy/haproxy.cfg 2>&1 | tail -3', check=False)
+        host.run('sudo systemctl enable haproxy >/dev/null 2>&1; sudo systemctl restart haproxy', timeout=120)
+        time.sleep(4)
+        state = host.run('systemctl is-active haproxy', check=False).stdout.strip()
+        listening = host.run(f"sudo ss -ltn | grep -c '{private}:443'", check=False).stdout.strip()
+        report[name] = dict(version=done.stdout.strip().splitlines()[-1][:80], config_check=check.stdout.strip()[-120:],
+                            haproxy=state, listening_443=listening)
+    ok = all(row['haproxy'] == 'active' and row['listening_443'] == '1' for row in report.values())
+    out.mkdir(parents=True, exist_ok=True)
+    (out/'entry-setup.json').write_text(json.dumps(dict(passed=ok, entry=report), ensure_ascii=False, indent=2))
+    print(json.dumps(dict(passed=ok, entry=report), ensure_ascii=False))
+    return ok
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('phase', choices=['preflight', 'install', 'deploy', 'diagnose', 'verify-basic', 'verify-faults', 'refresh-units', 'reboot-probe', 'dr-backup', 'dr-restore', 'native-suite', 'verify-concurrency'])
+    parser.add_argument('phase', choices=['preflight', 'install', 'deploy', 'diagnose', 'verify-basic', 'verify-faults', 'refresh-units', 'reboot-probe', 'dr-backup', 'dr-restore', 'native-suite', 'verify-concurrency', 'entry-setup', 'verify-entry'])
     parser.add_argument('--inventory', type=Path, default=ROOT/'infra/ha/hosts/oracle-osaka.json')
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args(argv)
@@ -389,16 +418,18 @@ def main(argv=None) -> int:
         print(json.dumps(dict(passed=ok)))
         return 0 if ok else 1
     if args.phase.startswith('verify-'):
-        from ha_real_verify import verify, BASIC, FAULTS, CONCURRENCY
-        faults = args.phase == 'verify-faults'
+        from ha_real_verify import verify, BASIC, FAULTS, CONCURRENCY, ENTRY
+        faults = args.phase in {'verify-faults', 'verify-entry'}
         try:
             ok = verify(hosts, ROOT/'infra/ha/inventory.oracle-osaka.yaml', args.output,
-                        only=FAULTS if faults else CONCURRENCY if args.phase == 'verify-concurrency' else BASIC, repeat=int(os.environ.get('PACT_REPEAT') or (ROOT/'infra/ha/hosts/repeat.txt').read_text().strip() or 1), faults=faults)
+                        only=ENTRY if args.phase == 'verify-entry' else FAULTS if faults else CONCURRENCY if args.phase == 'verify-concurrency' else BASIC, repeat=int(os.environ.get('PACT_REPEAT') or (ROOT/'infra/ha/hosts/repeat.txt').read_text().strip() or 1), faults=faults)
         except BaseException as exc:  # noqa: BLE001
             print(json.dumps(dict(passed=False, error=f'{type(exc).__name__}: {str(exc)[:800]}'), ensure_ascii=False))
             return 1
         print(json.dumps(dict(passed=ok)))
         return 0 if ok else 1
+    if args.phase == 'entry-setup':
+        return 0 if entry_setup(hosts, args.output) else 1
     if args.phase == 'native-suite':
         return 0 if native_suite(hosts, args.output, int((ROOT/'infra/ha/hosts/repeat.txt').read_text().strip() or 1)) else 1
     if args.phase == 'reboot-probe':
