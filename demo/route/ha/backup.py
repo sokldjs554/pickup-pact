@@ -12,6 +12,8 @@ import re
 
 MANIFEST='pact-backup-manifest.json'
 METADATA={'cluster_id','source_commit','timeline','wal_segment_size','start_lsn','target_lsn','scope'}
+# The development scope is the default; an inventory-approved set of independent hosts has its own explicit label.
+SCOPES={'development_single_host','oracle_single_ad_fault_domains'}
 
 
 def _lsn(value):
@@ -38,7 +40,7 @@ def _metadata(meta):
         raise ValueError('invalid cluster identity')
     if not isinstance(meta['source_commit'],str) or not re.fullmatch('[0-9a-f]{40}',meta['source_commit']):
         raise ValueError('source identity required')
-    if meta['scope']!='development_single_host':raise ValueError('this rehearsal does not attest external-host storage')
+    if meta['scope'] not in SCOPES:raise ValueError('this backup pipeline does not attest that scope')
     return required_wal(meta['start_lsn'],meta['target_lsn'],timeline=meta['timeline'],segment_bytes=meta['wal_segment_size'])
 
 

@@ -34,7 +34,8 @@ def gate(inventory_path: Path, needs_destructive: bool) -> dict:
     return data
 
 
-def verify(hosts, inventory_path: Path, out: Path, *, only: list[str], repeat: int, faults: bool) -> bool:
+def verify(hosts, inventory_path: Path, out: Path, *, only: list[str], repeat: int, faults: bool,
+           driver: str = 'ha_real_harness.py') -> bool:
     gate(inventory_path, faults)
     if faults:
         approval = ROOT/'infra/ha/hosts/fault-approval.txt'
@@ -55,6 +56,12 @@ def verify(hosts, inventory_path: Path, out: Path, *, only: list[str], repeat: i
                    'sudo mkdir -p /opt/pact-harness && sudo chown ubuntu:ubuntu /opt/pact-harness', timeout=300)
         code = subprocess.run(['git', 'archive', '--format=tar', 'HEAD'], cwd=ROOT, check=True, capture_output=True).stdout
         backup.run_bytes('tar -x -C /opt/pact-harness', code)
+        commit = subprocess.run(['git', 'rev-parse', 'HEAD'], cwd=ROOT, check=True, capture_output=True, text=True).stdout.strip()
+        backup.run(f'echo {commit} > /opt/pact-harness/.pact-commit')
+        if driver == 'ha_real_dr.py':  # 기본 백업(pg_basebackup)에 필요한 PostgreSQL 17 클라이언트
+            backup.run('sudo apt-get install -y -qq postgresql-common gnupg >/dev/null && '
+                       'sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y >/dev/null 2>&1 && sudo apt-get update -qq && '
+                       'sudo apt-get install -y -qq --no-install-recommends postgresql-client-17 >/dev/null', timeout=600)
         backup.run('python3 -m venv /opt/pact-harness/.venv && /opt/pact-harness/.venv/bin/pip install -q --disable-pip-version-check '
                    '-r /opt/pact-harness/requirements-ha.txt', timeout=900)
         # 2. 비공개 자료: 메모리 디스크에만 둔다.
@@ -87,7 +94,7 @@ def verify(hosts, inventory_path: Path, out: Path, *, only: list[str], repeat: i
         if only:
             args += ['--only', *only]
         script = (f'cd /opt/pact-harness && PYTHONPATH=.:services/reconciler PICKUP_HA_TEST=1 '
-                  f'/opt/pact-harness/.venv/bin/python scripts/ha_real_harness.py {" ".join(args)} > {WORK}/log.txt 2>&1; echo $? > {WORK}/exit')
+                  f'/opt/pact-harness/.venv/bin/python scripts/{driver} {" ".join(args)} > {WORK}/log.txt 2>&1; echo $? > {WORK}/exit')
         backup.run_bytes(f'cat > {WORK}/run.sh', script.encode())
         backup.run(f'nohup setsid bash {WORK}/run.sh >/dev/null 2>&1 < /dev/null & echo started')
         # 4. 진행 상황을 따라가며 기다린다.

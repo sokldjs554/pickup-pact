@@ -82,3 +82,14 @@ def test_delete_guard_never_accepts_non_test_or_changed_resource():
     for name,lab,r,role in [('main',labels,run,'source'),('pickup-dr-'+run+'-source',{},run,'source'),
                          ('pickup-dr-'+run+'-source',labels,'wrong','source')]:
         with pytest.raises(ValueError):b.assert_test_resource(name,lab,r,role)
+
+
+def test_bundle_scope_must_be_a_known_label():
+    import pytest
+    from demo.route.ha import backup
+    meta = dict(cluster_id='1', source_commit='a'*40, timeline=1, wal_segment_size=16*1024*1024,
+                start_lsn='0/100000', target_lsn='0/100010', scope='development_single_host')
+    assert backup._metadata(meta)
+    assert backup._metadata(dict(meta, scope='oracle_single_ad_fault_domains'))
+    with pytest.raises(ValueError):
+        backup._metadata(dict(meta, scope='production'))
