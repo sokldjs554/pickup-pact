@@ -538,6 +538,9 @@ def patroni_config(data, host: Host) -> dict:
                     'postgresql': {'use_pg_rewind': True, 'use_slots': True, 'parameters': {
                         'wal_level': 'replica', 'hot_standby': 'on', 'max_wal_senders': 10,
                         'max_replication_slots': 10, 'wal_log_hints': 'on', 'archive_mode': 'on',
+                        # Patroni drops the slot of a member that has been down longer than the TTL; without kept WAL a
+                        # standby that was down for a while cannot catch up and stays "starting" until it is re-initialised.
+                        'wal_keep_size': '2GB',
                         'archive_timeout': '60s', 'synchronous_commit': 'on', 'max_connections': 200}}},
             'initdb': [{'encoding': 'UTF8'}, 'data-checksums', {'locale': 'C.UTF-8'}],
         },

@@ -251,6 +251,12 @@ def test_render_writes_strict_patroni_quorum_and_tls_only_access(rendered):
         assert etcd['ETCD_INITIAL_CLUSTER'].count('https://') == 3
 
 
+def test_render_keeps_wal_for_standbys_that_were_down_for_a_while(rendered):
+    out, _ = rendered
+    config = yaml.safe_load((out/'hosts/pact-a/patroni.yml').read_text())
+    assert config['bootstrap']['dcs']['postgresql']['parameters']['wal_keep_size'] == '2GB'
+
+
 def test_render_entry_points_and_manifest_without_secrets(rendered):
     out, manifest = rendered
     proxies = sorted(path.parent.name for path in out.glob('hosts/*/haproxy.cfg'))

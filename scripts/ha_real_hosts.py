@@ -205,19 +205,35 @@ def refresh_units(hosts: list[Host], out: Path) -> bool:
                 host.run(f'sudo systemctl start {unit}', check=False, timeout=150)
                 started.append(unit)
         report[host.name] = dict(started=started, states=host.run('systemctl is-active '+' '.join(units), check=False).stdout.split())
-    deadline = time.monotonic()+240
+    scope = 'pact-ha-oracle-osaka'
+    patronictl = f'sudo -u postgres /opt/patroni/bin/patronictl -c /etc/pickup-pact/patroni.yml'
+    actions = []
+    # 이미 배포된 클러스터에도 WAL 보관량을 적용한다(새 배포는 렌더링된 설정에 들어 있다). 같은 값이면 변경 없음.
+    done = hosts[0].run(f"{patronictl} edit-config -s postgresql.parameters.wal_keep_size=2GB --force", check=False, timeout=60)
+    actions.append(dict(action='wal_keep_size=2GB', exit=done.returncode))
+    reinit_after = time.monotonic()+150
+    deadline = time.monotonic()+480
     members = None
+    reinitialised = set()
     while time.monotonic() < deadline:
         done = hosts[0].run('sudo -u postgres /opt/patroni/bin/patronictl -c /etc/pickup-pact/patroni.yml list -f json', check=False, timeout=60)
         if done.returncode == 0 and done.stdout.strip():
             members = [(m['Member'], m['Role'], m['State']) for m in json.loads(done.stdout)]
             if len(members) == 3 and all(m[2] in {'running', 'streaming'} for m in members):
                 break
+            # 일정 시간이 지나도 따라잡지 못하고 starting에 머문 대기 노드는 리더에서 다시 복제한다(그 노드 데이터만 지운다).
+            if time.monotonic() > reinit_after:
+                for name, role, state in members:
+                    if state == 'starting' and role == 'Replica' and name not in reinitialised and name in {h.name for h in hosts}:
+                        done = hosts[0].run(f'{patronictl} reinit {scope} {name} --force', check=False, timeout=120)
+                        reinitialised.add(name)
+                        actions.append(dict(action=f'reinit {name}', exit=done.returncode))
+                        reinit_after = time.monotonic()+30
         time.sleep(5)
     ok = bool(members) and len(members) == 3 and all(m[2] in {'running', 'streaming'} for m in members)
     out.mkdir(parents=True, exist_ok=True)
-    (out/'refresh-units.json').write_text(json.dumps(dict(passed=ok, hosts=report, members=members), ensure_ascii=False, indent=2))
-    print(json.dumps(dict(passed=ok, hosts=report, members=members), ensure_ascii=False))
+    (out/'refresh-units.json').write_text(json.dumps(dict(passed=ok, hosts=report, members=members, actions=actions), ensure_ascii=False, indent=2))
+    print(json.dumps(dict(passed=ok, hosts=report, members=members, actions=actions), ensure_ascii=False))
     return ok
 
 
