@@ -335,6 +335,19 @@ def ha08_multihost(cluster, api):
                 same_key=[kind for kind, _ in same], proof_same_key=proof_same)
 
 
+def ha08_sequential_replay(cluster, api):
+    """진단: 같은 요청 키를 순차로 다시 보냈을 때 응답이 원래 응답과 같은지(동시성 때문인지 구분한다)."""
+    state = _drive_to_ready(api, 'a')
+    key = uuid4().hex
+    body = dict(pickup_code=state['order']['pickup_code'])
+    first = base.Api.command(api, 'a', state, 'claim', request_id=key, **body)
+    replays = [base.Api.command(api, host, state, 'claim', request_id=key, **body) for host in ('b', 'c', 'a')]
+    fields = ('state', 'picked_up_at', 'status')
+    return dict(first={k: first['order'].get(k) for k in fields}, first_duplicate=first.get('duplicate'),
+                replays=[dict({k: r['order'].get(k) for k in fields}, duplicate=r.get('duplicate')) for r in replays],
+                identical=all(r['order'] == first['order'] for r in replays))
+
+
 def ha09_multihost(cluster, api):
     """다중 탭: 같은 주문 상태에서 세 호스트(호스트마다 2탭)가 서로 다른 키로 같은 전이를 동시에 보낸다. 전이는 한 번만 효력이 있고 끝까지 불변조건을 지킨다."""
     from concurrent.futures import ThreadPoolExecutor
@@ -362,7 +375,7 @@ def ha09_multihost(cluster, api):
     return dict(tab_outcomes=[kind for kind, _ in outcomes], proof=api.proof('c', state))
 
 
-SCENARIOS = [('HA-07-multihost', ha07_multihost), ('HA-08-multihost', ha08_multihost), ('HA-09-multihost', ha09_multihost),
+SCENARIOS = [('HA-08-sequential-replay', ha08_sequential_replay), ('HA-07-multihost', ha07_multihost), ('HA-08-multihost', ha08_multihost), ('HA-09-multihost', ha09_multihost),
              ('WAL-ARCHIVE', wal_archive), ('HA-01', base.ha01), ('HA-02', base.ha02), ('HA-03', base.ha03),
              ('HA-04', base.ha04), ('HA-05', base.ha05), ('HA-06', base.ha06)]
 
