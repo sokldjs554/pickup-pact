@@ -21,7 +21,10 @@ sed -i '/# pickup-pact-begin/,/# pickup-pact-end/d' /etc/hosts
 {
   echo '# pickup-pact-begin'
   IFS=, read -ra pairs <<< "$HOSTS"
-  for pair in "${pairs[@]}"; do echo "${pair%%=*} ${pair##*=}.pact.internal ${pair##*=}"; done
+  for pair in "${pairs[@]}"; do
+    alias_name=""; [ "${pair##*=}" = pact-backup ] && alias_name=" backup.pact.internal"   # 인벤토리의 백업 저장소 이름
+    echo "${pair%%=*} ${pair##*=}.pact.internal ${pair##*=}${alias_name}"
+  done
   echo '# pickup-pact-end'
 } >> /etc/hosts
 
