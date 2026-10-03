@@ -72,6 +72,17 @@ def verify(hosts, inventory_path: Path, out: Path, *, only: list[str], repeat: i
         for host in db:
             # 장애 시험에서 호스트가 즉시 재부팅(동기화 없음)되어도 시험 도구의 접속 키가 남도록 디스크에 확정한다.
             host.run(f"echo {shlex.quote(entry)} >> ~/.ssh/authorized_keys && sync")
+        # 시험 도구가 DB 서버 세 대에 모두 접속할 수 있는지 먼저 확인한다(안 되면 시작하지 않는다).
+        reach = {}
+        for host in db:
+            done = backup.run(f"ssh -i {WORK}/id -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=accept-new "
+                              f"-o UserKnownHostsFile={WORK}/known_hosts -o ConnectTimeout=8 ubuntu@{host.spec['private']} 'echo ok' 2>&1 | tail -1",
+                              check=False, timeout=60)
+            reach[host.name] = done.stdout.strip()[:120]
+        (out/'ssh-check.json').write_text(json.dumps(reach, ensure_ascii=False, indent=2))
+        print('[ssh-check]', json.dumps(reach, ensure_ascii=False), flush=True)
+        if any(value != 'ok' for value in reach.values()):
+            raise AssertionError('시험 도구가 DB 서버에 접속하지 못한다: '+json.dumps(reach, ensure_ascii=False))
         args = ['--work', WORK, '--output', f'{WORK}/out', '--repeat', str(repeat)]
         if only:
             args += ['--only', *only]
