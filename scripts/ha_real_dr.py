@@ -106,7 +106,9 @@ class RealDR(RealCluster):
                 raise OSError('저장소 인증이 시작 중에 실패했다') from None
             except (URLError, OSError):
                 time.sleep(.3)
-        raise OSError('HTTPS 저장소가 준비되지 않았다')
+        logs = self.local(f'sudo journalctl -u {STORE_UNIT} --no-pager -n 12 -o cat 2>&1 | cut -c1-200; '
+                          f'systemctl is-active {STORE_UNIT}; ls -ld {STORE_DATA} {STORE_CONF}; sudo ss -ltn | grep {STORE_PORT}', check=False).stdout
+        raise OSError('HTTPS 저장소가 준비되지 않았다: '+logs.replace('\n', ' | ')[:900])
 
     def stop_store(self):
         self.local(f'sudo systemctl stop {STORE_UNIT} 2>/dev/null; sudo systemctl reset-failed {STORE_UNIT} 2>/dev/null; true', check=False)
