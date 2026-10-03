@@ -73,21 +73,21 @@ def preflight(hosts: list[Host], inventory: dict, out: Path) -> bool:
         row['problems'] = problems
         report[host.name] = row
         ok &= not problems
-    # 호스트 사이 사설망 도달성(ICMP는 보안 목록에서 허용된 기본 규칙)
+    # 호스트 사이 사설망 도달성. Oracle 기본 규칙은 ICMP echo를 막으므로 TCP 22로 확인한다.
     for src in hosts:
         reach = {}
         for dst in hosts:
             if dst is src:
                 continue
-            done = src.run(f"ping -c 2 -W 2 {dst.spec['private']} >/dev/null 2>&1 && echo up || echo down", check=False)
+            done = src.run(f"timeout 4 bash -c 'exec 3<>/dev/tcp/{dst.spec['private']}/22' >/dev/null 2>&1 && echo up || echo down", check=False)
             reach[dst.name] = done.stdout.strip()
             ok &= reach[dst.name] == 'up'
-        report[src.name]['private_ping'] = reach
+        report[src.name]['private_tcp22'] = reach
     out.mkdir(parents=True, exist_ok=True)
     (out/'preflight.json').write_text(json.dumps(dict(inventory=inventory['name'], scope=inventory['scope'], passed=ok, hosts=report),
                                                  ensure_ascii=False, indent=2))
     print(json.dumps(dict(passed=ok, hosts={k: dict(arch=v.get('arch'), cpus=v.get('cpus'), mem_mib=v.get('mem_mib'),
-                                                      disk_gib=v.get('disk_free_gib'), problems=v['problems'], ping=v.get('private_ping'),
+                                                      disk_gib=v.get('disk_free_gib'), problems=v['problems'], tcp22=v.get('private_tcp22'),
                                                       ssh_ed25519=v.get('ssh_fingerprint')) for k, v in report.items()}),
                      ensure_ascii=False, indent=2))
     return ok
