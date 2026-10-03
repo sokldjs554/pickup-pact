@@ -15,6 +15,7 @@ import os
 from pathlib import Path
 import shlex
 import ssl
+import threading
 import subprocess
 import sys
 import time
@@ -262,6 +263,156 @@ def wal_archive(cluster, api):
     return dict(leader=leader, archived_count=archived, failed_count=failed, spooled_files=len(spooled))
 
 
+ENTRY_NAME = 'entry.pact.internal'
+ENTRY_ADDRESSES = ('10.0.0.11', '10.0.0.12')
+ENTRY_HOSTS = {'10.0.0.11': 'a', '10.0.0.12': 'b'}
+
+
+class EntryClient:
+    """공개 주소(다중 A 레코드)를 쓰는 클라이언트. 브라우저·curl처럼 주소를 섞어 시도하고, 연결이 안 되면 다음 주소로 넘어간다."""
+
+    def __init__(self, trust: Path, connect_timeout=3.0):
+        import httpx
+        context = ssl.create_default_context(cafile=str(trust))
+        self.http = httpx.Client(verify=context, trust_env=False, follow_redirects=False,
+                                 timeout=httpx.Timeout(20.0, connect=connect_timeout))
+        self.httpx = httpx
+
+    def request(self, method, path, body=None, *, only=None):
+        import random
+        order = [only] if only else random.sample(ENTRY_ADDRESSES, k=len(ENTRY_ADDRESSES))
+        last = None
+        for address in order:
+            try:
+                response = self.http.request(method, f'https://{address}{path}', json=body, headers={'Host': ENTRY_NAME},
+                                             extensions={'sni_hostname': ENTRY_NAME})
+                return address, response
+            except (self.httpx.ConnectError, self.httpx.ConnectTimeout) as exc:
+                last = exc
+        raise last
+
+
+class EntryApi(base.Api):
+    """주문 흐름 전체를 공개 주소(진입점)를 거쳐 보낸다."""
+
+    def __init__(self, entry: EntryClient):
+        self.entry = entry
+
+    def call(self, letter, path, body=None):
+        address, response = self.entry.request('GET' if body is None else 'POST', path, body)
+        if response.status_code >= 400:
+            raise AssertionError(f'{path} -> {response.status_code}: {response.text[:300]}')
+        return response.json()
+
+
+class EntryProbe(threading.Thread):
+    """진입점 장애 중에도 공개 주소가 계속 응답하는지 0.2초마다 확인한다."""
+
+    def __init__(self, entry: EntryClient):
+        super().__init__(daemon=True)
+        self.entry, self.events, self.stop_event = entry, [], threading.Event()
+
+    def run(self):
+        while not self.stop_event.is_set():
+            started = time.monotonic()
+            try:
+                address, response = self.entry.request('GET', '/ready')
+                self.events.append(dict(t=started, ok=response.status_code == 200, address=address, ms=(time.monotonic()-started)*1000,
+                                        status=response.status_code))
+            except Exception as exc:  # noqa: BLE001
+                self.events.append(dict(t=started, ok=False, address=None, ms=(time.monotonic()-started)*1000, status=type(exc).__name__))
+            self.stop_event.wait(.2)
+
+    def stop(self):
+        self.stop_event.set()
+        self.join(30)
+
+    def window(self, start, end):
+        return [e for e in self.events if start <= e['t'] <= end]
+
+
+def _summarize(events):
+    return dict(requests=len(events), failed=sum(1 for e in events if not e['ok']),
+                served_by=sorted({e['address'] for e in events if e['ok']}),
+                max_ms=round(max((e['ms'] for e in events), default=0)), p95_ms=round(sorted(e['ms'] for e in events)[int(len(events)*.95)-1]) if events else 0)
+
+
+def ha10(cluster, api):
+    """진입점 호스트 1대 중단·복귀: 공개 주소가 남은 진입점으로 계속 응답한다(서비스 중지, 방화벽 무응답 두 방식)."""
+    trust = cluster.work/'entry-trust.pem'
+    entry = EntryClient(trust)
+    entry_api = EntryApi(entry)
+    report = {}
+    # 기준: 두 진입점이 각각 응답하고, 주문 전체가 공개 주소를 거쳐 끝난다.
+    direct = {}
+    for address in ENTRY_ADDRESSES:
+        _, response = entry.request('GET', '/ready', only=address)
+        direct[address] = response.status_code
+    assert set(direct.values()) == {200}, direct
+    baseline = entry_api.finish('a', 'b', entry_api.start('a'))
+    report['baseline'] = dict(direct_ready=direct, order_through_entry=baseline)
+
+    def outage(label, address, inject, restore, hold=14):
+        letter = ENTRY_HOSTS[address]
+        probe = EntryProbe(entry)
+        probe.start()
+        time.sleep(2)
+        began = time.monotonic()
+        inject(letter)
+        try:
+            time.sleep(3)  # 헬스체크·연결 실패가 반영되도록
+            order = entry_api.finish('a', 'b', entry_api.start('a'))
+            time.sleep(hold)
+        finally:
+            ended = time.monotonic()
+            restore(letter)
+        # 복귀: 중단했던 진입점이 다시 응답하고 두 진입점이 함께 서비스한다.
+        deadline = time.monotonic()+60
+        back = None
+        while time.monotonic() < deadline:
+            try:
+                _, response = entry.request('GET', '/ready', only=address)
+                if response.status_code == 200:
+                    back = round(time.monotonic()-ended, 1)
+                    break
+            except Exception:  # noqa: BLE001
+                pass
+            time.sleep(.5)
+        assert back is not None, f'{label}: 중단했던 진입점이 돌아오지 않았다'
+        time.sleep(3)
+        probe.stop()
+        during = probe.window(began+1, ended)
+        after = probe.window(ended+back+1, time.monotonic())
+        summary = _summarize(during)
+        assert summary['failed'] == 0, f'{label}: 공개 주소가 {summary["failed"]}번 응답하지 못했다'
+        assert address not in summary['served_by'], f'{label}: 중단한 진입점이 응답했다'
+        both = sorted({e['address'] for e in after if e['ok']})
+        assert both == sorted(ENTRY_ADDRESSES), f'{label}: 복귀 뒤 두 진입점이 함께 서비스하지 않는다: {both}'
+        return dict(stopped=f'pact-{letter}', during_outage=summary, order_during_outage=order, entry_back_after_s=back,
+                    served_by_after_recovery=both, probe_failed_total=sum(1 for e in probe.events if not e['ok']))
+
+    def stop_service(letter):
+        cluster.sh(letter, 'sudo systemctl stop haproxy')
+
+    def start_service(letter):
+        cluster.sh(letter, 'sudo systemctl start haproxy', check=False)
+
+    def drop_443(letter):
+        cluster.sh(letter, 'sudo iptables -I INPUT 1 -p tcp --dport 443 -m comment --comment pact-entry-drop -j DROP')
+
+    def undrop_443(letter):
+        cluster.sh(letter, "sudo iptables-save | grep -v 'pact-entry-drop' | sudo iptables-restore", check=False)
+
+    try:
+        report['service_stop_pact_a'] = outage('service_stop', '10.0.0.11', stop_service, start_service)
+        report['silent_drop_pact_b'] = outage('silent_drop', '10.0.0.12', drop_443, undrop_443)
+    finally:
+        for letter in ('a', 'b'):
+            undrop_443(letter)
+            start_service(letter)
+    return report
+
+
 def _drive_to_ready(api, host, fault='none'):
     """예약 → 매장 변경 → 제조 완료(수령 직전)까지 한 호스트로 진행한다."""
     state = api.settle(host, api.start(host, fault=fault))
@@ -378,7 +529,7 @@ def ha09_multihost(cluster, api):
     return dict(tab_outcomes=[kind for kind, _ in outcomes], proof=api.proof('c', state))
 
 
-SCENARIOS = [('HA-08-sequential-replay', ha08_sequential_replay), ('HA-07-multihost', ha07_multihost), ('HA-08-multihost', ha08_multihost), ('HA-09-multihost', ha09_multihost),
+SCENARIOS = [('HA-10', ha10), ('HA-08-sequential-replay', ha08_sequential_replay), ('HA-07-multihost', ha07_multihost), ('HA-08-multihost', ha08_multihost), ('HA-09-multihost', ha09_multihost),
              ('WAL-ARCHIVE', wal_archive), ('HA-01', base.ha01), ('HA-02', base.ha02), ('HA-03', base.ha03),
              ('HA-04', base.ha04), ('HA-05', base.ha05), ('HA-06', base.ha06)]
 
