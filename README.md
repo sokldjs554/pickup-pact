@@ -7,6 +7,22 @@
 
 [직접 체험하기](https://pickup-pact-demo.onrender.com) · [처리 순서와 실패 조건](docs/transfer-recovery.md) · [실행·촬영 검증 기록](docs/recovery-release-verification-2026-09-26.md) · [페이타랩 공고와 구현 대조](docs/jd-traceability.md)
 
+## 30초 안내
+
+**한 줄 요약:** 매장 변경이 실패해도 원래 주문과 혜택이 사라지지 않게 만든 주문 백엔드와, 직접 눌러 볼 수 있는 체험 데모입니다. 개인 프로젝트이며 실제 카드사·PG·가맹점과 연동하지 않습니다.
+
+| 확인하고 싶은 것 | 근거 | 범위(과장하지 않는 선) |
+|---|---|---|
+| 도메인 모델링과 정합성 | [도메인 모델](docs/domain-model.md) · [처리 순서와 실패 조건](docs/transfer-recovery.md) · [단계별 처리](demo/route/durable_operations.py) | 주문 DB와 매장별 독립 DB 사이에서 응답이 끊겨도 저장된 결정을 따라 같은 작업을 이어갑니다. 전체를 묶는 원자적 트랜잭션은 아닙니다 |
+| REST·OpenAPI | [`contracts/route-benefits.openapi.json`](contracts/route-benefits.openapi.json) · [`demo/route/api.py`](demo/route/api.py) | 일부 응답은 범용 객체입니다 |
+| 이벤트 기반·분산 구조 | Outbox 테이블에서 순서대로 읽어 Kafka로 발행([`OutboxRelay.kt`](services/commitment-service/src/main/kotlin/io/pickuppact/commitment/infra/OutboxRelay.kt)) · 이벤트 소비([`FulfillmentEventConsumer.kt`](services/commitment-service/src/main/kotlin/io/pickuppact/commitment/infra/FulfillmentEventConsumer.kt)) · Redis Lua 스크립트로 매장 용량을 원자적으로 점유([`ReactiveRedisCapacityLease.kt`](services/commitment-service/src/main/kotlin/io/pickuppact/commitment/infra/ReactiveRedisCapacityLease.kt)) · [아키텍처](docs/architecture.md) | **별도 Docker 구성에서 검증**했습니다(`scripts/integration_smoke.py`). 공개 데모의 주문 경로에는 연결하지 않았습니다 |
+| 쿼리 실행계획 | [`sql/explain/`](sql/explain) · [SQL·성능 검증](docs/performance.md) | 합성 데이터의 EXPLAIN입니다. 실제 트래픽 성능 수치가 아닙니다 |
+| 문제를 끝까지 파고든 사례 | [실서버 장애 주입·복구 시험 보고서](docs/ha-task5-final-report.md) 4장 | Oracle Cloud 서버 4대에서 PostgreSQL 장애 조치와 외부 백업 복구를 시험했고, 로컬에서 보이지 않던 문제를 찾아 고쳤습니다. 서버는 시험 뒤 삭제했습니다. 한 가용 영역이며 운영 경험이 아닙니다 |
+| AI 협업 방식 | [AI 협업 기록](docs/ai-iteration-log.md) · [AI 우선 작업 흐름](docs/ai-first-workflow.md) | 요구와 판단은 제가 정하고, 구현과 검증을 AI와 반복했습니다 |
+| 모니터링 | [`infra/observability/`](infra/observability) | 설정·모니터 템플릿입니다. 외부 계정에서 장애를 운영한 근거는 아닙니다 |
+
+공고 항목별 근거와 한계는 [공고 대조표](docs/jd-traceability.md)에 있습니다.
+
 ## 이번 보완: 변경 조건과 공정한 대안 비교
 
 [변경 내용·가정·검증 범위](docs/decision-review-2026-09-26.md)

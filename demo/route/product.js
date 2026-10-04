@@ -173,7 +173,7 @@ let routeBootStarted=false,routeBootFinished=false;
 async function initializeRoute(){
  if(routeBootStarted)return;
  routeBootStarted=true;
- try{catalog=await api('/api/route/catalog');drawMap();const saved=localStorage.getItem('pickup-pact.route-journey');if(saved){try{state=await api('/api/route/journeys/'+saved);fillIntent(state.intent);render();}catch(e){notify('이전 주문을 불러오지 못했어요. 저장된 주문 번호는 지우지 않았어요. 잠시 후 새로고침해 주세요.',true);}}renderAux();}catch(e){notify('화면을 불러오지 못했어요. 잠시 후 새로고침해 주세요.',true);}finally{routeBootFinished=true;}
+ try{catalog=await api('/api/route/catalog');drawMap();const saved=localStorage.getItem('pickup-pact.route-journey');if(saved){try{state=await api('/api/route/journeys/'+saved);fillIntent(state.intent);render();}catch(e){if(e&&e.status===404){/* 서버가 '없는 주문'이라고 확답한 경우만 저장 번호를 지운다(일시 오류에서는 중복 주문을 막으려고 유지). */localStorage.removeItem('pickup-pact.route-journey');localStorage.removeItem('pickup-pact.guided-journey');let again=false;try{again=!sessionStorage.getItem('pickup-pact.stale-cleared');if(again)sessionStorage.setItem('pickup-pact.stale-cleared','1');}catch(_){}if(again){location.reload();return;}}else notify('이전 주문을 불러오지 못했어요. 저장된 주문 번호는 지우지 않았어요. 잠시 후 새로고침해 주세요.',true);}}renderAux();}catch(e){notify('화면을 불러오지 못했어요. 잠시 후 새로고침해 주세요.',true);}finally{routeBootFinished=true;}
 }
 if(document.readyState==='complete')initializeRoute();
 else document.addEventListener('DOMContentLoaded',initializeRoute,{once:true});
