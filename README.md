@@ -47,6 +47,8 @@
 
 한 호스트의 분리된 프로세스와 보존된 SQLite 파일의 재시작을 다룹니다. 실제 가맹점·PG·카드사 연동, DB 파일 자체 유실, 멀티 호스트 고가용성은 이 데모의 검증 범위가 아닙니다. 공개 서버의 현재 버전과 결제 모드는 `/health`와 `/api/route/runtime`에서 별도로 확인합니다.
 
+PostgreSQL 멀티 호스트 실행(`ha_postgres_v1`)과 외부 백업 복원 절차는 [별도 문서](docs/ha-multi-host-rollout.md)에 있습니다. 현재 한 컴퓨터 리허설로만 검증했고, 공개 서비스에는 적용하지 않았습니다.
+
 </details>
 
 이전 자료는 [41.12초 가이드 영상](docs/media/guided/pickup-pact-guided.mp4)과 [39.72초 복구 영상](docs/media/pickup-pact-demo.mp4)으로 보존합니다. 이 두 영상을 신규 독립 결제 연동의 증거로 사용하지 않습니다.

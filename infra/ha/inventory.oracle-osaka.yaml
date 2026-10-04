@@ -1,0 +1,99 @@
+# Oracle Cloud Osaka 시험 인벤토리(무료 체험 크레딧, 승인 기록 포함).
+# 승인: sokldjs, 2026-10-03, 비용 상한 0원(업그레이드 금지), 파괴 시험은 4대에서 2026-10-03~05만.
+# 파괴 시험 대상은 승인된 4대다. pact-backup은 backup.host로 별도 검사되어 destructive.hosts에는 DB 3대만 적는다.
+# 시험용 자격 증명은 워크플로 실행 중에만 존재하고 끝나면 폐기한다(보관 위치 값이 그 뜻이다).
+# 개인키·비밀번호·토큰은 이 파일에 넣지 않는다.
+schema: pickup-pact-ha-inventory/v1
+kind: independent_hosts
+name: pact-ha-oracle-osaka
+hosts:
+- name: pact-a
+  dns: pact-a.pact.internal
+  address: 10.0.0.11
+  physical_host: oracle-osaka-pact-a
+  failure_domain: FAULT-DOMAIN-1
+  roles:
+  - postgres
+  - etcd
+  - order
+  - merchant
+  - payment
+  - entry
+- name: pact-b
+  dns: pact-b.pact.internal
+  address: 10.0.0.12
+  physical_host: oracle-osaka-pact-b
+  failure_domain: FAULT-DOMAIN-2
+  roles:
+  - postgres
+  - etcd
+  - order
+  - merchant
+  - payment
+  - entry
+- name: pact-c
+  dns: pact-c.pact.internal
+  address: 10.0.0.13
+  physical_host: oracle-osaka-pact-c
+  failure_domain: FAULT-DOMAIN-3
+  roles:
+  - postgres
+  - etcd
+  - order
+  - merchant
+  - payment
+postgres:
+  version: '17.11'
+  image: postgres:17.11-bookworm@sha256:639ab7ceb90e13123085b741fb31ef493fba25463002f6da665352e7b534b652
+  synchronous_node_count: 1
+  watchdog: required
+  client_cidrs:
+  - 10.0.0.0/24
+entry:
+  method: dns_multi_a
+  public_name: entry.pact.internal
+  hosts:
+  - pact-a
+  - pact-b
+backup:
+  host:
+    name: pact-backup
+    dns: backup.pact.internal
+    address: 10.0.0.20
+    physical_host: oracle-osaka-pact-backup
+    failure_domain: FAULT-DOMAIN-1
+  repository_url: https://backup.pact.internal:8000/pickup-pact
+  writer: append_only
+  maintainer_credential_location: runner-ephemeral-discarded-after-run
+  key_escrow:
+  - runner-ephemeral-discarded-after-run
+  receipt_locations:
+  - runner-ephemeral-discarded-after-run
+  - backup-repository
+  base_backup_interval_hours: 24
+  max_base_backup_age_hours: 30
+  retain_base_backups: 7
+  max_wal_archive_delay_seconds: 300
+  capacity_gib: 20
+  alert_free_ratio: 0.2
+approval:
+  approved_by: sokldjs
+  approved_on: '2026-10-03'
+  monthly_cost_cap_krw: 0
+  paid_resources: false
+  production_addresses:
+  - pickup-pact-demo.onrender.com
+  accepted_exceptions:
+  - rule: backup_failure_domain
+    scope: oracle_single_ad_fault_domains
+    reason: Osaka 가용 영역에는 fault domain이 3개뿐이라 DB 3대가 모두 쓰고 나면 백업 서버가 DB 서버 한 대(pact-a)와
+      FD-1을 공유한다. 시험 결과에 이 조건을 명시한다.
+  destructive:
+    test_id: ha-rehearsal-2026100301a7c9e0
+    hosts:
+    - pact-a
+    - pact-b
+    - pact-c
+    window:
+      from: '2026-10-03'
+      until: '2026-10-05'

@@ -1,0 +1,3 @@
+-r requirements-workbench.txt
+psycopg[binary]==3.3.6
+psycopg_pool==3.3.1

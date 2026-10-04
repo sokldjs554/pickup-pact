@@ -1,0 +1,25 @@
+[Unit]
+Description=Patroni (strict synchronous PostgreSQL 17, watchdog fencing)
+After=network-online.target etcd.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=postgres
+Group=postgres
+# PATRONI_SUPERUSER_PASSWORD, PATRONI_REPLICATION_PASSWORD and PATRONI_REWIND_PASSWORD (0600).
+EnvironmentFile=/etc/pickup-pact/secrets/patroni.env
+# The watchdog device must exist and belong to the postgres user before Patroni arms it. A host that crashed and
+# rebooted does not always have it yet, and Patroni refuses to run without it (watchdog: required), so prepare it here.
+ExecStartPre=+/sbin/modprobe softdog
+ExecStartPre=+/bin/sh -c 'udevadm settle --timeout=10; chown postgres:postgres /dev/watchdog; chmod 0600 /dev/watchdog'
+ExecStartPre=/usr/bin/test -c /dev/watchdog
+ExecStart=/opt/patroni/bin/patroni /etc/pickup-pact/patroni.yml
+ExecReload=/bin/kill -s HUP $MAINPID
+KillMode=process
+TimeoutSec=30
+# Patroni must not be restarted blindly after a fencing event; an operator inspects first.
+Restart=no
+
+[Install]
+WantedBy=multi-user.target

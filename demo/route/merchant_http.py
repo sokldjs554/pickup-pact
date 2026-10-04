@@ -25,20 +25,32 @@ KEY = re.compile(r'^[A-Za-z0-9:_-]{1,180}$')
 class HttpMerchantFleet:
     handles_response_loss = True
 
-    def __init__(self, base_url: str, token: str, timeout: float = .8):
+    def __init__(self, base_url: str, token: str, timeout: float = .8, *, transport=None):
         parts = urlsplit(base_url)
         if parts.scheme not in {'http','https'} or not parts.hostname or parts.username or parts.query or parts.fragment:
             raise ValueError('merchant URL must be a configured HTTP(S) origin')
         if parts.path not in {'','/'} or len(token) < 24 or not 0 < timeout <= 5:
             raise ValueError('invalid merchant transport configuration')
-        self.url, self.token, self.timeout = base_url.rstrip('/'), token, timeout
+        # transport=None keeps the existing development behaviour unchanged.
+        self.transport_policy = transport
+        self.url = base_url.rstrip('/') if transport is None else transport.origin(base_url)
+        self.token, self.timeout = token, timeout
+
+    def _client(self):
+        import httpx
+        if self.transport_policy is None:
+            return httpx.Client(timeout=self.timeout, trust_env=False, follow_redirects=False)
+        return self.transport_policy.http_client(self.timeout, server_role='merchant')
+
+    def _generation(self) -> dict:
+        return self.transport_policy.headers() if self.transport_policy is not None else {}
 
     def _request(self, path: str, body: dict | None = None) -> dict:
         import httpx
         try:
-            with httpx.Client(timeout=self.timeout, trust_env=False, follow_redirects=False) as client:
+            with self._client() as client:
                 response = client.request('GET' if body is None else 'POST', self.url+path,
-                    json=body, headers={'Authorization':'Bearer '+self.token})
+                    json=body, headers={'Authorization':'Bearer '+self.token,**self._generation()})
                 response.raise_for_status()
                 if len(response.content) > 1_048_576:
                     raise ValueError('oversized merchant response')
@@ -88,18 +100,30 @@ class HttpMerchantFleet:
 
 
 def serve(directory: str, token: str, host: str = '127.0.0.1', port: int = 0,
-          ready_file: str | None = None, crash_phase: str | None = None):
+          ready_file: str | None = None, crash_phase: str | None = None, *, repository=None, tls=None):
     if len(token) < 24:raise ValueError('ROUTE_MERCHANT_TOKEN must have at least 24 characters')
-    fleet=MerchantFleet(directory)
-    transport_db=Path(directory)/'transport.sqlite'
-    with sqlite3.connect(transport_db) as db:
-        db.execute('CREATE TABLE IF NOT EXISTS lost_replies(world TEXT,command_id TEXT,PRIMARY KEY(world,command_id))')
+    if tls is not None:
+        if crash_phase:raise ValueError('test crash hooks are not part of the TLS deployment')
+        host=tls.bind_address
+    fleet=repository if repository is not None else MerchantFleet(directory)
+    transport_db=None
+    if repository is None:
+        transport_db=Path(directory)/'transport.sqlite'
+        with sqlite3.connect(transport_db) as db:
+            db.execute('CREATE TABLE IF NOT EXISTS lost_replies(world TEXT,command_id TEXT,PRIMARY KEY(world,command_id))')
+    elif crash_phase:
+        raise ValueError('legacy crash hook cannot be attached to a shared repository')
     if crash_phase:
         def crash(shop,action,key,result):
             if action == crash_phase and result['ok']:os._exit(91)
         fleet.after_commit=crash
 
     class Handler(BaseHTTPRequestHandler):
+        def setup(self):
+            if tls is not None:
+                tls.accept(self.request)  # handshake and caller role before any request byte
+            super().setup()
+
         def log_message(self, *_):
             pass  # Do not log tokens, order IDs, or request payloads.
 
@@ -118,22 +142,29 @@ def serve(directory: str, token: str, host: str = '127.0.0.1', port: int = 0,
 
         def do_GET(self):
             if self.path == '/health':
-                return self.send(200,dict(status='ok',mode='synthetic-http',pid=os.getpid()))
+                try:ready=repository.storage_ready() if repository is not None else True
+                except OSError:ready=False
+                return self.send(200 if ready else 503,dict(status='ok' if ready else 'unavailable',
+                    mode='synthetic-http',pid=os.getpid(),storage_ready=ready,
+                    storage_backend=getattr(fleet,'backend','sqlite')))
             if not self.authenticated():return self.send(403,dict(error='forbidden'))
+            if tls is not None and not tls.current(self.headers):return self.send(503,dict(error='stale_generation'))
             if self.path.startswith('/v1/orders/'):
                 parts=self.path[len('/v1/orders/'):].split('/')
                 if len(parts)==2 and all(KEY.fullmatch(p) for p in parts):
                     try:return self.send(200,fleet.evidence(*parts))
-                    except sqlite3.Error:return self.send(503,dict(error='storage_unavailable'))
+                    except (sqlite3.Error,OSError):return self.send(503,dict(error='storage_unavailable'))
                 return self.send(422,dict(error='invalid_identity'))
             prefix='/v1/snapshot/'
             if self.path.startswith(prefix) and KEY.fullmatch(self.path[len(prefix):]):
                 world=self.path[len(prefix):]
-                return self.send(200,dict(world=world,merchants=fleet.snapshot(world)))
+                try:return self.send(200,dict(world=world,merchants=fleet.snapshot(world)))
+                except (sqlite3.Error,OSError):return self.send(503,dict(error='storage_unavailable'))
             return self.send(404,dict(error='not_found'))
 
         def do_POST(self):
             if not self.authenticated():return self.send(403,dict(error='forbidden'))
+            if tls is not None and not tls.current(self.headers):return self.send(503,dict(error='stale_generation'))
             if self.headers.get('Content-Type','').split(';')[0] != 'application/json':
                 return self.send(415,dict(error='json_required'))
             try:
@@ -141,7 +172,6 @@ def serve(directory: str, token: str, host: str = '127.0.0.1', port: int = 0,
                 if not 0 < length <= 16384:return self.send(413,dict(error='body_size'))
                 body=json.loads(self.rfile.read(length))
                 if not isinstance(body,dict):raise ValueError('object required')
-                # Never include arbitrary input in an error response.
                 pending=[body]
                 while pending:
                     value=pending.pop()
@@ -155,7 +185,8 @@ def serve(directory: str, token: str, host: str = '127.0.0.1', port: int = 0,
             if self.path == '/v1/policy':
                 if set(body)!={'shop','world','accepting'} or type(body.get('accepting')) is not bool:
                     return self.send(422,dict(error='invalid_policy'))
-                fleet.set_accepting(body['shop'],body['world'],body['accepting'])
+                try:fleet.set_accepting(body['shop'],body['world'],body['accepting'])
+                except (sqlite3.Error,OSError):return self.send(503,dict(error='storage_unavailable'))
                 return self.send(200,dict(ok=True))
             required={'shop','world','order_id','generation','operation_id','action'}
             if (not required <= body.keys() or not body.keys() <= required|{'transfer_id','reject','lose_reply'}
@@ -168,13 +199,17 @@ def serve(directory: str, token: str, host: str = '127.0.0.1', port: int = 0,
                 return self.send(422,dict(error='invalid_command'))
             shop=body.pop('shop');lose_reply=body.pop('lose_reply',False)
             try:result=fleet.execute(shop,**body)
-            except sqlite3.OperationalError:return self.send(503,dict(error='storage_unavailable'))
+            except (sqlite3.OperationalError,OSError):return self.send(503,dict(error='storage_unavailable'))
             if lose_reply and result['ok']:
-                with sqlite3.connect(transport_db,timeout=3) as db:
-                    cursor=db.execute('INSERT OR IGNORE INTO lost_replies VALUES(?,?)',(body['world'],body['operation_id']))
-                    first=cursor.rowcount==1
+                try:
+                    if repository is not None:
+                        first=repository.consume_reply_loss(body['world'],body['operation_id'])
+                    else:
+                        with sqlite3.connect(transport_db,timeout=3) as db:
+                            cursor=db.execute('INSERT OR IGNORE INTO lost_replies VALUES(?,?)',(body['world'],body['operation_id']))
+                            first=cursor.rowcount==1
+                except (sqlite3.Error,OSError):return self.send(503,dict(error='storage_unavailable'))
                 if first:
-                    # Real commit then real socket close, not a fake HTTP 200.
                     self.close_connection=True
                     try:self.connection.shutdown(socket.SHUT_RDWR)
                     except OSError:pass
@@ -188,8 +223,10 @@ def serve(directory: str, token: str, host: str = '127.0.0.1', port: int = 0,
         def get_request(self):
             conn,addr=super().get_request();conn.settimeout(3);return conn,addr
     server=Server((host,port),Handler)
+    if tls is not None:tls.wrap(server)
     if ready_file:
-        p=Path(ready_file);p.write_text(json.dumps(dict(url=f'http://{host}:{server.server_port}',pid=os.getpid())))
+        url=tls.url(server.server_port) if tls is not None else f'http://{host}:{server.server_port}'
+        p=Path(ready_file);p.write_text(json.dumps(dict(url=url,pid=os.getpid())))
     server.serve_forever(poll_interval=.1)
 
 

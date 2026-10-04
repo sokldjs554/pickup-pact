@@ -1,0 +1,21 @@
+[Unit]
+Description=Pickup Pact synthetic payment role (ha_postgres_v1, order role only)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=pickup
+Group=pickup
+WorkingDirectory=/opt/pickup-pact
+EnvironmentFile=/etc/pickup-pact/pickup-payment.env
+EnvironmentFile=/etc/pickup-pact/secrets/payment.env
+ExecStart=/opt/pickup-pact/.venv/bin/python -m demo.route.ha.payment_service --port ${PICKUP_PAYMENT_PORT}
+Restart=always
+RestartSec=2
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

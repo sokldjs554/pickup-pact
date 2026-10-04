@@ -15,10 +15,10 @@ LABELS={'order':'주문 번호 유지','merchant':'수령 매장 확인','paymen
 def reconcile(store,sid: str) -> dict:
     began=time.time()
     def coordinator():
-        with store.connection() as db:return store._load(db,sid)
+        return store.read_state(sid)
     s0=coordinator();order=s0.get('order')
     oid=(order or {}).get('id') or s0.get('pending_order_id') or s0.get('payment_order_id')
-    result=dict(mode='synthetic',scope='single_host_independent_process_and_store_databases',
+    result=dict(mode='synthetic',scope=getattr(store,'evidence_scope','single_host_independent_process_and_store_databases'),
                 journey_id=sid,order_id=oid,journey_version=s0['version'],status='PENDING',terminal=False,
                 payment=None,merchants=None,checks={k:dict(status='PENDING',label=v,detail='주문 처리를 확인하고 있어요.') for k,v in LABELS.items()},
                 observation=dict(started_at=began,finished_at=None,stable=False,coordinator_version=s0['version']))
@@ -54,8 +54,6 @@ def reconcile(store,sid: str) -> dict:
         for item in result['checks'].values():item['detail']='저장된 작업이 아직 진행 중이에요. 일부 서버의 성공만으로 완료하지 않아요.'
         return finish('PENDING')
     if not order:
-        # Approval rejection cannot conceal a seat or a loyalty hold in another
-        # source. Each green check requires that source's own evidence.
         wallet=benefits.wallet_view(s1)
         merchant_ok=all(not v['reservation'] or v['reservation']['phase'] in {'CANCELLED','RELEASED','ABORTED'}
                         for v in m1['merchants'].values())

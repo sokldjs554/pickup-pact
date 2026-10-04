@@ -1,0 +1,57 @@
+name: ha-encrypted-backup-review
+on:
+  push:
+    branches: [feat/ha-dr-foundation-20261002]
+  pull_request:
+    paths: ['demo/route/ha/**', 'tests/ha/**', 'scripts/ha_restic_lab.py', 'scripts/verify_ha_restore.py', '.github/workflows/ha-encrypted-backup-review.yml']
+permissions:
+  contents: read
+concurrency:
+  group: ha-encrypted-backup-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  encrypted-network-restore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PYTHONPATH: .:services/reconciler
+      PICKUP_HA_TEST: '1'
+      PICKUP_BACKUP_TRANSPORT: restic_https_development
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+          cache: false
+      - name: Install pinned encryption client and append-only HTTPS server
+        run: |
+          set -euo pipefail
+          python -m pip install -r requirements-ha.txt
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq apache2-utils
+          mkdir -p "$RUNNER_TEMP/backup-bin" verification/ha-encrypted-restore
+          GOBIN="$RUNNER_TEMP/backup-bin" go install github.com/restic/restic/cmd/restic@v0.19.1
+          GOBIN="$RUNNER_TEMP/backup-bin" go install github.com/restic/rest-server/cmd/rest-server@v0.14.0
+          echo "$RUNNER_TEMP/backup-bin" >> "$GITHUB_PATH"
+          go version -m "$RUNNER_TEMP/backup-bin/restic" > verification/ha-encrypted-restore/restic-build.txt
+          go version -m "$RUNNER_TEMP/backup-bin/rest-server" > verification/ha-encrypted-restore/server-build.txt
+          sha256sum "$RUNNER_TEMP/backup-bin/restic" "$RUNNER_TEMP/backup-bin/rest-server" > verification/ha-encrypted-restore/binaries.sha256
+      - name: Verify trust, secret and fresh-destination guards
+        run: python -m pytest -q tests/ha/test_remote_backup.py tests/ha/test_remote_restore_contract.py tests/ha/test_backup_guards.py
+      - name: Remove source and local archive, fetch pinned encrypted snapshot, restore all three databases
+        run: python scripts/verify_ha_restore.py --repeat 3 --output verification/ha-encrypted-restore/runs
+      - name: Record candidate without keys, plaintext backups or encrypted repository
+        if: always()
+        run: |
+          mkdir -p verification/ha-encrypted-restore
+          git rev-parse HEAD > verification/ha-encrypted-restore/tested-commit.txt
+          python -m pip freeze > verification/ha-encrypted-restore/dependencies.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ha-encrypted-network-restore-evidence
+          path: verification/ha-encrypted-restore
+          retention-days: 30

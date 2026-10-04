@@ -18,6 +18,30 @@ def sign(secret: str, stamp: str, body: bytes) -> str:
     return hmac.new(secret.encode(), stamp.encode()+b'.'+body, hashlib.sha256).hexdigest()
 
 
+def parse_event(secret: str, body: bytes, stamp: str, signature: str) -> dict:
+    if not isinstance(body, bytes) or len(body)>MAX_BODY:
+        raise PaymentError('INVALID_EVENT_SIZE',413)
+    try:
+        timestamp=int(stamp)
+        if str(timestamp)!=stamp or abs(time.time()-timestamp)>300:
+            raise ValueError()
+        if len(signature)!=64 or not hmac.compare_digest(sign(secret,stamp,body).encode(),signature.encode('ascii')):
+            raise ValueError()
+    except (ValueError,TypeError,UnicodeError):
+        raise PaymentError('INVALID_EVENT_SIGNATURE',403) from None
+    try:
+        event=json.loads(body)
+        if not isinstance(event,dict) or set(event)!=EVENT_FIELDS:raise ValueError()
+        for field in ('event_id','world_id','order_id','authorization_id','transaction_id'):key(event[field])
+        for field in ('revision','payment_revision','amount_krw'):
+            if type(event[field]) is not int or event[field]<1:raise ValueError()
+        if event['kind'] not in {'AUTHORIZE','CAPTURE','VOID'} or event['currency']!='KRW' or event['mode']!='synthetic':
+            raise ValueError()
+    except (ValueError,TypeError,KeyError,UnicodeError):
+        raise PaymentError('INVALID_EVENT',422) from None
+    return event
+
+
 class PaymentInbox:
     def __init__(self, path: str | Path, secret: str):
         if len(secret) < 24:
@@ -57,26 +81,7 @@ class PaymentInbox:
         db.execute('INSERT OR IGNORE INTO payment_authorization_refs VALUES(?,?,?)', (authorization_id,world,order_id))
 
     def accept(self,body: bytes,stamp: str,signature: str) -> dict:
-        if not isinstance(body, bytes) or len(body)>MAX_BODY:
-            raise PaymentError('INVALID_EVENT_SIZE',413)
-        try:
-            timestamp=int(stamp)
-            if str(timestamp)!=stamp or abs(time.time()-timestamp)>300:
-                raise ValueError()
-            if len(signature)!=64 or not hmac.compare_digest(sign(self.secret,stamp,body).encode(),signature.encode('ascii')):
-                raise ValueError()
-        except (ValueError,TypeError,UnicodeError):
-            raise PaymentError('INVALID_EVENT_SIGNATURE',403) from None
-        try:
-            event=json.loads(body)
-            if not isinstance(event,dict) or set(event)!=EVENT_FIELDS:raise ValueError()
-            for field in ('event_id','world_id','order_id','authorization_id','transaction_id'):key(event[field])
-            for field in ('revision','payment_revision','amount_krw'):
-                if type(event[field]) is not int or event[field]<1:raise ValueError()
-            if event['kind'] not in {'AUTHORIZE','CAPTURE','VOID'} or event['currency']!='KRW' or event['mode']!='synthetic':
-                raise ValueError()
-        except (ValueError,TypeError,KeyError,UnicodeError):
-            raise PaymentError('INVALID_EVENT',422) from None
+        event=parse_event(self.secret,body,stamp,signature)
         sha=hashlib.sha256(body).hexdigest()
         with self.connection() as db:
             db.execute('BEGIN IMMEDIATE')
@@ -111,16 +116,21 @@ class PaymentInbox:
 
 
 class NotificationServer:
-    """A dedicated loopback listener; the public customer's Origin rules stay intact."""
-    def __init__(self, inbox: PaymentInbox):
+    """A dedicated listener (loopback in development, mTLS for ha_postgres_v1); customer Origin rules stay intact."""
+    def __init__(self, inbox: PaymentInbox, *, port: int = 0, tls=None):
+        if type(port) is not int or not 0 <= port <= 65535:
+            raise ValueError('invalid callback port')
         from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
         class Handler(BaseHTTPRequestHandler):
             def log_message(self,*_):pass
-            def setup(self):super().setup();self.connection.settimeout(2)
+            def setup(self):
+                if tls is not None:tls.accept(self.request)  # only the payment role may notify
+                super().setup();self.connection.settimeout(2)
             def do_POST(self):
                 status=200
                 try:
                     if self.path!='/internal/payments/events':raise PaymentError('NOT_FOUND',404)
+                    if tls is not None and not tls.current(self.headers):raise PaymentError('STALE_GENERATION',503)
                     if self.headers.get('Origin') or self.headers.get('Transfer-Encoding'):raise PaymentError('INVALID_NOTIFICATION',403)
                     length=int(self.headers.get('Content-Length','-1'))
                     if length<1:raise PaymentError('INVALID_LENGTH',400)
@@ -136,8 +146,13 @@ class NotificationServer:
                 self.end_headers()
                 try:self.wfile.write(raw)
                 except (BrokenPipeError,ConnectionResetError):pass
-        self.server=ThreadingHTTPServer(('127.0.0.1',0),Handler);self.server.daemon_threads=True
-        self.url=f'http://127.0.0.1:{self.server.server_port}/internal/payments/events'
+        self.server=ThreadingHTTPServer((tls.bind_address if tls is not None else '127.0.0.1',port),Handler)
+        self.server.daemon_threads=True
+        if tls is not None:
+            tls.wrap(self.server)
+            self.url=tls.url(self.server.server_port,'/internal/payments/events')
+        else:
+            self.url=f'http://127.0.0.1:{self.server.server_port}/internal/payments/events'
         self.thread=None
 
     def __enter__(self):
@@ -151,11 +166,10 @@ class NotificationServer:
 
 
 def deliver_due(repo,secret: str,send,*,duplicate: bool=False,limit: int=16) -> int:
-    """At-least-once delivery. A successful HTTP ACK is not a financial mutation."""
+    """At-least-once delivery outside the DB transaction, with fenced ACKs."""
+    from uuid import uuid4
     if not 1<=limit<=64:raise ValueError('delivery batch limit')
-    now=time.time()
-    with repo.connection() as db:
-        rows=[dict(r) for r in db.execute('SELECT * FROM payment_outbox WHERE delivered=0 AND next_at<=? AND attempts<8 ORDER BY revision LIMIT ?', (now,limit))]
+    rows=repo.claim_notifications('sender-'+uuid4().hex,limit=limit,lease_seconds=30)
     delivered=0
     for row in rows:
         ok=True
@@ -163,11 +177,6 @@ def deliver_due(repo,secret: str,send,*,duplicate: bool=False,limit: int=16) -> 
             body=row['body'].encode();stamp=str(int(time.time()))
             try:ok=bool(send(body,stamp,sign(secret,stamp,body))) and ok
             except (OSError,ValueError):ok=False
-        with repo.connection() as db:
-            if ok:
-                db.execute('UPDATE payment_outbox SET delivered=1,attempts=attempts+1 WHERE event_id=?',(row['event_id'],))
-                delivered+=1
-            else:
-                delay=min(3*2**min(row['attempts'],4),30)
-                db.execute('UPDATE payment_outbox SET attempts=attempts+1,next_at=? WHERE event_id=?',(time.time()+delay,row['event_id']))
+        if repo.finish_notification(row,ok) and ok:
+            delivered+=1
     return delivered

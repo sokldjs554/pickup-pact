@@ -94,43 +94,15 @@ class MerchantFleet:
         return result
 
     def _apply(self, db, shop: str, row: dict | None, p: dict) -> dict:
-        world, oid, gen, action, token = (p[k] for k in ('world', 'order_id', 'generation', 'action', 'transfer_id'))
-        def failure(code):
-            return dict(ok=False, code=code, phase=row['phase'] if row else None)
-        if action in {'ADMIT', 'HOLD'}:
-            policy = db.execute('SELECT accepting FROM policy WHERE world=?', (world,)).fetchone()
-            if p['reject'] or (policy and not policy[0]):
-                return failure('MERCHANT_REJECTED')
-            if row and (gen <= row['generation'] or row['phase'] not in TERMINAL):
-                return failure('STALE_GENERATION')
-            if self._used(db, world) >= CAPACITY[shop]:
-                return failure('CAPACITY_FULL')
-            phase = 'RESERVED' if action == 'ADMIT' else 'HELD'
+        from .merchant_rules import transition
+        policy = db.execute('SELECT accepting FROM policy WHERE world=?', (p['world'],)).fetchone()
+        result = transition(row, p, accepting=not policy or bool(policy[0]),
+                            used=self._used(db, p['world']), capacity=CAPACITY[shop])
+        if result['ok']:
+            seat = result['seat']
             db.execute('INSERT INTO seats VALUES(?,?,?,?,?) ON CONFLICT(world,order_id) DO UPDATE SET generation=excluded.generation,phase=excluded.phase,transfer_id=excluded.transfer_id',
-                       (world, oid, gen, phase, token if action == 'HOLD' else ''))
-        elif action == 'ABORT_TARGET' and (not row or (row['generation'] < gen and row['phase'] in TERMINAL)):
-            # Tombstone blocks a delayed HOLD/ACTIVATE after compensation.
-            db.execute('INSERT INTO seats VALUES(?,?,?,?,?) ON CONFLICT(world,order_id) DO UPDATE SET generation=excluded.generation,phase=excluded.phase,transfer_id=excluded.transfer_id',
-                       (world, oid, gen, 'ABORTED', token))
-        else:
-            if not row or row['generation'] != gen:
-                return failure('STALE_GENERATION')
-            expected = {'FREEZE': ('RESERVED',), 'UNFREEZE': ('FROZEN',),
-                        'RELEASE_SOURCE': ('FROZEN',), 'ACTIVATE': ('HELD',),
-                        'ABORT_TARGET': ('HELD',), 'START': ('RESERVED',),
-                        'READY': ('PREPARING',), 'CLAIM': ('READY', 'CLAIMED'),
-                        'CANCEL': ('RESERVED', 'CANCELLED')}.get(action)
-            if expected is None or row['phase'] not in expected:
-                return failure('MERCHANT_STATE_CONFLICT')
-            if action in {'UNFREEZE', 'RELEASE_SOURCE', 'ACTIVATE', 'ABORT_TARGET'} and row['transfer_id'] != token:
-                return failure('TRANSFER_FENCE')
-            next_phase = {'FREEZE': 'FROZEN', 'UNFREEZE': 'RESERVED', 'RELEASE_SOURCE': 'RELEASED',
-                          'ACTIVATE': 'RESERVED', 'ABORT_TARGET': 'ABORTED', 'START': 'PREPARING',
-                          'READY': 'READY', 'CLAIM': 'CLAIMED', 'CANCEL': 'CANCELLED'}[action]
-            next_token = token if action in {'FREEZE', 'ABORT_TARGET', 'RELEASE_SOURCE'} else ''
-            db.execute('UPDATE seats SET phase=?,transfer_id=? WHERE world=? AND order_id=?',
-                       (next_phase, next_token, world, oid))
-        return dict(ok=True, code='ACCEPTED', seat=self._row(db, world, oid))
+                       tuple(seat[k] for k in ('world','order_id','generation','phase','transfer_id')))
+        return result
 
     def set_accepting(self, shop: str, world: str, accepting: bool) -> None:
         """Modeled merchant control used by bounded same-input experiments."""

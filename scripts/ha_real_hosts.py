@@ -1,0 +1,454 @@
+#!/usr/bin/env python3
+"""승인된 독립 호스트에 SSH로 접속해 점검·배포·시험을 실행한다.
+
+개인키는 환경 변수 PACT_HA_SSH_KEY_FILE이 가리키는 파일(0600)에서만 읽고, 출력·증거에 남기지 않는다.
+이 스크립트는 infra/ha/hosts/*.json에 적힌 호스트에만 접속한다.
+"""
+from __future__ import annotations
+import argparse
+import json
+import os
+from pathlib import Path
+import shlex
+import subprocess
+import time
+import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT/'scripts'))
+
+
+def load(path: Path) -> dict:
+    return json.loads(path.read_text())
+
+
+class Host:
+    def __init__(self, spec: dict, user: str, key: str, known_hosts: str):
+        self.spec, self.user, self.key, self.known_hosts = spec, user, key, known_hosts
+        self.name = spec['name']
+
+    def ssh_args(self) -> list[str]:
+        return ['ssh', '-i', self.key, '-o', 'IdentitiesOnly=yes', '-o', 'BatchMode=yes',
+                '-o', 'StrictHostKeyChecking=accept-new', '-o', f'UserKnownHostsFile={self.known_hosts}',
+                '-o', 'ConnectTimeout=20', '-o', 'ServerAliveInterval=15', f"{self.user}@{self.spec['public']}"]
+
+    def run(self, command: str, *, timeout=300, check=True) -> subprocess.CompletedProcess:
+        done = subprocess.run(self.ssh_args()+['bash', '-lc', shlex.quote(command)], capture_output=True, text=True,
+                              timeout=timeout, stdin=subprocess.DEVNULL)
+        if check and done.returncode:
+            raise RuntimeError(f'{self.name}: exit {done.returncode}: {done.stderr.strip()[:500]}')
+        return done
+
+
+    def run_bytes(self, command: str, data: bytes, *, timeout=300) -> subprocess.CompletedProcess:
+        """표준 입력으로 바이트(비밀값 포함)를 전달한다. 명령행에는 값이 나오지 않는다."""
+        done = subprocess.run(self.ssh_args()+['bash', '-lc', shlex.quote(command)], input=data, capture_output=True, timeout=timeout)
+        done.stdout, done.stderr = done.stdout.decode(errors='replace'), done.stderr.decode(errors='replace')
+        if done.returncode and not command.startswith('sudo -u postgres psql'):
+            raise RuntimeError(f'{self.name}: exit {done.returncode}: {done.stderr.strip()[-500:]}')
+        return done
+
+    def run_script(self, script: Path, args: list[str], *, timeout=1500) -> subprocess.CompletedProcess:
+        done = subprocess.run(self.ssh_args()+['sudo', 'bash', '-s', '--']+args, input=script.read_text(),
+                              capture_output=True, text=True, timeout=timeout)
+        if done.returncode:
+            raise RuntimeError(f'{self.name}: install exit {done.returncode}: {done.stderr.strip()[-1500:]}')
+        return done
+
+
+PROBE = r'''
+set -u
+echo "os=$(. /etc/os-release; echo $PRETTY_NAME)"
+echo "arch=$(uname -m)"
+echo "kernel=$(uname -r)"
+echo "cpus=$(nproc)"
+echo "mem_mib=$(awk '/MemTotal/ {print int($2/1024)}' /proc/meminfo)"
+echo "disk_free_gib=$(df -BG --output=avail / | tail -1 | tr -dc 0-9)"
+echo "private_ips=$(hostname -I)"
+echo "sudo=$(sudo -n true 2>/dev/null && echo yes || echo no)"
+echo "ntp_synced=$(timedatectl show -p NTPSynchronized --value 2>/dev/null)"
+echo "softdog=$(sudo -n modprobe softdog 2>/dev/null && echo loadable || echo missing)"
+echo "ufw=$(sudo -n ufw status 2>/dev/null | head -1)"
+meta() { curl -sf -m 5 -H 'Authorization: Bearer Oracle' "http://169.254.169.254/opc/v2/instance/$1"; }
+echo "fault_domain=$(meta faultDomain)"
+echo "availability_domain=$(meta availabilityDomain)"
+echo "region=$(meta canonicalRegionName)"
+echo "shape=$(meta shape)"
+echo "ssh_fingerprint=$(ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub 2>/dev/null | cut -d' ' -f2)"
+'''
+
+
+def preflight(hosts: list[Host], inventory: dict, out: Path) -> bool:
+    ok = True
+    report = {}
+    for host in hosts:
+        row = dict(x.split('=', 1) for x in host.run(PROBE).stdout.splitlines() if '=' in x)
+        problems = []
+        if row.get('arch') != 'x86_64':
+            problems.append('x86_64가 아님')
+        if row.get('sudo') != 'yes':
+            problems.append('비밀번호 없는 sudo 불가')
+        if host.spec['private'] not in row.get('private_ips', '').split():
+            problems.append(f"private IP 불일치: {row.get('private_ips')}")
+        if int(row.get('mem_mib', '0')) < 900 and host.name != 'pact-backup':
+            problems.append('메모리 부족')
+        if host.name != 'pact-backup' and row.get('softdog') != 'loadable':
+            problems.append('softdog 모듈 사용 불가')
+        if host.spec.get('fault_domain', 'unspecified') != 'unspecified' and row.get('fault_domain') != host.spec['fault_domain']:
+            problems.append(f"fault domain 불일치: {row.get('fault_domain')}")
+        row['problems'] = problems
+        report[host.name] = row
+        ok &= not problems
+    # 호스트 사이 사설망 도달성. Oracle 기본 규칙은 ICMP echo를 막으므로 TCP 22로 확인한다.
+    for src in hosts:
+        reach = {}
+        for dst in hosts:
+            if dst is src:
+                continue
+            done = src.run(f"timeout 4 bash -c 'exec 3<>/dev/tcp/{dst.spec['private']}/22' >/dev/null 2>&1 && echo up || echo down", check=False)
+            reach[dst.name] = done.stdout.strip()
+            ok &= reach[dst.name] == 'up'
+        report[src.name]['private_tcp22'] = reach
+    out.mkdir(parents=True, exist_ok=True)
+    (out/'preflight.json').write_text(json.dumps(dict(inventory=inventory['name'], scope=inventory['scope'], passed=ok, hosts=report),
+                                                 ensure_ascii=False, indent=2))
+    print(json.dumps(dict(passed=ok, hosts={k: dict(arch=v.get('arch'), cpus=v.get('cpus'), mem_mib=v.get('mem_mib'),
+                                                      disk_gib=v.get('disk_free_gib'), problems=v['problems'], tcp22=v.get('private_tcp22'),
+                                                      fault_domain=v.get('fault_domain'), ad=v.get('availability_domain'), region=v.get('region'), shape=v.get('shape'), ssh_ed25519=v.get('ssh_fingerprint')) for k, v in report.items()}),
+                     ensure_ascii=False, indent=2))
+    return ok
+
+
+def install(hosts: list[Host], inventory: dict, out: Path) -> bool:
+    from concurrent.futures import ThreadPoolExecutor
+    cidr = inventory['private_cidr']
+    pairs = ','.join(f"{h.spec['private']}={h.name}" for h in hosts)
+    script = ROOT/'infra/ha/hosts/install.sh'
+
+    def one(host):
+        role = 'backup' if host.name == 'pact-backup' else 'db'
+        try:
+            done = host.run_script(script, [role, cidr, pairs])
+            facts = dict(x.split('=', 1) for x in done.stdout.splitlines() if '=' in x)
+            return host.name, dict(passed=True, **facts)
+        except Exception as exc:  # noqa: BLE001 - 서버별 실패를 모두 모은다
+            return host.name, dict(passed=False, error=str(exc)[:1800])
+
+    with ThreadPoolExecutor(max_workers=len(hosts)) as pool:
+        report = dict(pool.map(one, hosts))
+    ok = all(row['passed'] for row in report.values())
+    out.mkdir(parents=True, exist_ok=True)
+    (out/'install.json').write_text(json.dumps(dict(inventory=inventory['name'], scope=inventory['scope'], passed=ok, hosts=report),
+                                                ensure_ascii=False, indent=2))
+    print(json.dumps(dict(passed=ok, hosts=report), ensure_ascii=False, indent=2))
+    return ok
+
+
+DIAGNOSE = r'''
+echo "== units"; systemctl is-active etcd patroni 2>&1 | tr '\n' ' '; echo
+echo "== etcd state"; systemctl show etcd -p ActiveState -p SubState -p Result -p NRestarts -p ExecMainStatus | tr '\n' ' '; echo
+echo "== etcd warnings"; sudo journalctl -u etcd --no-pager -p warning -o cat 2>&1 | grep -v "prober detected" | tail -6 | cut -c1-420
+echo "== etcd dial errors"; sudo journalctl -u etcd --no-pager -o cat 2>&1 | grep -o 'dial tcp [0-9.:]*: [a-z ]*[a-z:]*' | sort | uniq -c | head -6
+echo "== peer reachability"; for ip in 10.0.0.11 10.0.0.12 10.0.0.13; do timeout 3 bash -c "exec 3<>/dev/tcp/$ip/2380" 2>/dev/null && echo "$ip:2380 open" || echo "$ip:2380 closed"; done
+echo "== listening"; sudo ss -ltn | awk '$4 ~ /:(2379|2380|5432|8008)$/ {print $4}' | sort | tr '\n' ' '; echo
+echo "== port probe (open=열림, refused=도달했지만 대기 프로세스 없음, blocked=네트워크에서 차단)"
+for ip in 10.0.0.11 10.0.0.12 10.0.0.13 10.0.0.20; do
+  [ "$ip" = "$(hostname -I | awk '{print $1}')" ] && continue
+  row="$ip"
+  for port in 22 2379 2380 5432 8008 8000 8443 8444 8445; do
+    start=$(date +%s%N)
+    if timeout 3 bash -c "exec 3<>/dev/tcp/$ip/$port" 2>/dev/null; then kind=open
+    else ms=$(( ($(date +%s%N)-start)/1000000 )); if [ "$ms" -lt 800 ]; then kind=refused; else kind=blocked; fi; fi
+    row="$row $port=$kind"
+  done
+  echo "$row"
+done
+echo "== boot"; uptime -s; ls -l /dev/watchdog 2>&1 | cut -c1-80; lsmod | grep -c softdog
+echo "== patroni state"; systemctl show patroni -p ActiveState -p SubState -p Result -p ExecMainStatus | tr '\n' ' '; echo
+echo "== patroni journal"; sudo journalctl -u patroni --no-pager -b -n 14 -o cat 2>&1 | cut -c1-300
+echo "== patroni last"; sudo journalctl -u patroni --no-pager -n 25 -o cat 2>&1 | cut -c1-260
+echo "== postgres log"; sudo sh -c 'ls -t /var/lib/postgresql/17/pickup/log/* 2>/dev/null | head -1 | xargs -r tail -n 25' 2>&1 | cut -c1-260
+echo "== softdog boot config"; cat /etc/modules-load.d/softdog.conf 2>&1 | head -2; sudo journalctl -b -u systemd-modules-load --no-pager -o cat 2>&1 | tail -4 | cut -c1-200
+echo "== authorized_keys harness lines"; grep -c pact-harness ~/.ssh/authorized_keys
+echo "== etcd env"; grep -E "ETCD_(NAME|LISTEN|INITIAL_ADVERTISE)" /etc/pickup-pact/etcd.env
+'''
+
+
+def diagnose(hosts: list[Host], out: Path) -> bool:
+    report = {h.name: h.run(DIAGNOSE, check=False, timeout=120).stdout for h in hosts if h.name != 'pact-backup'}
+    out.mkdir(parents=True, exist_ok=True)
+    (out/'diagnose.json').write_text(json.dumps(report, ensure_ascii=False, indent=2))
+    for name, text in report.items():
+        print(f'##### {name}\n{text}')
+    return True
+
+
+def refresh_units(hosts: list[Host], out: Path) -> bool:
+    """수정한 systemd 유닛을 DB 서버에 올리고, 멈춘 유닛을 시작해 3노드로 되돌린다(데이터는 건드리지 않는다)."""
+    import io
+    import tarfile
+    buffer = io.BytesIO()
+    with tarfile.open(fileobj=buffer, mode='w') as archive:
+        for unit in sorted((ROOT/'infra/ha/systemd').glob('*.service')):
+            raw = unit.read_bytes()
+            info = tarfile.TarInfo(f'etc/systemd/system/{unit.name}')
+            info.size, info.mode = len(raw), 0o644
+            archive.addfile(info, io.BytesIO(raw))
+    report = {}
+    code = subprocess.run(['git', 'archive', '--format=tar', 'HEAD'], cwd=ROOT, check=True, capture_output=True).stdout
+    services = ['pickup-merchant', 'pickup-order-notification', 'pickup-payment', 'pickup-order-app', 'pickup-order-worker']
+    units = ['etcd', 'patroni', 'pickup-merchant', 'pickup-order-notification', 'pickup-payment', 'pickup-order-app', 'pickup-order-worker']
+    for host in [h for h in hosts if h.name != 'pact-backup']:
+        host.run_bytes('sudo tar -xp -C /', buffer.getvalue())
+        # 시험이 중간에 멈춰 정지 조건 파일이나 드롭인이 남았으면 지운다(시험 도구가 시작할 때 다시 둔다).
+        host.run('sudo rm -f /etc/pickup-pact/hold /etc/systemd/system/etcd.service.d/hold.conf /etc/systemd/system/patroni.service.d/hold.conf')
+        host.run('sudo systemctl daemon-reload')
+        # 앱 코드를 현재 커밋으로 갱신하고 서비스만 재시작한다(DB·etcd는 건드리지 않는다). 호스트를 하나씩 해서 서비스가 계속 남는다.
+        host.run_bytes('sudo tar -x -C /opt/pickup-pact', code)
+        host.run('sudo systemctl restart '+' '.join(services), timeout=240)
+        time.sleep(8)
+        started = []
+        for unit in units:
+            if host.run(f'systemctl is-active --quiet {unit}', check=False).returncode:
+                host.run(f'sudo systemctl start {unit}', check=False, timeout=150)
+                started.append(unit)
+        report[host.name] = dict(started=started, states=host.run('systemctl is-active '+' '.join(units), check=False).stdout.split())
+    scope = 'pact-ha-oracle-osaka'
+    patronictl = f'sudo -u postgres /opt/patroni/bin/patronictl -c /etc/pickup-pact/patroni.yml'
+    actions = []
+    # 이미 배포된 클러스터에도 WAL 보관량을 적용한다(새 배포는 렌더링된 설정에 들어 있다). 같은 값이면 변경 없음.
+    done = hosts[0].run(f"{patronictl} edit-config -s postgresql.parameters.wal_keep_size=2GB --force", check=False, timeout=60)
+    actions.append(dict(action='wal_keep_size=2GB', exit=done.returncode))
+    reinit_after = time.monotonic()+150
+    deadline = time.monotonic()+480
+    members = None
+    reinitialised = set()
+    while time.monotonic() < deadline:
+        done = hosts[0].run('sudo -u postgres /opt/patroni/bin/patronictl -c /etc/pickup-pact/patroni.yml list -f json', check=False, timeout=60)
+        if done.returncode == 0 and done.stdout.strip():
+            members = [(m['Member'], m['Role'], m['State']) for m in json.loads(done.stdout)]
+            if len(members) == 3 and all(m[2] in {'running', 'streaming'} for m in members):
+                break
+            # 일정 시간이 지나도 따라잡지 못하고 starting에 머문 대기 노드는 리더에서 다시 복제한다(그 노드 데이터만 지운다).
+            if time.monotonic() > reinit_after:
+                for name, role, state in members:
+                    if state == 'starting' and role == 'Replica' and name not in reinitialised and name in {h.name for h in hosts}:
+                        done = hosts[0].run(f'{patronictl} reinit {scope} {name} --force', check=False, timeout=120)
+                        reinitialised.add(name)
+                        actions.append(dict(action=f'reinit {name}', exit=done.returncode))
+                        reinit_after = time.monotonic()+30
+        time.sleep(5)
+    ok = bool(members) and len(members) == 3 and all(m[2] in {'running', 'streaming'} for m in members)
+    out.mkdir(parents=True, exist_ok=True)
+    (out/'refresh-units.json').write_text(json.dumps(dict(passed=ok, hosts=report, members=members, actions=actions), ensure_ascii=False, indent=2))
+    print(json.dumps(dict(passed=ok, hosts=report, members=members, actions=actions), ensure_ascii=False))
+    return ok
+
+
+def reboot_probe(hosts: list[Host], out: Path) -> bool:
+    """대기 노드 한 대를 즉시 재부팅(sysrq b)해서, 등록한 SSH 키가 재부팅 뒤에도 남는지 확인한다."""
+    approval = ROOT/'infra/ha/hosts/fault-approval.txt'
+    if not approval.is_file() or 'approved_by: sokldjs' not in approval.read_text():
+        raise SystemExit('소유자 확인 기록이 필요하다')
+    members = json.loads(hosts[0].run('sudo -u postgres /opt/patroni/bin/patronictl -c /etc/pickup-pact/patroni.yml list -f json', timeout=60).stdout)
+    target_name = next(m['Member'] for m in members if m['Role'] == 'Replica')
+    target = next(h for h in hosts if h.name == target_name)
+    marker = 'pact-probe-'+str(int(time.time()))
+    entry = f'from="10.0.0.20" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPROBEPROBEPROBEPROBEPROBEPROBEPROBEPROBEPR {marker}'
+    facts = {'target': target_name}
+    target.run(f"echo '{entry}' >> ~/.ssh/authorized_keys && sync")
+    facts['before'] = target.run(f"grep -c {marker} ~/.ssh/authorized_keys; stat -c '%y %s' ~/.ssh/authorized_keys; uptime -s").stdout.split('\n')
+    subprocess.run(target.ssh_args()+['sudo', 'sh', '-c', shlex.quote('echo 1 > /proc/sys/kernel/sysrq; echo b > /proc/sysrq-trigger')],
+                   capture_output=True, timeout=20, stdin=subprocess.DEVNULL)
+    deadline = time.monotonic()+420
+    came_back = False
+    time.sleep(20)
+    while time.monotonic() < deadline:
+        try:
+            if target.run('true', check=False, timeout=15).returncode == 0:
+                came_back = True
+                break
+        except subprocess.TimeoutExpired:
+            pass
+        time.sleep(5)
+    facts['came_back'] = came_back
+    if came_back:
+        facts['after'] = target.run(f"grep -c {marker} ~/.ssh/authorized_keys; stat -c '%y %s' ~/.ssh/authorized_keys; uptime -s; wc -l < ~/.ssh/authorized_keys; "
+                                    "cloud-init status 2>&1 | head -2; sudo journalctl -b --no-pager -o cat 2>/dev/null | grep -i -E 'authorized|ssh key|ssh_authorized' | tail -5 | cut -c1-200; "
+                                    "ls -l /dev/watchdog 2>&1 | cut -c1-60; systemctl is-active patroni etcd", check=False).stdout.split('\n')
+        target.run(f"sed -i '/{marker}/d' ~/.ssh/authorized_keys", check=False)
+    out.mkdir(parents=True, exist_ok=True)
+    (out/'reboot-probe.json').write_text(json.dumps(facts, ensure_ascii=False, indent=2))
+    print(json.dumps(facts, ensure_ascii=False))
+    return came_back
+
+
+NATIVE_GROUPS = {
+    'HA-07': ['tests/ha/test_native_fences.py::test_late_owner_cannot_overwrite_takeover_and_does_not_hold_order_lock',
+              'tests/ha/test_payment_postgres.py::test_outbox_lease_takeover_fences_a_late_success',
+              'tests/ha/test_payment_postgres.py::test_outbox_workers_cannot_claim_same_event',
+              'tests/ha/test_operation_store.py',
+              'tests/ha/test_native_journey.py::test_other_instance_recovers_unknown_payment_without_new_key'],
+    'HA-08': ['tests/ha/test_payment_postgres.py::test_simultaneous_same_key_receives_one_original_receipt',
+              'tests/ha/test_payment_postgres.py::test_different_keys_cannot_capture_order_twice',
+              'tests/ha/test_payment_postgres.py::test_competing_authorizations_for_order_cannot_both_capture',
+              'tests/ha/test_payment_postgres.py::test_credit_limit_race_is_guarded_across_different_orders',
+              'tests/ha/test_payment_postgres.py::test_voided_authorization_cannot_be_revived',
+              'tests/ha/test_payment_postgres.py::test_same_key_different_payload_is_conflict_without_effect'],
+    'HA-09': ['tests/ha/test_native_fences.py::test_review_required_is_readable_but_never_automatically_claimed',
+              'tests/ha/test_native_fences.py::test_payment_notification_can_wake_but_never_apply_order_money',
+              'tests/ha/test_native_fences.py::test_capacity_guest_control_replays_across_apps',
+              'tests/ha/test_native_journey.py::test_two_apps_share_same_request_order_and_final_proof',
+              'tests/ha/test_native_journey.py::test_concurrent_same_reservation_across_instances_is_one_order',
+              'tests/ha/test_native_journey.py::test_decline_and_rejected_transfer_preserve_benefits',
+              'tests/ha/test_native_journey.py::test_merchant_capacity_is_shared_and_receipts_are_fenced',
+              'tests/ha/test_native_journey.py::test_merchant_abort_tombstone_rejects_late_hold',
+              'tests/ha/test_payment_postgres.py::test_replay_after_reply_is_discarded_preserves_transaction_and_fault',
+              'tests/ha/test_payment_postgres.py::test_locked_wallet_does_not_block_another_world',
+              'tests/ha/test_payment_postgres.py::test_decline_does_not_create_authorization_or_outbox'],
+}
+
+
+def native_suite(hosts: list[Host], out: Path, repeat: int) -> bool:
+    """HA-07~09의 불변조건 시험 묶음을 실서버 PostgreSQL 17(현재 리더)에서 실행한다.
+
+    라이브 앱 데이터베이스는 건드리지 않는다. 이 시험 전용 데이터베이스를 만들어 쓰고 끝나면 지운다.
+    시험 프로세스는 리더 서버 한 대 안에서 도는 동시 경합이며, 여러 호스트가 동시에 경합하는 증거는 아니다.
+    """
+    import io
+    members = json.loads(hosts[0].run('sudo -u postgres /opt/patroni/bin/patronictl -c /etc/pickup-pact/patroni.yml list -f json', timeout=60).stdout)
+    leader_name = next(m['Member'] for m in members if m['Role'] == 'Leader')
+    leader = next(h for h in hosts if h.name == leader_name)
+    code = subprocess.run(['git', 'archive', '--format=tar', 'HEAD'], cwd=ROOT, check=True, capture_output=True).stdout
+    database = 'pact_ha_native_test'
+    report = dict(host=leader_name, database=database, scope='oracle_single_ad_fault_domains', groups={})
+    ok = True
+    try:
+        leader.run('sudo rm -rf /opt/pact-native-test && sudo mkdir -p /opt/pact-native-test')
+        leader.run_bytes('sudo tar -x -C /opt/pact-native-test', code)
+        leader.run(f'sudo -u postgres psql -X -q -c "DROP DATABASE IF EXISTS {database} WITH (FORCE)" -c "CREATE DATABASE {database}"')
+        report['postgres'] = leader.run('sudo -u postgres psql -X -At -c "select version()"').stdout.strip()[:80]
+        for group, tests in NATIVE_GROUPS.items():
+            runs = []
+            for number in range(1, repeat+1):
+                command = ("cd /opt/pact-native-test && sudo -u postgres env PYTHONDONTWRITEBYTECODE=1 PICKUP_HA_TEST=1 "
+                           f"PICKUP_PG_TEST_DSN='host=/var/run/postgresql dbname={database} user=postgres' "
+                           "PYTHONPATH=.:services/reconciler:tests/ha /opt/pickup-pact/.venv/bin/python -m pytest -q -p no:cacheprovider -rA "
+                           + ' '.join(tests) + ' 2>&1 | tail -n 80')
+                done = leader.run(command, check=False, timeout=1500)
+                lines = done.stdout.splitlines()
+                passed = [l.split(' ', 1)[1].split('::')[-1] for l in lines if l.startswith('PASSED ')]
+                failed = [l for l in lines if l.startswith(('FAILED ', 'ERROR '))]
+                skipped = [l for l in lines if l.startswith('SKIPPED ')]
+                summary = next((l for l in reversed(lines) if ' passed' in l or ' failed' in l or ' error' in l), '')
+                runs.append(dict(run=number, passed=len(passed), failed=failed[:5], skipped=len(skipped), summary=summary.strip('= ')))
+                ok &= not failed and not skipped and bool(passed)
+                if number == 1:
+                    report['groups'].setdefault(group, {})['tests'] = sorted(set(passed))
+            report['groups'][group]['runs'] = runs
+    finally:
+        try:
+            leader.run(f'sudo -u postgres psql -X -q -c "DROP DATABASE IF EXISTS {database} WITH (FORCE)"; sudo rm -rf /opt/pact-native-test', check=False)
+        except Exception:  # noqa: BLE001
+            pass
+    report['passed'] = ok
+    out.mkdir(parents=True, exist_ok=True)
+    (out/'native-suite.json').write_text(json.dumps(report, ensure_ascii=False, indent=2))
+    print(json.dumps(report, ensure_ascii=False))
+    return ok
+
+
+def entry_setup(hosts: list[Host], out: Path) -> bool:
+    """pact-a, pact-b에 HAProxy 진입점을 설치하고 인벤토리가 렌더링한 설정으로 시작한다(데이터는 건드리지 않는다)."""
+    sys.path.insert(0, str(ROOT))
+    from demo.route.ha import inventory as inv
+    import tempfile
+    data = inv.load(str(ROOT/'infra/ha/inventory.oracle-osaka.yaml'))
+    rendered = Path(tempfile.mkdtemp(prefix='pact-entry-'))/'cfg'
+    inv.render(data, rendered)
+    report = {}
+    for name in data['entry']['hosts']:
+        host = next(h for h in hosts if h.name == name)
+        private = host.spec['private']
+        done = host.run_script(ROOT/'infra/ha/hosts/entry-setup.sh', [private, '10.0.0.0/24'], timeout=900)
+        config = (rendered/'hosts'/name/'haproxy.cfg').read_bytes()
+        host.run_bytes('sudo install -m 0644 -o root -g root /dev/stdin /etc/haproxy/haproxy.cfg', config)
+        check = host.run('sudo haproxy -c -f /etc/haproxy/haproxy.cfg 2>&1 | tail -3', check=False)
+        host.run('sudo systemctl enable haproxy >/dev/null 2>&1; sudo systemctl restart haproxy', timeout=120)
+        time.sleep(4)
+        state = host.run('systemctl is-active haproxy', check=False).stdout.strip()
+        listening = host.run(f"sudo ss -ltn | grep -c '{private}:443'", check=False).stdout.strip()
+        report[name] = dict(version=done.stdout.strip().splitlines()[-1][:80], config_check=check.stdout.strip()[-120:],
+                            haproxy=state, listening_443=listening)
+    ok = all(row['haproxy'] == 'active' and row['listening_443'] == '1' for row in report.values())
+    out.mkdir(parents=True, exist_ok=True)
+    (out/'entry-setup.json').write_text(json.dumps(dict(passed=ok, entry=report), ensure_ascii=False, indent=2))
+    print(json.dumps(dict(passed=ok, entry=report), ensure_ascii=False))
+    return ok
+
+
+def main(argv=None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('phase', choices=['preflight', 'install', 'deploy', 'diagnose', 'verify-basic', 'verify-faults', 'refresh-units', 'reboot-probe', 'dr-backup', 'dr-restore', 'dr-alerts', 'native-suite', 'verify-concurrency', 'entry-setup', 'verify-entry'])
+    parser.add_argument('--inventory', type=Path, default=ROOT/'infra/ha/hosts/oracle-osaka.json')
+    parser.add_argument('--output', type=Path, required=True)
+    args = parser.parse_args(argv)
+    key = os.environ.get('PACT_HA_SSH_KEY_FILE')
+    if not key or not Path(key).is_file():
+        raise SystemExit('PACT_HA_SSH_KEY_FILE이 필요하다')
+    if Path(key).stat().st_mode & 0o077:
+        raise SystemExit('개인키 파일 권한은 0600이어야 한다')
+    inventory = load(args.inventory)
+    known = str(args.output/'known_hosts')
+    args.output.mkdir(parents=True, exist_ok=True)
+    hosts = [Host(spec, inventory['ssh_user'], key, known) for spec in inventory['hosts']]
+    if args.phase == 'preflight':
+        return 0 if preflight(hosts, inventory, args.output) else 1
+    if args.phase == 'install':
+        return 0 if install(hosts, inventory, args.output) else 1
+    if args.phase in {'dr-backup', 'dr-restore', 'dr-alerts'}:
+        from ha_real_verify import verify
+        try:
+            ok = verify(hosts, ROOT/'infra/ha/inventory.oracle-osaka.yaml', args.output, only=[],
+                        repeat=int((ROOT/'infra/ha/hosts/repeat.txt').read_text().strip() or 1) if args.phase == 'dr-restore' else 1, faults=True,
+                        driver='ha_real_dr.py', driver_args=['--mode', {'dr-restore': 'full', 'dr-alerts': 'alerts'}.get(args.phase, 'backup')])
+        except BaseException as exc:  # noqa: BLE001
+            print(json.dumps(dict(passed=False, error=f'{type(exc).__name__}: {str(exc)[:800]}'), ensure_ascii=False))
+            return 1
+        print(json.dumps(dict(passed=ok)))
+        return 0 if ok else 1
+    if args.phase.startswith('verify-'):
+        from ha_real_verify import verify, BASIC, FAULTS, CONCURRENCY, ENTRY
+        faults = args.phase in {'verify-faults', 'verify-entry'}
+        try:
+            ok = verify(hosts, ROOT/'infra/ha/inventory.oracle-osaka.yaml', args.output,
+                        only=ENTRY if args.phase == 'verify-entry' else FAULTS if faults else CONCURRENCY if args.phase == 'verify-concurrency' else BASIC, repeat=int(os.environ.get('PACT_REPEAT') or (ROOT/'infra/ha/hosts/repeat.txt').read_text().strip() or 1), faults=faults)
+        except BaseException as exc:  # noqa: BLE001
+            print(json.dumps(dict(passed=False, error=f'{type(exc).__name__}: {str(exc)[:800]}'), ensure_ascii=False))
+            return 1
+        print(json.dumps(dict(passed=ok)))
+        return 0 if ok else 1
+    if args.phase == 'entry-setup':
+        return 0 if entry_setup(hosts, args.output) else 1
+    if args.phase == 'native-suite':
+        return 0 if native_suite(hosts, args.output, int((ROOT/'infra/ha/hosts/repeat.txt').read_text().strip() or 1)) else 1
+    if args.phase == 'reboot-probe':
+        return 0 if reboot_probe(hosts, args.output) else 1
+    if args.phase == 'refresh-units':
+        return 0 if refresh_units(hosts, args.output) else 1
+    if args.phase == 'diagnose':
+        return 0 if diagnose(hosts, args.output) else 1
+    if args.phase == 'deploy':
+        from ha_real_deploy import Deployment
+        try:
+            result = Deployment(hosts, ROOT/'infra/ha/inventory.oracle-osaka.yaml', args.output).run()
+        except BaseException as exc:  # noqa: BLE001
+            print(json.dumps(dict(passed=False, error=f'{type(exc).__name__}: {str(exc)[:800]}'), ensure_ascii=False))
+            return 1
+        print(json.dumps(dict(passed=result['passed'], seconds=result['seconds'], scope=result['scope'])))
+        return 0 if result['passed'] else 1
+    return 2
+
+
+if __name__ == '__main__':
+    sys.exit(main())

@@ -13,23 +13,33 @@ from urllib.parse import unquote, urlsplit
 import httpx
 from .domain import PaymentError, canonical
 from .repository import PaymentRepository
+from .storage import PaymentStore
 from .notifications import deliver_due
 from .http_client import origin
 
 
 def serve(directory: str,token: str,port: int=0,ready_file: str|None=None,
-          callback_url: str|None=None,notify_secret: str|None=None,crash_action: str|None=None):
+          callback_url: str|None=None,notify_secret: str|None=None,crash_action: str|None=None,
+          repository: PaymentStore|None=None,tls=None):
     if len(token)<24:raise ValueError('strong internal payment token required')
-    if callback_url:
-        origin(callback_url,callback=True)
-        if not notify_secret or len(notify_secret)<24:raise ValueError('notification secret missing')
-    repo=PaymentRepository(Path(directory)/'payments.sqlite')
+    if tls is not None and crash_action:raise ValueError('test crash hooks are not part of the TLS deployment')
+    # One URL (development) or up to three order-role receivers tried in order.
+    callbacks=[callback_url] if isinstance(callback_url,str) else list(callback_url or [])
+    if len(callbacks)>3 or len(set(callbacks))!=len(callbacks) or (tls is None and len(callbacks)>1):
+        raise ValueError('one development or up to three distinct notification endpoints')
+    for url in callbacks:
+        if tls is None:origin(url,callback=True)
+        else:tls.policy.origin(url,callback=True)
+    if callbacks and (not notify_secret or len(notify_secret)<24):raise ValueError('notification secret missing')
+    callback_url=callbacks[0] if callbacks else None
+    repo=repository if repository is not None else PaymentRepository(Path(directory)/'payments.sqlite')
     slots=threading.BoundedSemaphore(16)
     stop=threading.Event()
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self,*_):pass
         def setup(self):
+            if tls is not None:tls.accept(self.request)  # caller role before any request byte
             super().setup();self.connection.settimeout(3)
         def send(self,status,body):
             data=canonical(body).encode();self.send_response(status)
@@ -43,6 +53,8 @@ def serve(directory: str,token: str,port: int=0,ready_file: str|None=None,
         def do_POST(self):self.handle_api(True)
         def handle_api(self,post):
             if not self.authenticated():self.send(403,{'code':'UNAUTHORIZED'});return
+            # A pre-restore process is answered as unavailable, never as a decline.
+            if tls is not None and not tls.current(self.headers):self.send(503,{'code':'STALE_GENERATION'});return
             if not slots.acquire(blocking=False):self.send(503,{'code':'BUSY'});return
             try:
                 parts=urlsplit(self.path)
@@ -50,7 +62,7 @@ def serve(directory: str,token: str,port: int=0,ready_file: str|None=None,
                 path=parts.path
                 if not post:
                     if path=='/health':
-                        with repo.connection() as db:db.execute('SELECT 1 FROM payment_settings').fetchone()
+                        if not repo.storage_ready():raise OSError('payment storage is unavailable')
                         self.send(200,dict(service='pickup-payment',mode='synthetic',storage_ready=True));return
                     if path.startswith('/v1/operations/'):
                         result=repo.operation(unquote(path[len('/v1/operations/'):]))
@@ -89,18 +101,29 @@ def serve(directory: str,token: str,port: int=0,ready_file: str|None=None,
 
     def delivery():
         def send(body,stamp,signature):
-            with httpx.Client(trust_env=False,timeout=1,follow_redirects=False) as client:
-                response=client.post(callback_url,content=body,headers={'Content-Type':'application/json',
-                    'X-Payment-Timestamp':stamp,'X-Payment-Signature':signature})
-                return response.status_code==200 and response.json().get('accepted') is True
+            client=(httpx.Client(trust_env=False,timeout=1,follow_redirects=False) if tls is None
+                    else tls.policy.http_client(1,server_role='order'))
+            with client:
+                for url in callbacks:
+                    try:
+                        response=client.post(url,content=body,headers={'Content-Type':'application/json',
+                            **(tls.policy.headers() if tls is not None else {}),
+                            'X-Payment-Timestamp':stamp,'X-Payment-Signature':signature})
+                    except httpx.HTTPError:
+                        continue  # another order receiver shares the same inbox
+                    if response.status_code==200 and response.json().get('accepted') is True:
+                        return True
+                return False
         while not stop.wait(.25):
             try:deliver_due(repo,notify_secret,send)
             except Exception:stop.wait(1)  # persisted outbox stays unacknowledged
 
-    server=ThreadingHTTPServer(('127.0.0.1',port),Handler);server.daemon_threads=True
+    server=ThreadingHTTPServer((tls.bind_address if tls is not None else '127.0.0.1',port),Handler);server.daemon_threads=True
+    if tls is not None:tls.wrap(server)
     if callback_url:threading.Thread(target=delivery,daemon=True,name='payment-outbox').start()
     if ready_file:
-        target=Path(ready_file);target.write_text(json.dumps({'url':f'http://127.0.0.1:{server.server_port}'}))
+        url=tls.url(server.server_port) if tls is not None else f'http://127.0.0.1:{server.server_port}'
+        target=Path(ready_file);target.write_text(json.dumps({'url':url,'pid':os.getpid()}))
     try:server.serve_forever(poll_interval=.2)
     finally:stop.set();server.server_close()
 
