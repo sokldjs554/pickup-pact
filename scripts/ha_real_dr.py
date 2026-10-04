@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """독립 호스트 DR 시험 도구(pact-backup에서 실행). 승인된 시험 서버 전용.
 
+alerts 단계(DR-04): 리더가 실제로 쌓은 WAL 스풀과 pg_stat_archiver 값을 이 호스트로 가져와, 저장소 중단·용량 초과(쿼터 1바이트)
+  때 업로드가 거부되고 경보 판정이 켜지며, 저장소 복구 뒤 업로드가 확인되고 경보가 꺼지는지 본다. 클러스터는 건드리지 않는다.
+
 backup 단계(클러스터는 건드리지 않는다):
   1. 이 호스트에 자체 서명 인증서의 HTTPS append-only Restic 저장소를 새로 만든다(`pickup-backup-store` 임시 유닛).
   2. 실제 클러스터에 주문 둘을 만든다(하나는 완료, 하나는 청구 응답 유실로 진행 중).
@@ -32,6 +35,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from ha_real_harness import ADDRESSES, HOSTS, RealApi, RealCluster  # noqa: E402
 from demo.route.ha import inventory as inv  # noqa: E402
 from demo.route.ha.backup import required_wal, seal_bundle, verify_bundle  # noqa: E402
+from demo.route.ha.backup_ops import Policy, archived_name, assess, ship_wal, spool_status  # noqa: E402
 from demo.route.ha.scram import verifier  # noqa: E402
 from demo.route.ha.remote_backup import ResticArchive, ResticSettings  # noqa: E402
 
@@ -265,6 +269,104 @@ def backup_stage(args) -> dict:
         report['upload_and_readback_s'] = round(time.monotonic()-started, 1)
         report['receipt'] = dict(snapshot_id=receipt['snapshot_id'], repository_id=receipt['repository_id'], target_lsn=receipt['target_lsn'])
         report['negative_controls'] = dr.negative_controls(receipt, bundle, seal, metadata['cluster_id'])
+        report['passed'] = True
+    except Exception as exc:  # noqa: BLE001 - 실패도 증거로 남긴다
+        report.update(passed=False, error=f'{type(exc).__name__}: {exc}'[:1500])
+    finally:
+        try:
+            dr.teardown_store()
+        finally:
+            subprocess.run(['rm', '-rf', str(stage), str(dr.secrets)], check=False)
+            dr.clear_faults()
+            dr.remove_hold_dropins()
+    return report
+
+
+# ================================================================ DR-04 경보 판정
+ALERT_POLICY = Policy(retain_base_backups=2, base_backup_interval_hours=24, max_base_backup_age_hours=30,
+                      max_wal_archive_delay_seconds=30, capacity_gib=1, alert_free_ratio=0.2)
+
+
+def alerts_stage(args) -> dict:
+    stage = Path(args.stage)
+    if stage.exists():
+        subprocess.run(['rm', '-rf', str(stage)], check=True)
+    stage.mkdir(mode=0o700)
+    dr = RealDR(args.work, stage)
+    dr.ensure_hold_dropins()
+    report: dict = dict(scope=SCOPE, steps=[], timings='시험 환경 측정값이며 운영 RTO/RPO가 아니다')
+    spool, state = stage/'spool', stage/'shipper.json'
+    spool.mkdir(mode=0o700)
+
+    def codes(now):
+        archiver = dr.psql_leader("SELECT archived_count||' '||failed_count||' '||coalesce(extract(epoch FROM last_archived_time),0)"
+                                  "||' '||coalesce(extract(epoch FROM last_failed_time),0) FROM pg_stat_archiver;").split()
+        status = dict(base_backups=[], spool=spool_status(spool, clock=lambda: now),
+                      archiver=dict(last_archived_at=float(archiver[2]) or None, last_failed_at=float(archiver[3]) or None),
+                      shipper=json.loads(state.read_text()) if state.exists() else {}, repository={}, retention={'problems': []})
+        result = assess(ALERT_POLICY, status, now=now)
+        return {a['code'] for a in result['alerts']}, result, archiver
+
+    def refused(label, operation):
+        try:
+            operation()
+        except (OSError, ValueError):
+            report['steps'].append(label)
+        else:
+            raise AssertionError(label+' 거부되지 않았다')
+
+    try:
+        dr.ensure_units()
+        dr.wait_cluster(members=3, timeout=240)
+        dr.wait_apps(HOSTS)
+        dr.setup_store()
+        leader = dr.leader()
+        before = int(dr.psql_leader('SELECT archived_count FROM pg_stat_archiver;') or 0)
+        for number in range(3):
+            dr.psql_leader(f"SELECT pg_logical_emit_message(true, 'dr04', 'x{number}');")
+            dr.psql_leader('SELECT pg_switch_wal();')
+        deadline = time.monotonic()+120
+        while time.monotonic() < deadline and int(dr.psql_leader('SELECT archived_count FROM pg_stat_archiver;') or 0) < before+3:
+            time.sleep(2)
+        listing = dr.sh(leader, 'sudo ls /var/lib/pickup-pact/wal-spool/').stdout.split()
+        names = [name for name in listing if archived_name(name)][-3:]
+        assert len(names) == 3, listing
+        for name in names:
+            data = subprocess.run(dr._ssh(leader)+['sudo', 'cat', '/var/lib/pickup-pact/wal-spool/'+name], capture_output=True, timeout=120).stdout
+            assert data, name
+            (spool/name).write_bytes(data)
+        report['spooled_from_leader'] = dict(leader=leader, files=len(names))
+        archive = ResticArchive(dr.settings, command_timeout=60)
+        failing = ResticArchive(dr.settings, command_timeout=15)
+        pre, _, archiver = codes(time.time())
+        assert 'WAL_UPLOAD_FAILING' not in pre, pre
+        report['archiver_before'] = dict(archived_count=int(archiver[0]), failed_count=int(archiver[1]))
+
+        dr.stop_store()
+        refused('store_down_upload_refused', lambda: ship_wal(spool, failing, status_file=state))
+        assert len(list(spool.glob('0*'))) == 3
+        time.sleep(ALERT_POLICY.max_wal_archive_delay_seconds+5)
+        down, result, _ = codes(time.time())
+        assert {'WAL_UPLOAD_FAILING', 'WAL_SHIPPING_DELAYED'} <= down and result['status'] == 'critical', down
+        report['store_down'] = dict(alerts=sorted(down), status=result['status'], spooled_files=3,
+                                    measured_exposure_s=round(result['measured_exposure_s'] or 0, 1))
+
+        dr.start_store(quota_bytes=1)
+        refused('quota_exhausted_upload_refused', lambda: ship_wal(spool, failing, status_file=state))
+        assert len(list(spool.glob('0*'))) == 3
+        quota, _, _ = codes(time.time())
+        assert {'WAL_UPLOAD_FAILING', 'WAL_SHIPPING_DELAYED'} <= quota, quota
+        report['quota_exhausted'] = dict(alerts=sorted(quota), spooled_files=3)
+
+        dr.start_store()
+        shipped = ship_wal(spool, archive, status_file=state)
+        assert shipped['last_uploaded'] == 3 and not list(spool.glob('0*')), shipped
+        assert shipped.get('last_snapshot'), shipped  # ship_wal이 이름·크기를 스냅샷 목록과 대조한 뒤에만 스풀을 비운다
+        recovered, result, _ = codes(time.time())
+        assert not recovered & {'WAL_UPLOAD_FAILING', 'WAL_SHIPPING_DELAYED', 'WAL_ARCHIVE_FAILING'}, recovered
+        report['recovered'] = dict(alerts=sorted(recovered), uploaded=3, snapshot_confirmed=True,
+                                   note='BASE_BACKUP_MISSING은 이 단계가 기본 백업을 만들지 않아 남는 것이 정상')
+        archive._run(['check', '--read-data'])
         report['passed'] = True
     except Exception as exc:  # noqa: BLE001 - 실패도 증거로 남긴다
         report.update(passed=False, error=f'{type(exc).__name__}: {exc}'[:1500])
@@ -632,13 +734,13 @@ def main():
     parser.add_argument('--stage', default='/var/tmp/pact-dr')
     parser.add_argument('--only', nargs='*', default=None)
     parser.add_argument('--repeat', type=int, default=1)
-    parser.add_argument('--mode', choices=['backup', 'full'], default='backup')
+    parser.add_argument('--mode', choices=['backup', 'full', 'alerts'], default='backup')
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     repetitions, failures = [], 0
     for number in range(1, max(1, args.repeat)+1):
-        report = full_stage(args) if args.mode == 'full' else backup_stage(args)
-        scenarios = report.pop('scenarios', None) or [dict(id='DR-backup', **report)]
+        report = {'full': full_stage, 'alerts': alerts_stage}.get(args.mode, backup_stage)(args)
+        scenarios = report.pop('scenarios', None) or [dict(id='DR-04' if args.mode == 'alerts' else 'DR-backup', **report)]
         scenarios.append(dict(id='DR-summary', **{k: v for k, v in report.items() if k not in {'scenarios'}}))
         repetitions.append(dict(repeat=number, scenarios=scenarios, passed=bool(report.get('passed'))))
         failures += 0 if report.get('passed') else 1

@@ -11,7 +11,7 @@ on:
       phase:
         description: '실행 단계'
         type: choice
-        options: [preflight, install, deploy, diagnose, verify-basic, verify-faults, refresh-units, reboot-probe, dr-backup, dr-restore, native-suite, verify-concurrency, entry-setup, verify-entry]
+        options: [preflight, install, deploy, diagnose, verify-basic, verify-faults, refresh-units, reboot-probe, dr-backup, dr-restore, dr-alerts, native-suite, verify-concurrency, entry-setup, verify-entry]
         default: preflight
 permissions:
   contents: read
@@ -31,7 +31,7 @@ jobs:
           phase="${{ inputs.phase }}"
           # push로 시작되면 저장소의 phase 파일이 단계를 정한다(허용 목록만).
           [ -n "$phase" ] || phase="$(tr -d '[:space:]' < infra/ha/hosts/phase)"
-          case "$phase" in preflight|install|deploy|diagnose|verify-basic|verify-faults|refresh-units|reboot-probe|dr-backup|dr-restore|native-suite|verify-concurrency|entry-setup|verify-entry) ;; *) echo "허용되지 않은 단계: $phase"; exit 1;; esac
+          case "$phase" in preflight|install|deploy|diagnose|verify-basic|verify-faults|refresh-units|reboot-probe|dr-backup|dr-restore|dr-alerts|native-suite|verify-concurrency|entry-setup|verify-entry) ;; *) echo "허용되지 않은 단계: $phase"; exit 1;; esac
           echo "name=$phase" >> "$GITHUB_OUTPUT"
       - name: Prepare the SSH key
         env:

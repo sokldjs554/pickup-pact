@@ -389,7 +389,7 @@ def entry_setup(hosts: list[Host], out: Path) -> bool:
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('phase', choices=['preflight', 'install', 'deploy', 'diagnose', 'verify-basic', 'verify-faults', 'refresh-units', 'reboot-probe', 'dr-backup', 'dr-restore', 'native-suite', 'verify-concurrency', 'entry-setup', 'verify-entry'])
+    parser.add_argument('phase', choices=['preflight', 'install', 'deploy', 'diagnose', 'verify-basic', 'verify-faults', 'refresh-units', 'reboot-probe', 'dr-backup', 'dr-restore', 'dr-alerts', 'native-suite', 'verify-concurrency', 'entry-setup', 'verify-entry'])
     parser.add_argument('--inventory', type=Path, default=ROOT/'infra/ha/hosts/oracle-osaka.json')
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args(argv)
@@ -406,12 +406,12 @@ def main(argv=None) -> int:
         return 0 if preflight(hosts, inventory, args.output) else 1
     if args.phase == 'install':
         return 0 if install(hosts, inventory, args.output) else 1
-    if args.phase in {'dr-backup', 'dr-restore'}:
+    if args.phase in {'dr-backup', 'dr-restore', 'dr-alerts'}:
         from ha_real_verify import verify
         try:
             ok = verify(hosts, ROOT/'infra/ha/inventory.oracle-osaka.yaml', args.output, only=[],
                         repeat=int((ROOT/'infra/ha/hosts/repeat.txt').read_text().strip() or 1) if args.phase == 'dr-restore' else 1, faults=True,
-                        driver='ha_real_dr.py', driver_args=['--mode', 'full'] if args.phase == 'dr-restore' else [])
+                        driver='ha_real_dr.py', driver_args=['--mode', {'dr-restore': 'full', 'dr-alerts': 'alerts'}.get(args.phase, 'backup')])
         except BaseException as exc:  # noqa: BLE001
             print(json.dumps(dict(passed=False, error=f'{type(exc).__name__}: {str(exc)[:800]}'), ensure_ascii=False))
             return 1
